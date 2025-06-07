@@ -1,0 +1,622 @@
+'use client'
+
+import {useCallback, useEffect, useMemo, useState} from "react";
+import {dispose, init, getFigureClass, registerFigure, registerOverlay, registerIndicator} from "klinecharts";
+import {useGetAllQuery as useGetAllKlinesQuery} from "@/lib/redux/api/klineApi";
+import {
+  useCreateMutation,
+  useGetAllQuery as useGetAllDhmQuery, useRemoveMutation, useUpdateMutation,
+} from "@/lib/redux/api/dhmApi";
+import { useGetAllQuery as useGetAllFppQuery } from "@/lib/redux/api/fppApi";
+import { useGetAllQuery as useGetAllClustersQuery } from "@/lib/redux/api/clusterApi";
+import { camelCase } from 'lodash';
+import CustomDialog from 'src/components/custom-dialog/custom-dialog';
+import {onSubmitWrapper} from "@/src/utils/submit";
+import {StrategiesDhmDialog} from "@/src/sections/strategies-graph/strategies.dhm-dialog";
+import {IconButton} from "@mui/material";
+import ReorderIcon from '@mui/icons-material/Reorder';
+import LinearScaleIcon from '@mui/icons-material/LinearScale';
+import HorizontalRuleIcon from '@mui/icons-material/HorizontalRule';
+import SpeedIcon from '@mui/icons-material/Speed';
+import fibonacciLine2 from "@/src/components/klinecharts-fibo/klinecharts-fibo";
+import SettingsIcon from '@mui/icons-material/Settings';
+import {StrategiesDhmBacktestDialog} from "@/src/sections/strategies-graph/strategies.dhm-backtest-dialog";
+import {useGetQuery} from "@/lib/redux/api/strategySettingsApi";
+import {StrategiesDhmSettingsDialog} from "@/src/sections/strategies-graph/strategies.dhm-settings-dialog";
+
+export default function DhmIndexView({ tf, pairId }: any) {
+  const [chart, setChart] = useState<any>(null);
+  const [page, setPage] = useState<number>(1);
+  const [currentPrice, setCurrentPrice] = useState(null);
+  const [openBacktest, setOpenBacktest] = useState(false);
+  const [openSettings, setOpenSettings] = useState(false);
+  const { data: klines } = useGetAllKlinesQuery({ pairId, page, limit: 5000, tf });
+  //const { data: clusters } = useGetAllClustersQuery({ pairId, page, limit: 5000, tf });
+  const { data: fpp } = useGetAllFppQuery({ pairId, page, limit: 1000, tf });
+  const { data: dhm } = useGetAllDhmQuery({ pairId, tf: 60 });
+  const [create, { isLoading: isCreateLoading }] = useCreateMutation();
+  const [update, { isLoading: isUpdateLoading }] = useUpdateMutation();
+  const [remove, { isLoading }] = useRemoveMutation();
+  const [currentDhm, setCurrentDhm] = useState(null);
+  const [currentKline, setCurrentKline] = useState(null);
+  const [height, setHeight] = useState(0);
+
+  useEffect(() => {
+    setHeight(window.innerHeight);
+    if (!chart) { return }
+    chart.resize()
+  }, [chart]);
+
+  // const clustersAsHashByTs = useMemo(() => {
+  //   if (!clusters) { return }
+  //   const result: any = {};
+  //   for (const item of clusters) {
+  //     result[item.ts] = item;
+  //   }
+  //   return result;
+  // }, [clusters]);
+
+  const onCreateSubmit = useCallback(async (values: any) => {
+    return onSubmitWrapper(() => create(values), (data) => {
+      if (data.data) {
+        setCurrentDhm(data.data);
+      }
+    }, 'Успешно создано');
+  }, []);
+
+  const onUpdateSubmit = useCallback(async (values: any) => {
+    return onSubmitWrapper(() => update({ id: currentDhm.id, values }), null, 'Успешно создано');
+  }, [currentDhm?.id]);
+
+  const onRemoveSubmit = useCallback(async () => {
+    return onSubmitWrapper(() => remove(currentDhm?.id), (data: any) => {
+      if (!data?.data) {
+        setCurrentDhm(null);
+        setCurrentKline(null);
+      }
+    }, 'Успешно удалено');
+  }, [currentDhm?.id]);
+
+  useEffect(() => {
+    // registerOverlay({
+    //   name: 'circle',
+    //   needDefaultPointFigure: true,
+    //   needDefaultXAxisFigure: true,
+    //   needDefaultYAxisFigure: true,
+    //   totalStep: 3,
+    //   createPointFigures: ({ coordinates }) => {
+    //     if (coordinates.length === 2) {
+    //       const xDis = Math.abs(coordinates[0].x - coordinates[1].x)
+    //       const yDis = Math.abs(coordinates[0].y - coordinates[1].y)
+    //       const radius = Math.sqrt(xDis * xDis + yDis * yDis)
+    //       return {
+    //         key: 'circle',
+    //         type: 'circle',
+    //         attrs: {
+    //           ...coordinates[0],
+    //           r: radius
+    //         },
+    //         styles: {
+    //           style: 'stroke_fill'
+    //         }
+    //       }
+    //     }
+    //     return []
+    //   }
+    // })
+    const chart = init('chart', {
+      // layout: [
+      //   { type: 'indicator', content: ['VOL'], options: { order: 10 }  },
+      // ]
+    });
+    setChart(chart);
+    chart.setPrecision({ price: 5 })
+    return () => {
+      dispose('chart')
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!klines) { return }
+    if (!dhm) {return}
+    if (!chart) {return}
+    //if (!clustersAsHashByTs) {return}
+
+    chart.applyNewData(klines.map((item: any) => {
+      // Создаем графическую метку
+      // console.log(123, clustersAsHashByTs[item.ts]);
+      // console.log('timestamp', item.ts);
+      // let bv = 0;
+      // let sv = 0;
+      // const clData = clustersAsHashByTs?.[item.ts]?.data;
+      // for (const key in clData) {
+      //   bv += parseFloat(clData?.[key]?.bv);
+      //   sv += parseFloat(clData?.[key]?.sv);
+      // }
+      return {
+        ...item,
+        // bv,
+        // sv,
+        timestamp: parseInt(item.ts),
+        volume: parseInt(item.volume),
+      }
+    }))
+
+    for (const kline of klines) {
+      const fppItem = fpp.find(item => item.ts === kline.ts);
+      if (fppItem) {
+        chart.createOverlay({
+          name: `${fppItem.direction}Circle`,
+          points: [
+            {
+              timestamp: parseInt(kline.ts),
+              value: parseFloat(fppItem.direction === 'up' ? kline.low : kline.high)
+            }
+          ]
+        });
+      }
+    }
+
+    for (const item of dhm) {
+      if (['waiting', 'finished', 'finished_by_lose', 'finished_by_length'].includes(item.status)) {
+        chart.createOverlay({
+          name: `${camelCase(item.status)}StartKline`,
+          points: [{timestamp: parseInt(item.data.kline1.ts), value: parseFloat(item.data.kline1.close)}],
+        })
+      }
+      if (item.confirmed) {
+        chart.createOverlay({
+          name: `confirmedCircle`,
+          points: [
+            {
+              timestamp: parseInt(item.data.kline1.ts),
+              value: parseFloat(item.data.kline1.low)
+            }
+          ]
+        });
+      }
+    }
+    // add EMA200 trand indicator
+    chart.createIndicator('EMA', false, { id: 'candle_pane' });
+    // chart.createIndicator('CUM_DELTA', true);
+    //chart.createOverlay({ name: 'custom_rect_overlay' })
+    chart.subscribeAction('onCandleBarClick', (event) => {
+      const { data, x, y } = event
+      const currentDhm = dhm.find(item => item.data.kline1Id === data.current.id);
+      console.log(currentDhm);
+      setCurrentDhm(currentDhm);
+      setCurrentKline(data.current);
+    })
+
+  }, [chart, klines, dhm]);
+
+  useEffect(() => {
+    if (!chart) { return }
+    const socket = new WebSocket('ws://klines.traken-trade.ru/ws/')
+
+    socket.onopen = () => {
+      socket.send(JSON.stringify({
+        type: 'subscribe',
+        pairId: parseInt(pairId),
+        tf: parseInt(tf),
+      }))
+    }
+
+    socket.onmessage = (msg) => {
+      const data = JSON.parse(msg.data)
+      if (data.type === 'kline') {
+        console.log('Пришла свеча:', data.data)
+        console.log('d', data.data.ts);
+        setCurrentPrice(data?.data?.close);
+        console.log(chart);
+        chart.updateData({
+          ...data.data,
+          timestamp: parseInt(data.data.ts),
+          volume: parseInt(data.data.volume),
+        });
+      }
+    }
+  }, [chart, pairId, tf])
+
+  registerFigure({
+    name: 'godKline',
+    draw: (ctx, attrs, styles) => {
+      const barSpace = chart.getBarSpace();
+      const { x, y, width, height } = attrs;
+      const { color } = styles;
+      ctx.beginPath();
+      ctx.moveTo(x - (barSpace.bar / 2), 0);
+      ctx.lineTo(x + (barSpace.bar / 2), 0);
+      ctx.lineTo(x + (barSpace.bar / 2), 1000);
+      ctx.lineTo(x - (barSpace.bar / 2), 1000);
+      //ctx.lineTo(x, y + height / 2);
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.fill();
+    },
+    checkEventOn: (coordinate, attrs) => {
+      const { x, y } = coordinate;
+      const { width, height } = attrs;
+      return Math.abs(x * height) + Math.abs(y * width) <= width * height / 2;
+    }
+  });
+
+  registerIndicator({
+    name: 'CUM_DELTA',
+    calc: (dataList) => {
+      let cum = 0;
+      return dataList.map((bar: any) => {
+        const delta = parseInt(bar.bv) - parseInt(bar.sv);
+        cum += delta;
+        return { value: cum };
+      });
+    },
+    figures: [
+      {
+        key: 'value',
+        title: 'CUM_DELTA',
+        type: 'line'
+      }
+    ]
+  });
+
+  // registerFigure({
+  //   name: 'circle1',
+  //   draw: ({ ctx, coordinates }: any) => {
+  //     console.log(coordinates);
+  //     if (!coordinates || coordinates.length === 0) return
+  //     const { x, y } = coordinates[0]
+  //
+  //     ctx.beginPath()
+  //     ctx.arc(x, y - 10, 5, 0, Math.PI * 2) // над свечой на 10px вверх
+  //     ctx.fillStyle = 'red'
+  //     ctx.fill()
+  //   },
+  //   checkEventOn: ({ x, y }, { coordinates }) => {
+  //     console.log(123213);
+  //     console.log(coordinates);
+  //     if (!coordinates || coordinates.length === 0) return false
+  //     const p = coordinates[0]
+  //     const dx = x - p.x
+  //     const dy = y - (p.y - 10)
+  //     return dx * dx + dy * dy <= 25 // радиус 5px
+  //   }
+  // })
+
+  // registerFigure({
+  //   name: 'custom_rect',
+  //   draw: ({ ctx, figure, coordinates, styles }: any) => {
+  //     console.log(ctx, figure, coordinates, styles);
+  //     if (coordinates.length < 2) return;
+  //
+  //     const [p1, p2] = coordinates;
+  //
+  //     const x = Math.min(p1.x, p2.x);
+  //     const y = Math.min(p1.y, p2.y);
+  //     const width = Math.abs(p2.x - p1.x);
+  //     const height = Math.abs(p2.y - p1.y);
+  //
+  //     ctx.fillStyle = styles.color || 'rgba(0, 128, 255, 0.2)';
+  //     ctx.fillRect(x, y, width, height);
+  //   }
+  // });
+
+  // registerOverlay({
+  //   name: 'upCircle',
+  //   totalStep: 2,
+  //   createPointFigures: ({ coordinates }) => {
+  //     return {
+  //       type: 'circle1',
+  //       attrs: {
+  //         x: coordinates[0].x,
+  //         y: coordinates[0].y,
+  //         width: 50,
+  //         height: 50
+  //       },
+  //       styles: {
+  //         style: 'fill',
+  //         color: 'rgba(20,234,114,0.39)' // Жёлтый с прозрачностью
+  //       },
+  //     }
+  //   }
+  // });
+
+  registerOverlay({
+    name: 'upCircle',
+    totalStep: 1,
+    needDefaultPointFigure: false,
+    createPointFigures: ({ coordinates }) => {
+      const [point] = coordinates;
+      return [
+        {
+          type: 'circle',
+          attrs: {
+            x: point.x,
+            y: point.y + 10, // немного выше
+            r: 3,
+          },
+          styles: {
+            color: 'rgba(0,89,30, 0.55)',
+            style: 'fill',
+          }
+        }
+      ];
+    }
+  });
+
+  registerOverlay({
+    name: 'confirmedCircle',
+    totalStep: 1,
+    needDefaultPointFigure: false,
+    createPointFigures: ({ coordinates }) => {
+      const [point] = coordinates;
+      return [
+        {
+          type: 'circle',
+          attrs: {
+            x: point.x,
+            y: point.y + 10, // немного выше
+            r: 8,
+          },
+          styles: {
+            color: 'rgba(0,89,30, 0.55)',
+            style: 'fill',
+          }
+        }
+      ];
+    }
+  });
+
+  registerOverlay({
+    name: 'downCircle',
+    totalStep: 1,
+    needDefaultPointFigure: false,
+    createPointFigures: ({ coordinates }) => {
+      const [point] = coordinates;
+      return [
+        {
+          type: 'circle',
+          attrs: {
+            x: point.x,
+            y: point.y - 10, // немного выше
+            r: 3,
+          },
+          styles: {
+            color: '#ff0000',
+            style: 'fill',
+          }
+        }
+      ];
+    }
+  });
+
+  registerOverlay({
+    name: 'finishedStartKline',
+    totalStep: 2,
+    createPointFigures: ({ coordinates }) => {
+      return {
+        type: 'godKline',
+        attrs: {
+          x: coordinates[0].x,
+          y: coordinates[0].y,
+          width: 50,
+          height: 50
+        },
+        styles: {
+          style: 'fill',
+          color: 'rgba(20,234,114,0.39)' // Жёлтый с прозрачностью
+        },
+      }
+    }
+  });
+
+  registerOverlay({
+    name: 'triggeredStartKline',
+    totalStep: 2,
+    createPointFigures: ({ coordinates }) => {
+      return {
+        type: 'godKline',
+        attrs: {
+          x: coordinates[0].x,
+          y: coordinates[0].y,
+          width: 50,
+          height: 50
+        },
+        styles: {
+          style: 'fill',
+          color: 'rgba(253,207,27,0.2)' // Жёлтый с прозрачностью
+        },
+      }
+    }
+  });
+
+  registerOverlay({
+    name: 'finishedByLoseStartKline',
+    totalStep: 2,
+    createPointFigures: ({ coordinates }) => {
+      return {
+        type: 'godKline',
+        attrs: {
+          x: coordinates[0].x,
+          y: coordinates[0].y,
+          width: 50,
+          height: 50
+        },
+        styles: {
+          style: 'fill',
+          color: 'rgba(220,14,14,0.2)' // Жёлтый с прозрачностью
+        },
+      }
+    }
+  });
+
+  registerOverlay({
+    name: 'waitingStartKline',
+    totalStep: 2,
+    createPointFigures: ({ coordinates }) => {
+      return {
+        type: 'godKline',
+        attrs: {
+          x: coordinates[0].x,
+          y: coordinates[0].y,
+          width: 50,
+          height: 50
+        },
+        styles: {
+          style: 'fill',
+          color: 'rgba(246,220,51,0.2)' // Жёлтый с прозрачностью
+        },
+      }
+    }
+  });
+
+  registerOverlay(fibonacciLine2);
+
+  registerIndicator({
+    name: 'EMA',
+    shortName: 'EMA',
+    series: 'price',
+    calcParams: [50],
+    precision: 2,
+    shouldOhlc: true,
+    figures: [
+      { key: 'ema1', title: 'EMA50: ', type: 'line' },
+      // { key: 'ema2', title: 'EMA12: ', type: 'line' },
+      // { key: 'ema3', title: 'EMA20: ', type: 'line' }
+    ],
+    regenerateFigures: (params) => params.map((p, i) => ({ key: `ema${i + 1}`, title: `EMA${p}: `, type: 'line' })),
+    calc: (dataList, indicator) => {
+      const { calcParams: params, figures } = indicator
+      let closeSum = 0
+      const emaValues: number[] = []
+      return dataList.map((kLineData, i) => {
+        const ema = {}
+        const close = parseFloat(kLineData.close);
+        closeSum += close
+        params.forEach((p, index) => {
+          if (i >= p - 1) {
+            if (i > p - 1) {
+              emaValues[index] = (2 * close + (p - 1) * emaValues[index]) / (p + 1)
+            } else {
+              emaValues[index] = closeSum / p
+            }
+            ema[figures[index].key] = emaValues[index]
+          }
+        })
+        return ema
+      })
+    }
+  });
+
+  // registerOverlay({
+  //   name: 'custom_rect_overlay',
+  //   totalStep: 2,
+  //   needDefaultPointFigure: false,
+  //
+  //   createPointFigures: ({ coordinates }) => {
+  //     //if (coordinates.length < 2) return [];
+  //     console.log(coordinates);
+  //     return [
+  //       {
+  //         type: 'custom_rect',
+  //         attrs: {
+  //           coordinates: [coordinates[0], coordinates[1]]
+  //         },
+  //         styles: {
+  //           color: 'rgba(100, 149, 237, 0.3)'
+  //         }
+  //       }
+  //     ];
+  //   }
+  // });
+
+  return (
+    <main>
+      <div id="chart" style={{width: '100%', height: `${height}px` }}/>
+      {height}
+
+      <IconButton key='settings' sx={{
+        position: 'absolute',
+        zIndex: 1,
+        left: '18px',
+        bottom: `${4 * 45 + 65}px`,
+        background: '#ececec',
+      }} aria-label="delete" onClick={() => {
+        setOpenSettings(true);
+      }}>
+        <SettingsIcon />
+      </IconButton>
+
+      <IconButton key='backtest' sx={{
+        position: 'absolute',
+        zIndex: 1,
+        left: '18px',
+        bottom: `${3 * 45 + 65}px`,
+        background: '#ececec',
+      }} aria-label="delete" onClick={() => {
+        setOpenBacktest(true);
+      }}>
+        <SpeedIcon />
+      </IconButton>
+
+      {[
+        { name: 'fibonacciLine2', icon: ReorderIcon },
+        { name: 'priceLine', icon: LinearScaleIcon },
+        { name: 'rayLine', icon: HorizontalRuleIcon },
+        ].map((item, index) => (
+        <IconButton key={item.name} sx={{
+          position: 'absolute',
+          zIndex: 1,
+          left: '18px',
+          bottom: `${index * 45 + 65}px`,
+          background: '#ececec',
+        }} aria-label="delete" onClick={() => {
+          chart.createOverlay(item.name);
+        }}>
+          <item.icon />
+        </IconButton>
+      ))}
+
+      <CustomDialog
+        open={currentKline}
+        onClose={() => setCurrentKline(null)}
+        title={`Kline ${currentKline?.ts}`}
+        content={(
+          <StrategiesDhmDialog
+            currentDhm={currentDhm}
+            currentKline={currentKline}
+            onCreateSubmit={onCreateSubmit}
+            onUpdateSubmit={onUpdateSubmit}
+            onRemoveSubmit={onRemoveSubmit}
+            tf={tf}
+            pairId={pairId}
+            currentPrice={currentPrice}
+          />
+        )}
+      />
+
+      <CustomDialog
+        maxWidth='lg'
+        open={openBacktest}
+        onClose={() => setOpenBacktest(false)}
+        title={`Back test`}
+        content={(
+          <StrategiesDhmBacktestDialog
+            klines={klines}
+            tf={tf}
+            pairId={pairId}
+          />
+        )}
+      />
+
+      <CustomDialog
+        open={openSettings}
+        onClose={() => setOpenSettings(false)}
+        title={`Settings`}
+        content={(
+          <StrategiesDhmSettingsDialog />
+        )}
+      />
+    </main>
+  )
+}
