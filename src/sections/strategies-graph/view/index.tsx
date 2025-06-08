@@ -106,61 +106,28 @@ export default function DhmIndexView({ tf, pairId }: any) {
       const r: any = {up: { s: 0, v: parseFloat(kline.low)}, down: { s: 0, v: parseFloat(kline.high) }};
       for (const fppItem of fppItems) {
         r[fppItem.direction].s += 1;
-        // if (fppItem.type === 'locked_volume') {
-        //   r[fppItem.direction] += 1;
-        // } else if (fppItem.type === 'locked_imbalance') {
-        //   if (fppItem.direction === 'up') {
-        //     value -= value * 0.002;
-        //   } else {
-        //     value += value * 0.002;
-        //   }
-        // } else if (fppItem.type === 'locked_delta') {
-        //   if (fppItem.direction === 'up') {
-        //     value -= value * 0.003;
-        //   } else {
-        //     value += value * 0.003;
-        //   }
-        // } else if (fppItem.type === 'reverse') {
-        //   if (fppItem.direction === 'up') {
-        //     value -= value * 0.004;
-        //   } else {
-        //     value += value * 0.004;
-        //   }
-        // } else if (fppItem.type === 'low_last_price_volume') {
-        //   if (fppItem.direction === 'up') {
-        //     value -= value * 0.005;
-        //   } else {
-        //     value += value * 0.005;
-        //   }
-        // } else if (fppItem.type === 'test_volume') {
-        //   if (fppItem.direction === 'up') {
-        //     value -= value * 0.006;
-        //   } else {
-        //     value += value * 0.006;
-        //   }
-        // }
-        if (r.up.s) {
-          chart.createOverlay({
-            name: `up${r.up.s}Circle`,
-            points: [
-              {
-                timestamp: parseInt(kline.ts),
-                value: r.up.v,
-              }
-            ]
-          });
-        }
-        if (r.down.s) {
-          chart.createOverlay({
-            name: `down${r.down.s}Circle`,
-            points: [
-              {
-                timestamp: parseInt(kline.ts),
-                value: r.down.v,
-              }
-            ]
-          });
-        }
+      }
+      if (r.up.s) {
+        chart.createOverlay({
+          name: `up${r.up.s}Circle`,
+          points: [
+            {
+              timestamp: parseInt(kline.ts),
+              value: r.up.v,
+            }
+          ]
+        });
+      }
+      if (r.down.s) {
+        chart.createOverlay({
+          name: `down${r.down.s}Circle`,
+          points: [
+            {
+              timestamp: parseInt(kline.ts),
+              value: r.down.v,
+            }
+          ]
+        });
       }
     }
   }, [chart]);
