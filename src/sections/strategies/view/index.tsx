@@ -15,7 +15,6 @@ import moment from "moment";
 import Label from "@/src/components/label";
 import Box from "@mui/material/Box";
 import {useTheme} from "@mui/material/styles";
-import {Icon} from "@iconify/react";
 import Iconify from "@/src/components/iconify";
 
 export default function StrategiesIndexView({ tf, pairId }: any) {
@@ -50,7 +49,7 @@ export default function StrategiesIndexView({ tf, pairId }: any) {
                   <TableCell>
                     {item.status === 'finished' ? (
                       <Label color='success'>{item.status}</Label>
-                    ) : (item.status === 'created' || item.status === 'waiting') ? (
+                    ) : (item.status === 'created' || item.status === 'waiting' || item.status === 'triggered') ? (
                       <Label color='warning'>{item.status}</Label>
                     ) : (
                       <Label color='error'>{item.status}</Label>

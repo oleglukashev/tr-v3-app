@@ -182,6 +182,7 @@ export default function Header() {
                   <MenuItem key={item.id} onClick={() => router.replace(`/${page.url}/${pair.id}/${item.id}`)}>{item.label}</MenuItem>
                 ))}
               </Menu>
+
             </Box>
           </Box>
         </StyledToolbar>

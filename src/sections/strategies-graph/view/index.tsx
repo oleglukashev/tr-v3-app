@@ -23,6 +23,7 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import {StrategiesDhmBacktestDialog} from "@/src/sections/strategies-graph/strategies.dhm-backtest-dialog";
 import {useGetQuery} from "@/lib/redux/api/strategySettingsApi";
 import {StrategiesDhmSettingsDialog} from "@/src/sections/strategies-graph/strategies.dhm-settings-dialog";
+import {StrategiesDhmFppFiltersDialog} from "@/src/sections/strategies-graph/strategies.dhm-fpp-filters-dialog";
 
 export default function DhmIndexView({ tf, pairId }: any) {
   const [chart, setChart] = useState<any>(null);
@@ -30,6 +31,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [currentPrice, setCurrentPrice] = useState(null);
   const [openBacktest, setOpenBacktest] = useState(false);
   const [openSettings, setOpenSettings] = useState(false);
+  const [openFppFilters, setOpenFppFilters] = useState(false);
   const { data: klines } = useGetAllKlinesQuery({ pairId, page, limit: 5000, tf });
   //const { data: clusters } = useGetAllClustersQuery({ pairId, page, limit: 5000, tf });
   const { data: fpp } = useGetAllFppQuery({ pairId, page, limit: 1000, tf });
@@ -40,6 +42,15 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [currentDhm, setCurrentDhm] = useState(null);
   const [currentKline, setCurrentKline] = useState(null);
   const [height, setHeight] = useState(0);
+  const [fppFilters, setFppFilters] = useState<any[]>([
+    'interception',
+    'reverse',
+    'locked_volume',
+    'locked_delta',
+    'locked_imbalance',
+    'test_volume',
+    'low_last_price_volume'
+  ]);
 
   useEffect(() => {
     setHeight(window.innerHeight);
@@ -55,6 +66,16 @@ export default function DhmIndexView({ tf, pairId }: any) {
   //   }
   //   return result;
   // }, [clusters]);
+
+  const onSaveFppFiltersSubmit = useCallback(async (values: any) => {
+    setFppFilters(values.fppFilters);
+    setOpenFppFilters(false);
+    for (const item of [1,2,3,4,5,6,7]) {
+      chart.removeOverlay({ name: `up${item}Circle` });
+      chart.removeOverlay({ name: `down${item}Circle` });
+    }
+    drawFppPatterns(klines, fpp, values.fppFilters);
+  }, [chart, klines, fpp]);
 
   const onCreateSubmit = useCallback(async (values: any) => {
     return onSubmitWrapper(() => create(values), (data) => {
@@ -76,6 +97,73 @@ export default function DhmIndexView({ tf, pairId }: any) {
       }
     }, 'Успешно удалено');
   }, [currentDhm?.id]);
+
+  const drawFppPatterns = useCallback((klines, fpp, fppFilters) => {
+    if (!klines?.length) { return }
+    if (!fpp?.length) { return }
+    for (const kline of klines) {
+      const fppItems: any[] = fpp.filter(item => item.ts === kline.ts && fppFilters.includes(item.type));
+      const r: any = {up: { s: 0, v: parseFloat(kline.low)}, down: { s: 0, v: parseFloat(kline.high) }};
+      for (const fppItem of fppItems) {
+        r[fppItem.direction].s += 1;
+        // if (fppItem.type === 'locked_volume') {
+        //   r[fppItem.direction] += 1;
+        // } else if (fppItem.type === 'locked_imbalance') {
+        //   if (fppItem.direction === 'up') {
+        //     value -= value * 0.002;
+        //   } else {
+        //     value += value * 0.002;
+        //   }
+        // } else if (fppItem.type === 'locked_delta') {
+        //   if (fppItem.direction === 'up') {
+        //     value -= value * 0.003;
+        //   } else {
+        //     value += value * 0.003;
+        //   }
+        // } else if (fppItem.type === 'reverse') {
+        //   if (fppItem.direction === 'up') {
+        //     value -= value * 0.004;
+        //   } else {
+        //     value += value * 0.004;
+        //   }
+        // } else if (fppItem.type === 'low_last_price_volume') {
+        //   if (fppItem.direction === 'up') {
+        //     value -= value * 0.005;
+        //   } else {
+        //     value += value * 0.005;
+        //   }
+        // } else if (fppItem.type === 'test_volume') {
+        //   if (fppItem.direction === 'up') {
+        //     value -= value * 0.006;
+        //   } else {
+        //     value += value * 0.006;
+        //   }
+        // }
+        if (r.up.s) {
+          chart.createOverlay({
+            name: `up${r.up.s}Circle`,
+            points: [
+              {
+                timestamp: parseInt(kline.ts),
+                value: r.up.v,
+              }
+            ]
+          });
+        }
+        if (r.down.s) {
+          chart.createOverlay({
+            name: `down${r.down.s}Circle`,
+            points: [
+              {
+                timestamp: parseInt(kline.ts),
+                value: r.down.v,
+              }
+            ]
+          });
+        }
+      }
+    }
+  }, [chart]);
 
   useEffect(() => {
     // registerOverlay({
@@ -120,6 +208,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
     if (!klines) { return }
     if (!dhm) {return}
     if (!chart) {return}
+    if (!fpp) {return}
     //if (!clustersAsHashByTs) {return}
 
     chart.applyNewData(klines.map((item: any) => {
@@ -142,20 +231,71 @@ export default function DhmIndexView({ tf, pairId }: any) {
       }
     }))
 
-    for (const kline of klines) {
-      const fppItem = fpp.find(item => item.ts === kline.ts);
-      if (fppItem) {
-        chart.createOverlay({
-          name: `${fppItem.direction}Circle`,
-          points: [
-            {
-              timestamp: parseInt(kline.ts),
-              value: parseFloat(fppItem.direction === 'up' ? kline.low : kline.high)
-            }
-          ]
-        });
-      }
-    }
+
+
+    drawFppPatterns(klines, fpp, fppFilters);
+    // for (const kline of klines) {
+    //   const fppItems: any[] = fpp.filter(item => item.ts === kline.ts && fppFilters.includes(item.type));
+    //   const r: any = {up: { s: 0, v: parseFloat(kline.low)}, down: { s: 0, v: parseFloat(kline.high) }};
+    //   for (const fppItem of fppItems) {
+    //     r[fppItem.direction].s += 1;
+    //     // if (fppItem.type === 'locked_volume') {
+    //     //   r[fppItem.direction] += 1;
+    //     // } else if (fppItem.type === 'locked_imbalance') {
+    //     //   if (fppItem.direction === 'up') {
+    //     //     value -= value * 0.002;
+    //     //   } else {
+    //     //     value += value * 0.002;
+    //     //   }
+    //     // } else if (fppItem.type === 'locked_delta') {
+    //     //   if (fppItem.direction === 'up') {
+    //     //     value -= value * 0.003;
+    //     //   } else {
+    //     //     value += value * 0.003;
+    //     //   }
+    //     // } else if (fppItem.type === 'reverse') {
+    //     //   if (fppItem.direction === 'up') {
+    //     //     value -= value * 0.004;
+    //     //   } else {
+    //     //     value += value * 0.004;
+    //     //   }
+    //     // } else if (fppItem.type === 'low_last_price_volume') {
+    //     //   if (fppItem.direction === 'up') {
+    //     //     value -= value * 0.005;
+    //     //   } else {
+    //     //     value += value * 0.005;
+    //     //   }
+    //     // } else if (fppItem.type === 'test_volume') {
+    //     //   if (fppItem.direction === 'up') {
+    //     //     value -= value * 0.006;
+    //     //   } else {
+    //     //     value += value * 0.006;
+    //     //   }
+    //     // }
+    //     if (r.up.s) {
+    //       chart.createOverlay({
+    //         name: `up${r.up.s}Circle`,
+    //         points: [
+    //           {
+    //             timestamp: parseInt(kline.ts),
+    //             value: r.up.v,
+    //           }
+    //         ]
+    //       });
+    //     }
+    //     if (r.down.s) {
+    //       chart.createOverlay({
+    //         name: `down${r.down.s}Circle`,
+    //         points: [
+    //           {
+    //             timestamp: parseInt(kline.ts),
+    //             value: r.down.v,
+    //           }
+    //         ]
+    //       });
+    //     }
+    //   }
+    // }
 
     for (const item of dhm) {
       if (['waiting', 'finished', 'finished_by_lose', 'finished_by_length'].includes(item.status)) {
@@ -241,24 +381,24 @@ export default function DhmIndexView({ tf, pairId }: any) {
     }
   });
 
-  registerIndicator({
-    name: 'CUM_DELTA',
-    calc: (dataList) => {
-      let cum = 0;
-      return dataList.map((bar: any) => {
-        const delta = parseInt(bar.bv) - parseInt(bar.sv);
-        cum += delta;
-        return { value: cum };
-      });
-    },
-    figures: [
-      {
-        key: 'value',
-        title: 'CUM_DELTA',
-        type: 'line'
-      }
-    ]
-  });
+  // registerIndicator({
+  //   name: 'CUM_DELTA',
+  //   calc: (dataList) => {
+  //     let cum = 0;
+  //     return dataList.map((bar: any) => {
+  //       const delta = parseInt(bar.bv) - parseInt(bar.sv);
+  //       cum += delta;
+  //       return { value: cum };
+  //     });
+  //   },
+  //   figures: [
+  //     {
+  //       key: 'value',
+  //       title: 'CUM_DELTA',
+  //       type: 'line'
+  //     }
+  //   ]
+  // });
 
   // registerFigure({
   //   name: 'circle1',
@@ -321,28 +461,53 @@ export default function DhmIndexView({ tf, pairId }: any) {
   //   }
   // });
 
-  registerOverlay({
-    name: 'upCircle',
-    totalStep: 1,
-    needDefaultPointFigure: false,
-    createPointFigures: ({ coordinates }) => {
-      const [point] = coordinates;
-      return [
-        {
-          type: 'circle',
-          attrs: {
-            x: point.x,
-            y: point.y + 10, // немного выше
-            r: 3,
-          },
-          styles: {
-            color: 'rgba(0,89,30, 0.55)',
-            style: 'fill',
+  for (const item of [1,2,3,4,5,6,7]) {
+    registerOverlay({
+      name: `up${item}Circle`,
+      totalStep: 1,
+      needDefaultPointFigure: false,
+      createPointFigures: ({ coordinates }) => {
+        const [point] = coordinates;
+        return [
+          {
+            type: 'circle',
+            attrs: {
+              x: point.x,
+              y: point.y + 10,
+              r: 1 + (item * 2),
+            },
+            styles: {
+              color: 'rgba(0,89,30, 0.55)',
+              style: 'fill',
+            }
           }
-        }
-      ];
-    }
-  });
+        ];
+      }
+    });
+
+    registerOverlay({
+      name: `down${item}Circle`,
+      totalStep: 1,
+      needDefaultPointFigure: false,
+      createPointFigures: ({ coordinates }) => {
+        const [point] = coordinates;
+        return [
+          {
+            type: 'circle',
+            attrs: {
+              x: point.x,
+              y: point.y - 10,
+              r: 1 + (item * 2),
+            },
+            styles: {
+              color: '#ff0000',
+              style: 'fill',
+            }
+          }
+        ];
+      }
+    });
+  }
 
   registerOverlay({
     name: 'confirmedCircle',
@@ -360,29 +525,6 @@ export default function DhmIndexView({ tf, pairId }: any) {
           },
           styles: {
             color: 'rgba(0,89,30, 0.55)',
-            style: 'fill',
-          }
-        }
-      ];
-    }
-  });
-
-  registerOverlay({
-    name: 'downCircle',
-    totalStep: 1,
-    needDefaultPointFigure: false,
-    createPointFigures: ({ coordinates }) => {
-      const [point] = coordinates;
-      return [
-        {
-          type: 'circle',
-          attrs: {
-            x: point.x,
-            y: point.y - 10, // немного выше
-            r: 3,
-          },
-          styles: {
-            color: '#ff0000',
             style: 'fill',
           }
         }
@@ -535,6 +677,18 @@ export default function DhmIndexView({ tf, pairId }: any) {
       <div id="chart" style={{width: '100%', height: `${height}px` }}/>
       {height}
 
+      <IconButton key='fppSettings' sx={{
+        position: 'absolute',
+        zIndex: 1,
+        left: '18px',
+        top: `${70}px`,
+        background: '#ececec',
+      }} aria-label="delete" onClick={() => {
+        setOpenFppFilters(true);
+      }}>
+        <SettingsIcon />
+      </IconButton>
+
       <IconButton key='settings' sx={{
         position: 'absolute',
         zIndex: 1,
@@ -615,6 +769,15 @@ export default function DhmIndexView({ tf, pairId }: any) {
         title={`Settings`}
         content={(
           <StrategiesDhmSettingsDialog />
+        )}
+      />
+
+      <CustomDialog
+        open={openFppFilters}
+        onClose={() => setOpenFppFilters(false)}
+        title={`Fpp filters`}
+        content={(
+          <StrategiesDhmFppFiltersDialog fppFilters={fppFilters} onSubmit={onSaveFppFiltersSubmit} />
         )}
       />
     </main>
