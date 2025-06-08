@@ -24,14 +24,17 @@ import {StrategiesDhmBacktestDialog} from "@/src/sections/strategies-graph/strat
 import {useGetQuery} from "@/lib/redux/api/strategySettingsApi";
 import {StrategiesDhmSettingsDialog} from "@/src/sections/strategies-graph/strategies.dhm-settings-dialog";
 import {StrategiesDhmFppFiltersDialog} from "@/src/sections/strategies-graph/strategies.dhm-fpp-filters-dialog";
+import {StrategiesDhmKlineFppsDialog} from "@/src/sections/strategies-graph/strategies.dhm-kline-fpps-dialog";
 
 export default function DhmIndexView({ tf, pairId }: any) {
   const [chart, setChart] = useState<any>(null);
   const [page, setPage] = useState<number>(1);
   const [currentPrice, setCurrentPrice] = useState(null);
+  const [currentKlineFpp, setCurrentKlineFpp] = useState<any[]>(null);
   const [openBacktest, setOpenBacktest] = useState(false);
   const [openSettings, setOpenSettings] = useState(false);
   const [openFppFilters, setOpenFppFilters] = useState(false);
+  const [openKlineFpp, setOpenKlineFpp] = useState(false);
   const { data: klines } = useGetAllKlinesQuery({ pairId, page, limit: 5000, tf });
   //const { data: clusters } = useGetAllClustersQuery({ pairId, page, limit: 5000, tf });
   const { data: fpp } = useGetAllFppQuery({ pairId, page, limit: 1000, tf });
@@ -49,6 +52,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
     'locked_delta',
     'locked_imbalance',
     'test_volume',
+    'resistance',
     'low_last_price_volume'
   ]);
 
@@ -428,11 +432,34 @@ export default function DhmIndexView({ tf, pairId }: any) {
   //   }
   // });
 
+  // registerOverlay({
+  //   name: 'myCircleOverlay',
+  //   createPointFigures: ({ points }): any => points.map((p, idx) => ({
+  //     key: `circle-${idx}`,
+  //     type: 'circle',
+  //     // attrs: { ... },
+  //     // styles: { ... },
+  //   })),
+  //   onClick: (e) => {
+  //     // e содержит { figure, dataIndex, etc. }
+  //     return true // включаем стандартную логику тултипа
+  //   },
+  //   createTooltipDataSource: ({ figure, timestamp, value }) => [
+  //     { title: 'Time', value: new Date(timestamp).toLocaleString() },
+  //     { title: 'Value', value: value.toString() },
+  //   ],
+  // })
+
   for (const item of [1,2,3,4,5,6,7]) {
     registerOverlay({
       name: `up${item}Circle`,
       totalStep: 1,
       needDefaultPointFigure: false,
+      onClick: (e) => {
+        setCurrentKlineFpp((fpp || []).filter(item => parseInt(item.ts) === e.overlay.points[0].timestamp));
+        setOpenKlineFpp(true);
+        return true
+      },
       createPointFigures: ({ coordinates }) => {
         const [point] = coordinates;
         return [
@@ -456,6 +483,11 @@ export default function DhmIndexView({ tf, pairId }: any) {
       name: `down${item}Circle`,
       totalStep: 1,
       needDefaultPointFigure: false,
+      onClick: (e) => {
+        setCurrentKlineFpp((fpp || []).filter(item => parseInt(item.ts) === e.overlay.points[0].timestamp));
+        setOpenKlineFpp(true);
+        return true
+      },
       createPointFigures: ({ coordinates }) => {
         const [point] = coordinates;
         return [
@@ -745,6 +777,15 @@ export default function DhmIndexView({ tf, pairId }: any) {
         title={`Fpp filters`}
         content={(
           <StrategiesDhmFppFiltersDialog fppFilters={fppFilters} onSubmit={onSaveFppFiltersSubmit} />
+        )}
+      />
+
+      <CustomDialog
+        open={openKlineFpp}
+        onClose={() => setOpenKlineFpp(false)}
+        title={`Kline Fpp`}
+        content={(
+          <StrategiesDhmKlineFppsDialog fpp={currentKlineFpp} />
         )}
       />
     </main>

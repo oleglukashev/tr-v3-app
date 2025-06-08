@@ -18,6 +18,13 @@ export function StrategiesFppFiltersForm({ defaultValues, onSubmit }: any) {
               showCheckbox
               size='small'
               label='Fpp Filters'
+              MenuProps={{
+                PaperProps: {
+                  style: {
+                    maxHeight: 1000, // устанавливаем большую высоту, чтобы избежать скролла
+                  },
+                },
+              }}
               options={[
                 { id: 'interception', label: 'Interception' },
                 { id: 'reverse', label: 'Reverse' },
@@ -25,6 +32,7 @@ export function StrategiesFppFiltersForm({ defaultValues, onSubmit }: any) {
                 { id: 'locked_delta', label: 'Locked delta' },
                 { id: 'locked_imbalance', label: 'Locked imbalance' },
                 { id: 'test_volume', label: 'Test Volume' },
+                { id: 'resistance', label: 'Resistance' },
                 { id: 'low_last_price_volume', label: 'Low last price volume' }
               ]}
             />
