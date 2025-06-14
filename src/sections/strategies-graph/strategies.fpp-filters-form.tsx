@@ -33,6 +33,7 @@ export function StrategiesFppFiltersForm({ defaultValues, onSubmit }: any) {
                 { id: 'locked_imbalance', label: 'Locked imbalance' },
                 { id: 'test_volume', label: 'Test Volume' },
                 { id: 'resistance', label: 'Resistance' },
+                { id: 'weakness', label: 'Weakness' },
                 { id: 'low_last_price_volume', label: 'Low last price volume' }
               ]}
             />

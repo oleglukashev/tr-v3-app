@@ -9,5 +9,6 @@ export const klineApi = (new BaseApi({
 })).create();
 
 export const {
-  useGetAllQuery
+  useGetAllQuery,
+  useLazyGetAllQuery
 } = klineApi;

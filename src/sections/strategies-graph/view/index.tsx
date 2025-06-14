@@ -25,6 +25,7 @@ import {useGetQuery} from "@/lib/redux/api/strategySettingsApi";
 import {StrategiesDhmSettingsDialog} from "@/src/sections/strategies-graph/strategies.dhm-settings-dialog";
 import {StrategiesDhmFppFiltersDialog} from "@/src/sections/strategies-graph/strategies.dhm-fpp-filters-dialog";
 import {StrategiesDhmKlineFppsDialog} from "@/src/sections/strategies-graph/strategies.dhm-kline-fpps-dialog";
+import moment from "moment/moment";
 
 export default function DhmIndexView({ tf, pairId }: any) {
   const [chart, setChart] = useState<any>(null);
@@ -35,7 +36,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [openSettings, setOpenSettings] = useState(false);
   const [openFppFilters, setOpenFppFilters] = useState(false);
   const [openKlineFpp, setOpenKlineFpp] = useState(false);
-  const { data: klines } = useGetAllKlinesQuery({ pairId, page, limit: 5000, tf });
+  //const { data: klines } = useGetAllKlinesQuery({ pairId, page, limit: 5000, tf });
   //const { data: clusters } = useGetAllClustersQuery({ pairId, page, limit: 5000, tf });
   const { data: fpp } = useGetAllFppQuery({ pairId, page, limit: 1000, tf });
   const { data: dhm } = useGetAllDhmQuery({ pairId, tf: 60 });
@@ -78,8 +79,8 @@ export default function DhmIndexView({ tf, pairId }: any) {
       chart.removeOverlay({ name: `up${item}Circle` });
       chart.removeOverlay({ name: `down${item}Circle` });
     }
-    drawFppPatterns(klines, fpp, values.fppFilters);
-  }, [chart, klines, fpp]);
+    drawFppPatterns(fpp, values.fppFilters);
+  }, [chart, fpp]);
 
   const onCreateSubmit = useCallback(async (values: any) => {
     return onSubmitWrapper(() => create(values), (data) => {
@@ -102,10 +103,9 @@ export default function DhmIndexView({ tf, pairId }: any) {
     }, 'Успешно удалено');
   }, [currentDhm?.id]);
 
-  const drawFppPatterns = useCallback((klines, fpp, fppFilters) => {
-    if (!klines?.length) { return }
+  const drawFppPatterns = useCallback((fpp, fppFilters) => {
     if (!fpp?.length) { return }
-    for (const kline of klines) {
+    for (const kline of chart.getDataList()) {
       const fppItems: any[] = fpp.filter(item => item.ts === kline.ts && fppFilters.includes(item.type));
       const r: any = {up: { s: 0, v: parseFloat(kline.low)}, down: { s: 0, v: parseFloat(kline.high) }};
       for (const fppItem of fppItems) {
@@ -169,42 +169,54 @@ export default function DhmIndexView({ tf, pairId }: any) {
       // ]
     });
     setChart(chart);
-    chart.setPrecision({ price: 5 })
+    //chart.setPrecision({ price: 5 })
+    chart.setSymbol({ ticker: 'TestSymbol' })
+    chart.setPeriod({ span: 1, type: 'day' })
+    chart.setDataLoader({
+      getBars: (data: any) => {
+        const chartData = chart.getDataList();
+        const startTs = data.type === 'init' ?
+          moment().subtract(15, 'days').startOf('hour').utc().valueOf() :
+          data.type === 'forward' ?
+            moment(chartData[0].timestamp).utc().subtract(15, 'days').startOf('hour').valueOf() :
+            moment(chartData[chartData.length - 1].timestamp + 3600000).utc().valueOf();
+
+        const endTs = data.type === 'init' ?
+          moment().utc().valueOf() :
+          data.type === 'forward' ?
+            moment(chartData[0].timestamp - 3600000).utc().startOf('hour').valueOf() :
+            moment(chartData[chartData.length - 1].timestamp + 3600000).add(15, 'days').startOf('hour').utc().valueOf();
+        fetch(`http://klines.traken-trade.ru/api/v1/klines?pairId=${pairId}&startTs=${startTs}&endTs=${endTs}&limit=1000&tf=${tf}`)
+          .then(res => res.json())
+          .then(data => {
+            return data.map(item => ({
+              open: parseFloat(item.open),
+              high: parseFloat(item.high),
+              low: parseFloat(item.low),
+              close: parseFloat(item.close),
+              timestamp: parseInt(item.ts),
+              volume: parseInt(item.volume),
+            }));
+          })
+          .then(dataList => {
+            data.callback(dataList, dataList.length > 0);
+          })
+      },
+      subscribe: (params) => {},
+      unsubscribe: (params) => {}
+    })
     return () => {
       dispose('chart')
     }
   }, [])
 
   useEffect(() => {
-    if (!klines) { return }
     if (!dhm) {return}
     if (!chart) {return}
     if (!fpp) {return}
     //if (!clustersAsHashByTs) {return}
 
-    chart.applyNewData(klines.map((item: any) => {
-      // Создаем графическую метку
-      // console.log(123, clustersAsHashByTs[item.ts]);
-      // console.log('timestamp', item.ts);
-      // let bv = 0;
-      // let sv = 0;
-      // const clData = clustersAsHashByTs?.[item.ts]?.data;
-      // for (const key in clData) {
-      //   bv += parseFloat(clData?.[key]?.bv);
-      //   sv += parseFloat(clData?.[key]?.sv);
-      // }
-      return {
-        ...item,
-        // bv,
-        // sv,
-        timestamp: parseInt(item.ts),
-        volume: parseInt(item.volume),
-      }
-    }))
-
-
-
-    drawFppPatterns(klines, fpp, fppFilters);
+    drawFppPatterns(fpp, fppFilters);
     // for (const kline of klines) {
     //   const fppItems: any[] = fpp.filter(item => item.ts === kline.ts && fppFilters.includes(item.type));
     //   const r: any = {up: { s: 0, v: parseFloat(kline.low)}, down: { s: 0, v: parseFloat(kline.high) }};
@@ -299,7 +311,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
       setCurrentKline(data.current);
     })
 
-  }, [chart, klines, dhm]);
+  }, [chart, dhm]);
 
   useEffect(() => {
     if (!chart) { return }
@@ -755,7 +767,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
         title={`Back test`}
         content={(
           <StrategiesDhmBacktestDialog
-            klines={klines}
+            klines={chart ? chart.getDataList() : []}
             tf={tf}
             pairId={pairId}
           />
