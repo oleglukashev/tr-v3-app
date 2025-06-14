@@ -190,6 +190,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
           .then(res => res.json())
           .then(data => {
             return data.map(item => ({
+              id: item.id,
               open: parseFloat(item.open),
               high: parseFloat(item.high),
               low: parseFloat(item.low),
@@ -281,23 +282,23 @@ export default function DhmIndexView({ tf, pairId }: any) {
     // }
 
     for (const item of dhm) {
-      if (['waiting', 'finished', 'finished_by_lose', 'finished_by_length'].includes(item.status)) {
+      if (['waiting', 'finished', 'finished_by_lose', 'finished_by_length'].includes(item.status) && item.confirmed) {
         chart.createOverlay({
           name: `${camelCase(item.status)}StartKline`,
           points: [{timestamp: parseInt(item.data.kline1.ts), value: parseFloat(item.data.kline1.close)}],
         })
       }
-      if (item.confirmed) {
-        chart.createOverlay({
-          name: `confirmedCircle`,
-          points: [
-            {
-              timestamp: parseInt(item.data.kline1.ts),
-              value: parseFloat(item.data.kline1.low)
-            }
-          ]
-        });
-      }
+      // if (item.confirmed) {
+      //   chart.createOverlay({
+      //     name: `confirmedCircle`,
+      //     points: [
+      //       {
+      //         timestamp: parseInt(item.data.kline1.ts),
+      //         value: parseFloat(item.data.kline1.low)
+      //       }
+      //     ]
+      //   });
+      // }
     }
     // add EMA200 trand indicator
     chart.createIndicator('EMA', false, { id: 'candle_pane' });
@@ -305,6 +306,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
     //chart.createOverlay({ name: 'custom_rect_overlay' })
     chart.subscribeAction('onCandleBarClick', (event) => {
       const { data, x, y } = event
+      console.log(event);
       const currentDhm = dhm.find(item => item.data.kline1Id === data.current.id);
       console.log(currentDhm);
       setCurrentDhm(currentDhm);
@@ -331,12 +333,12 @@ export default function DhmIndexView({ tf, pairId }: any) {
         console.log('Пришла свеча:', data.data)
         console.log('d', data.data.ts);
         setCurrentPrice(data?.data?.close);
-        console.log(chart);
-        chart.updateData({
-          ...data.data,
-          timestamp: parseInt(data.data.ts),
-          volume: parseInt(data.data.volume),
-        });
+        console.log('chart.updateData', chart.updateData);
+        // chart.updateData({
+        //   ...data.data,
+        //   timestamp: parseInt(data.data.ts),
+        //   volume: parseInt(data.data.volume),
+        // });
       }
     }
   }, [chart, pairId, tf])
@@ -686,7 +688,6 @@ export default function DhmIndexView({ tf, pairId }: any) {
   return (
     <main>
       <div id="chart" style={{width: '100%', height: `${height}px` }}/>
-      {height}
 
       <IconButton key='fppSettings' sx={{
         position: 'absolute',
@@ -745,7 +746,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
       <CustomDialog
         open={currentKline}
         onClose={() => setCurrentKline(null)}
-        title={`Kline ${currentKline?.ts}`}
+        title={`Kline ${currentKline?.timestamp}`}
         content={(
           <StrategiesDhmDialog
             currentDhm={currentDhm}

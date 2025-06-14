@@ -23,14 +23,18 @@ const fibonacciLine2: any = {
 
     if (coordinates.length > 0) {
       let precision = 0
-      if (yAxis?.isInCandle() ?? true) {
-        precision = chart.getPrecision().price
-      } else {
-        const indicators = chart.getIndicators({ paneId: overlay.paneId })
-        indicators.forEach((indicator: any) => {
-          precision = Math.max(precision, indicator.precision)
-        })
-      }
+      // if (yAxis?.isInCandle() ?? true) {
+      //   precision = chart.getPrecision().price
+      // } else {
+      //   const indicators = chart.getIndicators({ paneId: overlay.paneId })
+      //   indicators.forEach((indicator: any) => {
+      //     precision = Math.max(precision, indicator.precision)
+      //   })
+      // }
+      const indicators = chart.getIndicators({ paneId: overlay.paneId })
+      indicators.forEach((indicator: any) => {
+        precision = Math.max(precision, indicator.precision)
+      })
       const lines: any[] = []
       const texts: any[] = []
       const startX = 0
