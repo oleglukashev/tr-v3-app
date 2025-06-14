@@ -170,8 +170,8 @@ export default function DhmIndexView({ tf, pairId }: any) {
     });
     setChart(chart);
     //chart.setPrecision({ price: 5 })
-    chart.setSymbol({ ticker: 'TestSymbol' })
-    chart.setPeriod({ span: 1, type: 'day' })
+    chart.setSymbol({ ticker: pairId })
+    chart.setPeriod({ span: tf, type: `minute` })
     chart.setDataLoader({
       getBars: (data: any) => {
         const chartData = chart.getDataList();
