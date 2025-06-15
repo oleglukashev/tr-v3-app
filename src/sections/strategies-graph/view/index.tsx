@@ -27,6 +27,16 @@ import {StrategiesDhmFppFiltersDialog} from "@/src/sections/strategies-graph/str
 import {StrategiesDhmKlineFppsDialog} from "@/src/sections/strategies-graph/strategies.dhm-kline-fpps-dialog";
 import moment from "moment/moment";
 
+const KLINE_TS_SIZE_BY_TF = {
+  1: 60000,
+  5: 300000,
+  15: 900000,
+  30: 1800000,
+  60: 3600000,
+  240: 14400000,
+  1440: 86400000,
+};
+
 export default function DhmIndexView({ tf, pairId }: any) {
   const [chart, setChart] = useState<any>(null);
   const [page, setPage] = useState<number>(1);
@@ -163,30 +173,31 @@ export default function DhmIndexView({ tf, pairId }: any) {
     //     return []
     //   }
     // })
-    const chart = init('chart', {
+    const chart: any = init('chart', {
       // layout: [
       //   { type: 'indicator', content: ['VOL'], options: { order: 10 }  },
       // ]
     });
     setChart(chart);
     //chart.setPrecision({ price: 5 })
-    chart.setSymbol({ ticker: pairId })
+    chart.setSymbol({ ticker: pairId, pricePrecision: 4 })
     chart.setPeriod({ span: tf, type: `minute` })
     chart.setDataLoader({
       getBars: (data: any) => {
         const chartData = chart.getDataList();
-        const startTs = data.type === 'init' ?
-          moment().subtract(15, 'days').startOf('hour').utc().valueOf() :
-          data.type === 'forward' ?
-            moment(chartData[0].timestamp).utc().subtract(15, 'days').startOf('hour').valueOf() :
-            moment(chartData[chartData.length - 1].timestamp + 3600000).utc().valueOf();
 
+        const startTs = data.type === 'init' ?
+          moment().subtract(200 * KLINE_TS_SIZE_BY_TF[tf], 'milliseconds').startOf('hour').utc().valueOf() :
+          data.type === 'forward' ?
+            moment(chartData[0].timestamp).utc().subtract(200 * KLINE_TS_SIZE_BY_TF[tf], 'milliseconds').startOf('hour').valueOf() :
+            moment(chartData[chartData.length - 1].timestamp + KLINE_TS_SIZE_BY_TF[tf]).utc().valueOf();
         const endTs = data.type === 'init' ?
           moment().utc().valueOf() :
           data.type === 'forward' ?
-            moment(chartData[0].timestamp - 3600000).utc().startOf('hour').valueOf() :
-            moment(chartData[chartData.length - 1].timestamp + 3600000).add(15, 'days').startOf('hour').utc().valueOf();
-        fetch(`http://klines.traken-trade.ru/api/v1/klines?pairId=${pairId}&startTs=${startTs}&endTs=${endTs}&limit=1000&tf=${tf}`)
+            moment(chartData[0].timestamp).utc().startOf('hour').valueOf() :
+            moment(chartData[chartData.length - 1].timestamp + KLINE_TS_SIZE_BY_TF[tf]).add(200 * KLINE_TS_SIZE_BY_TF[tf], 'milliseconds').startOf('hour').utc().valueOf();
+
+        fetch(`http://klines.traken-trade.ru/api/v1/klines?pairId=${pairId}&startTs=${startTs}&endTs=${endTs}&limit=100&tf=${tf}`)
           .then(res => res.json())
           .then(data => {
             return data.map(item => ({

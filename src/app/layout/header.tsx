@@ -67,6 +67,7 @@ export default function Header() {
     { url: 'dhm-graph', label: 'DHM (graph)' },
     { url: 'dhm', label: 'DHMs' },
     { url: 'clusters', label: 'Clusters' },
+    { url: 'experiments', label: 'Experiments (graph)' },
   ]
   const router = useRouter();
   const pair = useMemo(() => {

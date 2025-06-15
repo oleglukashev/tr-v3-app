@@ -95,7 +95,7 @@ export function StrategiesDhmDialog({currentDhm, currentKline, onCreateSubmit, o
           </Typography>
           <StrategiesForm
             defaultValues={{
-              kline1Ts: currentKline ? parseInt(currentKline?.ts) : null,
+              kline1Ts: currentKline ? parseInt(currentKline?.timestamp) : null,
               status: 'created',
               direction: 'up',
               confirmed: true,
