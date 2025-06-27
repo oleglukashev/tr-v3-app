@@ -16,6 +16,7 @@ import Box from "@mui/material/Box";
 import {useTheme} from "@mui/material/styles";
 import {customRect} from "@/src/helpers/klinecharts.helper";
 import RayIcon from "@/src/components/icons/ray";
+import ParChannelIcon from "@/src/components/icons/par-channel";
 
 export default function MapTools({ chart }: any) {
   const theme = useTheme();
@@ -43,6 +44,7 @@ export default function MapTools({ chart }: any) {
         { name: 'longPosition', icon: LongIcon },
         { name: 'shortPosition', icon: ShortIcon },
         { name: 'rect', icon: rectIcon },
+        { name: 'priceChannelLine', icon: ParChannelIcon },
         { name: 'fibonacciLine2', icon: fiboIcon },
         { name: 'priceLine', icon: priceLineIcon },
         { name: 'horizontalStraightLine', icon: horLineIcon },
