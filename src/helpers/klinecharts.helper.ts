@@ -1,0 +1,304 @@
+export const godKline = {
+  name: 'godKline',
+  draw: (ctx, attrs, styles) => {
+    const barSpaceWidth = 10;
+    const { x, y, width, height } = attrs;
+    const { color } = styles;
+    ctx.beginPath();
+    ctx.moveTo(x - (barSpaceWidth / 2), 0);
+    ctx.lineTo(x + (barSpaceWidth / 2), 0);
+    ctx.lineTo(x + (barSpaceWidth / 2), 1000);
+    ctx.lineTo(x - (barSpaceWidth / 2), 1000);
+    //ctx.lineTo(x, y + height / 2);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+  },
+  checkEventOn: (coordinate, attrs) => {
+    const { x, y } = coordinate;
+    const { width, height } = attrs;
+    return Math.abs(x * height) + Math.abs(y * width) <= width * height / 2;
+  }
+}
+
+export const cumDelta = {
+  name: 'CUM_DELTA',
+  calc: (dataList) => {
+    let cum = 0;
+    return dataList.map((bar: any) => {
+      const delta = parseInt(bar.bv) - parseInt(bar.sv);
+      cum += delta;
+      return { value: cum };
+    });
+  },
+  figures: [
+    {
+      key: 'value',
+      title: 'CUM_DELTA',
+      type: 'line'
+    }
+  ]
+}
+
+export const confirmedCircle = {
+  name: 'confirmedCircle',
+  totalStep: 1,
+  needDefaultPointFigure: false,
+  createPointFigures: ({ coordinates }) => {
+    const [point] = coordinates;
+    return [
+      {
+        type: 'circle',
+        attrs: {
+          x: point.x,
+          y: point.y + 10, // немного выше
+          r: 8,
+        },
+        styles: {
+          color: 'rgba(0,89,30, 0.55)',
+          style: 'fill',
+        }
+      }
+    ];
+  }
+}
+
+export const finishedStartKline = {
+  name: 'finishedStartKline',
+  totalStep: 2,
+  createPointFigures: ({ coordinates }) => {
+    return {
+      type: 'godKline',
+      attrs: {
+        x: coordinates[0].x,
+        y: coordinates[0].y,
+        width: 50,
+        height: 50
+      },
+      styles: {
+        style: 'fill',
+        color: 'rgba(20,234,114,0.39)' // Жёлтый с прозрачностью
+      },
+    }
+  }
+}
+
+export const triggeredStartKline = {
+  name: 'triggeredStartKline',
+  totalStep: 2,
+  createPointFigures: ({ coordinates }) => {
+    return {
+      type: 'godKline',
+      attrs: {
+        x: coordinates[0].x,
+        y: coordinates[0].y,
+        width: 50,
+        height: 50
+      },
+      styles: {
+        style: 'fill',
+        color: 'rgba(253,207,27,0.2)' // Жёлтый с прозрачностью
+      },
+    }
+  }
+}
+
+export const finishedByLoseStartKline = {
+  name: 'finishedByLoseStartKline',
+    totalStep: 2,
+    createPointFigures: ({ coordinates }) => {
+    return {
+      type: 'godKline',
+      attrs: {
+        x: coordinates[0].x,
+        y: coordinates[0].y,
+        width: 50,
+        height: 50
+      },
+      styles: {
+        style: 'fill',
+        color: 'rgba(220,14,14,0.2)' // Жёлтый с прозрачностью
+      },
+    }
+  }
+}
+
+export const waitingStartKline = {
+  name: 'waitingStartKline',
+  totalStep: 2,
+  createPointFigures: ({ coordinates }) => {
+    return {
+      type: 'godKline',
+      attrs: {
+        x: coordinates[0].x,
+        y: coordinates[0].y,
+        width: 50,
+        height: 50
+      },
+      styles: {
+        style: 'fill',
+        color: 'rgba(246,220,51,0.2)' // Жёлтый с прозрачностью
+      },
+    }
+  }
+}
+
+export const ema = {
+  name: 'EMA',
+  shortName: 'EMA',
+  series: 'price',
+  calcParams: [50],
+  precision: 2,
+  shouldOhlc: true,
+  figures: [
+    { key: 'ema1', title: 'EMA50: ', type: 'line' },
+    // { key: 'ema2', title: 'EMA12: ', type: 'line' },
+    // { key: 'ema3', title: 'EMA20: ', type: 'line' }
+  ],
+  regenerateFigures: (params) => params.map((p, i) => ({ key: `ema${i + 1}`, title: `EMA${p}: `, type: 'line' })),
+  calc: (dataList, indicator) => {
+    const { calcParams: params, figures } = indicator
+    let closeSum = 0
+    const emaValues: number[] = []
+    return dataList.map((kLineData, i) => {
+      const ema = {}
+      const close = parseFloat(kLineData.close);
+      closeSum += close
+      params.forEach((p, index) => {
+        if (i >= p - 1) {
+          if (i > p - 1) {
+            emaValues[index] = (2 * close + (p - 1) * emaValues[index]) / (p + 1)
+          } else {
+            emaValues[index] = closeSum / p
+          }
+          ema[figures[index].key] = emaValues[index]
+        }
+      })
+      return ema
+    })
+  }
+}
+
+export const customRectFigure = {
+  name: 'custom_rect',
+  draw: ({ ctx, figure, coordinates, styles }: any) => {
+    console.log(ctx, figure, coordinates, styles);
+    if (coordinates.length < 2) return;
+
+    const [p1, p2] = coordinates;
+
+    const x = Math.min(p1.x, p2.x);
+    const y = Math.min(p1.y, p2.y);
+    const width = Math.abs(p2.x - p1.x);
+    const height = Math.abs(p2.y - p1.y);
+
+    ctx.fillStyle = styles.color || 'rgba(0, 128, 255, 0.2)';
+    ctx.fillRect(x, y, width, height);
+  }
+}
+
+export const customRect = {
+  name: 'custom_rect_overlay',
+  totalStep: 2,
+  needDefaultPointFigure: false,
+  createPointFigures: ({ coordinates }) => {
+    if (coordinates.length < 2) return [];
+    console.log(coordinates);
+    return [
+      {
+        type: 'custom_rect',
+        attrs: {
+          coordinates: [coordinates[0], coordinates[1]]
+        },
+        styles: {
+          color: 'rgba(100, 149, 237, 0.3)'
+        }
+      }
+    ];
+  }
+}
+
+export function upCircleBySize(size, onClickCallback){
+  return {
+    name: `up${size}Circle`,
+    totalStep: 1,
+    needDefaultPointFigure: false,
+    onClick: (e) => {
+      return onClickCallback(e);
+    },
+    createPointFigures: ({ coordinates }) => {
+      const [point] = coordinates;
+      return [
+        {
+          type: 'circle',
+          attrs: {
+            x: point.x,
+            y: point.y + 10,
+            r: 1 + (size * 2),
+          },
+          styles: {
+            color: 'rgba(0,89,30, 0.55)',
+            style: 'fill',
+          }
+        }
+      ];
+    }
+  }
+}
+
+export function downCircleBySize(size: number, onClickCallback: any){
+  return {
+    name: `down${size}Circle`,
+    totalStep: 1,
+    needDefaultPointFigure: false,
+    onClick: (e) => {
+      return onClickCallback(e);
+    },
+    createPointFigures: ({ coordinates }) => {
+      const [point] = coordinates;
+      return [
+        {
+          type: 'circle',
+          attrs: {
+            x: point.x,
+            y: point.y - 10,
+            r: 1 + (size * 2),
+          },
+          styles: {
+            color: '#ff0000',
+            style: 'fill',
+          }
+        }
+      ];
+    }
+  }
+}
+
+export function getPriceByWebSocket(chart: any, pairId: number, tf: number, callback: any) {
+  if (!chart) { return }
+  const socket = new WebSocket('ws://klines.traken-trade.ru/ws/')
+
+  socket.onopen = () => {
+    socket.send(JSON.stringify({
+      type: 'subscribe',
+      pairId: parseInt(pairId),
+      tf: parseInt(tf),
+    }))
+  }
+
+  socket.onmessage = (msg) => {
+    callback(msg);
+  }
+}
+
+export function resizeChart(chart: any) {
+  if (!chart) { return }
+  if (typeof window !== 'undefined') {
+    chart._container.style.height = `${window.innerHeight}px`;
+    chart.resize();
+    window.addEventListener('resize', () => {
+      chart._container.style.height = `${window.innerHeight}px`;
+      chart.resize();
+    })
+  }
+}
