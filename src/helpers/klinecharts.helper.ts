@@ -182,7 +182,6 @@ export const ema = {
 export const customRectFigure = {
   name: 'custom_rect',
   draw: ({ ctx, figure, coordinates, styles }: any) => {
-    console.log(ctx, figure, coordinates, styles);
     if (coordinates.length < 2) return;
 
     const [p1, p2] = coordinates;
@@ -313,4 +312,113 @@ export function resizeChart(chart: any) {
       chart.resize();
     })
   }
+}
+
+
+
+export function clusterKline(data: any) {
+  const sortedData = sortByPrice(Object.values(data), false);
+  return {
+    name: 'clusterKline',
+    lock: true,
+    createPointFigures: ({coordinates}) => {
+      const result = [];
+      // let levels = [];
+      // let texts = [];
+      const height = coordinates[1].y - coordinates[0].y;
+      const clusterLevelHeight = height / Object.keys(data).length;
+      //const maxVolume = 0;
+      let i = 0;
+      const poc = pocFromCluster(data);
+      result.push({
+        type: 'rect',
+        attrs: {
+          x: coordinates[0].x - 18,
+          y: coordinates[0].y - 1,
+          width: 57,
+          height: height + 2,
+        },
+        styles: {
+          style: 'stroke_fill',
+          color: '#fff',
+          padding: 1,
+          borderColor: '#009688',
+          borderStyle: 'solid',
+          borderSize: 1,
+        }
+      });
+      for (const item of sortedData) {
+        // if data[price].
+        const bv = parseFloat(item.bv);
+        const sv = parseFloat(item.sv);
+        const v = parseFloat(item.v);
+        const deltaVale = parseFloat(delta(item));
+        const delimeter = Math.abs(deltaVale) >= 1000 ? Math.abs(deltaVale) >= 1000000 ? 1000000 : 1000 : 1;
+        const text = `${Math.round(deltaVale / delimeter)}${delimeter === 1000000 ? 'm' : delimeter === 1000 ? 'k' : ''}`;
+        result.push({
+          type: 'rect',
+          attrs: {
+            x: coordinates[0].x - 17,
+            y: coordinates[0].y + (i * clusterLevelHeight),
+            width: 55,
+            height: clusterLevelHeight,
+          },
+          styles: {
+            style: 'stroke_fill',
+            color: parseFloat(item.bv) > parseFloat(item.sv) ? '#009688' : '#f44336',
+            backgroundColor: parseFloat(item.bv) > parseFloat(item) ? '#009688' : '#f44336',
+            //borderColor: '#fff',
+            //borderStyle: 'solid',
+            borderSize: 0,
+          }
+        })
+        result.push({
+          type: 'text',
+          attrs: {
+            x: coordinates[0].x - 17,
+            y: coordinates[0].y + (i * clusterLevelHeight),
+            text,
+            width: 55,
+            height: clusterLevelHeight - 1,
+            baseline: 'top',
+          },
+          styles: {
+            backgroundColor: 'transparent',
+            color: poc.v === item.v ? '#000' : '#fff',
+            size: 10,
+            weight: 'bold',
+            borderColor: '#fff',
+            //borderStyle: 'solid',
+            borderSize: 0,
+            paddingTop: 0,
+            paddingBottom: 0,
+            paddingLeft: 0,
+            paddingRight: 0,
+          }
+        })
+        i++;
+      }
+      return result;
+    }
+  }
+}
+
+function sortByPrice(array: any[], asc = true): any {
+  return [...array].sort((a: any, b: any) => {
+    return asc
+      ? parseFloat(a.p) - parseFloat(b.p)
+      : parseFloat(b.p) - parseFloat(a.p);
+  });
+}
+
+function delta(clusterPrice: any) {
+  return (parseFloat(clusterPrice.bv) - parseFloat(clusterPrice.sv)).toString();
+}
+
+function pocFromCluster(data: any) {
+  return Object.entries(data).reduce((max, entry) => {
+    const [, current]: any = entry;
+    const [, maxValue]: any = max;
+    return parseFloat(current.v) > parseFloat(maxValue.v) ? entry : max;
+  })[1];
 }

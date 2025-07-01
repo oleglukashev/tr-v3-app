@@ -53,7 +53,6 @@ export default function Map({
         fetch(`http://klines.traken-trade.ru/api/v1/klines?pairId=${pairId}&startTs=${startTs}&endTs=${endTs}&limit=100&tf=${tf}`)
           .then(res => res.json())
           .then(data => {
-            console.log(data);
             return data.map(item => ({
               id: item.id,
               open: parseFloat(item.open),
@@ -83,24 +82,24 @@ export default function Map({
   }, [])
 
   // get last price by websocket
-  useEffect(() => {
-    getPriceByWebSocket(chart, pairId, tf, (msg: any): void => {
-      const websocketKlineData = JSON.parse(msg.data);
-      if (websocketKlineData.type === 'kline') {
-        console.log('Пришла свеча:', websocketKlineData.data)
-        console.log('d', websocketKlineData.data.ts);
-        //setCurrentPrice(websocketKlineData?.data?.close);
-        const klines = chart.getDataList();
-        klines[klines.length - 1].close = parseFloat(websocketKlineData?.data?.close);
-        if (updateWebsocketPriceCallback) {
-          updateWebsocketPriceCallback();
-        }
-        // resize helps redraw last kline. I don't know why!!!
-        chart.resize();
-        //chart.resetData(klines);
-      }
-    })
-  }, [chart, pairId, tf, updateWebsocketPriceCallback])
+  // useEffect(() => {
+  //   getPriceByWebSocket(chart, pairId, tf, (msg: any): void => {
+  //     const websocketKlineData = JSON.parse(msg.data);
+  //     if (websocketKlineData.type === 'kline') {
+  //       console.log('Пришла свеча:', websocketKlineData.data)
+  //       console.log('d', websocketKlineData.data.ts);
+  //       //setCurrentPrice(websocketKlineData?.data?.close);
+  //       const klines = chart.getDataList();
+  //       klines[klines.length - 1].high = parseFloat(websocketKlineData?.data?.close);
+  //       if (updateWebsocketPriceCallback) {
+  //         updateWebsocketPriceCallback();
+  //       }
+  //       // resize helps redraw last kline. I don't know why!!!
+  //       chart.resize();
+  //       //chart.resetData(klines);
+  //     }
+  //   })
+  // }, [chart, pairId, tf, updateWebsocketPriceCallback])
 
   // resize map
   useEffect(() => {
