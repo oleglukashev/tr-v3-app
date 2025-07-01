@@ -23,14 +23,19 @@ import moment from "moment/moment";
 import {clearFppPatterns, drawFppPatterns} from "@/src/utils/klinecharts";
 import MapTools from "@/src/components/map-tools/map-tools";
 import {
-  confirmedCircle, customRect, customRectFigure,
-  downCircleBySize, ema, finishedByLoseStartKline,
-  finishedStartKline, getPriceByWebSocket,
+  confirmedCircle,
+  ema, finishedByLoseStartKline,
+  finishedStartKline,
   godKline, triggeredStartKline,
-  upCircleBySize, waitingStartKline
+  waitingStartKline, noneditableRect
 } from "@/src/helpers/klinecharts.helper";
 import Map from "@/src/components/map/map";
 import {useTheme} from "@mui/material/styles";
+import rect from "@/src/components/klinecharts-rect/klinecharts-rect";
+import createPosition from "@/src/components/klinecharts-create-position/klinecharts-create-position";
+import stopPosition from "@/src/components/klinecharts-stop-position/klinecharts-stop-position";
+import takePosition from "@/src/components/klinecharts-take-position/klinecharts-take-position";
+import enterPosition from "@/src/components/klinecharts-enter-position/klinecharts-enter-position";
 
 export default function DhmIndexView({ tf, pairId }: any) {
   const theme = useTheme();
@@ -60,6 +65,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
     'locked_imbalance',
     'test_volume',
     'resistance',
+    'weakness',
     'low_last_price_volume'
   ]);
 
@@ -100,6 +106,35 @@ export default function DhmIndexView({ tf, pairId }: any) {
     }, 'Успешно удалено');
   }, [currentDhm?.id]);
 
+  const drawPosition = useCallback((enterPrice, stopPrice, takePrice) => {
+    if (!chart) { return }
+    chart.removeOverlay({ name: `enterPosition` })
+    chart.removeOverlay({ name: `stopPosition` })
+    chart.removeOverlay({ name: `takePosition` })
+    chart.createOverlay({
+      name: `enterPosition`,
+      points: [{timestamp: null, value: enterPrice }],
+    })
+    chart.createOverlay({
+      name: `stopPosition`,
+      points: [{timestamp: null, value: stopPrice }],
+    })
+    chart.createOverlay({
+      name: `takePosition`,
+      points: [{timestamp: null, value: takePrice }],
+    })
+  }, [chart]);
+
+  const drawCreatePosition = useCallback(() => {
+    if (!chart) { return }
+    const klines = chart.getDataList();
+    chart.removeOverlay({ name: `createPosition` })
+    chart.createOverlay({
+      name: `createPosition`,
+      points: [{timestamp: null, value: parseFloat(klines[klines.length - 1].close)}],
+    })
+  }, [chart]);
+
   useEffect((): void => {
     if (!chart) { return; }
     if (!fpp?.length) { return; }
@@ -115,13 +150,31 @@ export default function DhmIndexView({ tf, pairId }: any) {
     if (!chart) {return}
     if (!fpp) {return}
     //if (!clustersAsHashByTs) {return}
+    const klines = chart.getDataList();
     for (const item of dhm) {
-      if (['waiting', 'finished', 'finished_by_lose', 'finished_by_length'].includes(item.status) && item.confirmed) {
+      if (['waiting', 'triggered', 'finished', 'finished_by_lose', 'finished_by_length'].includes(item.status) && item.confirmed) {
         chart.createOverlay({
           name: `${camelCase(item.status)}StartKline`,
           points: [{timestamp: parseInt(item.data.kline1.ts), value: parseFloat(item.data.kline1.close)}],
         })
+        chart.createOverlay({
+          name: `${camelCase(item.status)}StartKline`,
+          points: [{timestamp: parseInt(item.data.kline2.ts), value: parseFloat(item.data.kline2.close)}],
+        })
+        for (const i of [1,2,3]) {
+          if (item.data?.[`poi${i}`]) {
+            chart.createOverlay({
+              name: 'noneditableRect',
+              points: [
+                { timestamp: parseInt(item.data?.[`poi${i}`].ts), value: item.data?.[`poi${i}`].high },
+                { timestamp: parseInt(item.data?.[`poi${i}`].ts) + (100 * 3600000), value: item.data?.[`poi${i}`].low }
+              ]
+            })
+          }
+        }
+        console.log(item.data.kline1.close);
       }
+
       // if (item.confirmed) {
       //   chart.createOverlay({
       //     name: `confirmedCircle`,
@@ -134,6 +187,17 @@ export default function DhmIndexView({ tf, pairId }: any) {
       //   });
       // }
     }
+
+    if (klines.length > 0) {
+      drawCreatePosition();
+    }
+
+
+    // if (klines.length > 0) {
+    //   drawPosition(0.075, 0.074, 0.076);
+    // }
+
+
     // add EMA200 trand indicator
     chart.createIndicator('EMA', false, { id: 'candle_pane' });
     // chart.createIndicator('CUM_DELTA', true);
@@ -141,7 +205,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
     chart.subscribeAction('onCandleBarClick', (event) => {
       const { data, x, y } = event
       console.log(event);
-      const currentDhm = dhm.find(item => item.data.kline1Id === data.current.id);
+      const currentDhm = dhm.find(item => item.data.kline1.id === data.current.id);
       console.log(currentDhm);
       setCurrentDhm(currentDhm);
       setCurrentKline(data.current);
@@ -149,51 +213,47 @@ export default function DhmIndexView({ tf, pairId }: any) {
 
   }, [chart, fpp, dhm]);
 
-  useEffect(() => {
-    getPriceByWebSocket(chart, pairId, tf, (msg: any): void => {
-      const data = JSON.parse(msg.data);
-      if (data.type === 'kline') {
-        console.log('Пришла свеча:', data.data)
-        console.log('d', data.data.ts);
-        setCurrentPrice(data?.data?.close);
-        console.log('chart.updateData', chart.updateData);
-        // chart.updateData({
-        //   ...data.data,
-        //   timestamp: parseInt(data.data.ts),
-        //   volume: parseInt(data.data.volume),
-        // });
-      }
-    })
-  }, [chart, pairId, tf])
+  // for (const item of [1,2,3,4,5,6,7]) {
+  //   registerOverlay(
+  //     upCircleBySize(item, (e) => {
+  //       setCurrentKlineFpp((fpp || []).filter(item => parseInt(item.ts) === e.overlay.points[0].timestamp));
+  //       setOpenKlineFpp(true);
+  //       return true
+  //     }),
+  //   );
+  //
+  //   registerOverlay(
+  //     downCircleBySize(item, (e) => {
+  //       setCurrentKlineFpp((fpp || []).filter(item => parseInt(item.ts) === e.overlay.points[0].timestamp));
+  //       setOpenKlineFpp(true);
+  //       return true
+  //     }),
+  //   );
+  // }
 
-  for (const item of [1,2,3,4,5,6,7]) {
-    registerOverlay(
-      upCircleBySize(item, (e) => {
-        setCurrentKlineFpp((fpp || []).filter(item => parseInt(item.ts) === e.overlay.points[0].timestamp));
-        setOpenKlineFpp(true);
-        return true
-      }),
-    );
-
-    registerOverlay(
-      downCircleBySize(item, (e) => {
-        setCurrentKlineFpp((fpp || []).filter(item => parseInt(item.ts) === e.overlay.points[0].timestamp));
-        setOpenKlineFpp(true);
-        return true
-      }),
-    );
-  }
-
-  registerFigure(customRectFigure);
   registerOverlay(confirmedCircle);
   registerOverlay(finishedStartKline);
   registerOverlay(triggeredStartKline);
   registerOverlay(finishedByLoseStartKline);
   registerOverlay(waitingStartKline);
+  registerOverlay(rect);
+  registerOverlay(noneditableRect);
+  registerOverlay(enterPosition(() => {}));
+  registerOverlay(stopPosition(() => {}));
+  registerOverlay(takePosition(() => {}));
+  registerOverlay(
+    createPosition((e: any) => {
+      const sign = e.figure.attrs[0].text;
+      if (sign === '⬆') {
+
+      } else if (sign === '⬇') {
+
+      }
+    }
+  ));
   registerIndicator(ema);
-  registerOverlay(customRect);
   registerFigure(godKline);
-  // registerIndicator(cumDelta);
+  //registerIndicator(cumDelta);
 
   return (
     <main>
@@ -201,6 +261,10 @@ export default function DhmIndexView({ tf, pairId }: any) {
         pairId={pairId}
         tf={tf}
         setParentChart={setChart}
+        //setCurrentPrice={setCurrentPrice}
+        updateWebsocketPriceCallback={() => {
+          drawCreatePosition();
+        }}
         setDataLoaderCallback={() => {
           if (!klinesUpdatedAt) {
             setKlinesUpdatedAt(moment().utc().valueOf());

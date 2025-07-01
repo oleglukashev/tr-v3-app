@@ -1,7 +1,7 @@
 'use client'
 
 import {useEffect, useState} from "react";
-import {resizeChart} from "@/src/helpers/klinecharts.helper";
+import {getPriceByWebSocket, resizeChart} from "@/src/helpers/klinecharts.helper";
 import {dispose, init} from "klinecharts";
 import moment from "moment";
 
@@ -20,44 +20,20 @@ export default function Map({
                               pairId,
                               tf,
                               setParentChart,
+                              updateWebsocketPriceCallback,
                               setDataLoaderCallback
 }: any) {
   const [chart, setChart] = useState<any>(null);
 
+  // new map data loader
   useEffect(() => {
-    // registerOverlay({
-    //   name: 'circle',
-    //   needDefaultPointFigure: true,
-    //   needDefaultXAxisFigure: true,
-    //   needDefaultYAxisFigure: true,
-    //   totalStep: 3,
-    //   createPointFigures: ({ coordinates }) => {
-    //     if (coordinates.length === 2) {
-    //       const xDis = Math.abs(coordinates[0].x - coordinates[1].x)
-    //       const yDis = Math.abs(coordinates[0].y - coordinates[1].y)
-    //       const radius = Math.sqrt(xDis * xDis + yDis * yDis)
-    //       return {
-    //         key: 'circle',
-    //         type: 'circle',
-    //         attrs: {
-    //           ...coordinates[0],
-    //           r: radius
-    //         },
-    //         styles: {
-    //           style: 'stroke_fill'
-    //         }
-    //       }
-    //     }
-    //     return []
-    //   }
-    // })
     const chart: any = init('chart', {
       // layout: [
       //   { type: 'indicator', content: ['VOL'], options: { order: 10 }  },
       // ]
     });
     //chart.setPrecision({ price: 5 })
-    chart.setSymbol({ ticker: pairId, pricePrecision: 4 })
+    chart.setSymbol({ ticker: pairId, pricePrecision: 5 })
     chart.setPeriod({ span: tf, type: `minute` })
     chart.setDataLoader({
       getBars: (data: any) => {
@@ -106,6 +82,27 @@ export default function Map({
     }
   }, [])
 
+  // get last price by websocket
+  useEffect(() => {
+    getPriceByWebSocket(chart, pairId, tf, (msg: any): void => {
+      const websocketKlineData = JSON.parse(msg.data);
+      if (websocketKlineData.type === 'kline') {
+        console.log('Пришла свеча:', websocketKlineData.data)
+        console.log('d', websocketKlineData.data.ts);
+        //setCurrentPrice(websocketKlineData?.data?.close);
+        const klines = chart.getDataList();
+        klines[klines.length - 1].close = parseFloat(websocketKlineData?.data?.close);
+        if (updateWebsocketPriceCallback) {
+          updateWebsocketPriceCallback();
+        }
+        // resize helps redraw last kline. I don't know why!!!
+        chart.resize();
+        //chart.resetData(klines);
+      }
+    })
+  }, [chart, pairId, tf, updateWebsocketPriceCallback])
+
+  // resize map
   useEffect(() => {
     resizeChart(chart);
   }, [chart]);

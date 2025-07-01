@@ -76,13 +76,21 @@ export function StrategiesDhmDialog({currentDhm, currentKline, onCreateSubmit, o
           <StrategiesForm
             defaultValues={{
               kline1Ts: currentDhm.data.kline1.ts,
+              kline2Ts: currentDhm.data.kline2.ts,
               status: currentDhm.status,
               confirmed: currentDhm.confirmed,
               direction: currentDhm.direction,
-              low: currentDhm.data.low,
-              high: currentDhm.data.high,
               pairId,
-              tf
+              tf,
+              poi1Ts: currentDhm.data.poi1?.ts,
+              poi1High: currentDhm.data.poi1?.high,
+              poi1Low: currentDhm.data.poi1?.low,
+              poi2Ts: currentDhm.data.poi2?.ts,
+              poi2High: currentDhm.data.poi2?.high,
+              poi2Low: currentDhm.data.poi2?.low,
+              poi3Ts: currentDhm.data.poi3?.ts,
+              poi3High: currentDhm.data.poi3?.high,
+              poi3Low: currentDhm.data.poi3?.low
             }}
             onSubmit={onUpdateSubmit}
           />

@@ -14,7 +14,6 @@ import horLineIcon from "@/src/components/icons/hor-line"
 import rectIcon from "@/src/components/icons/rect"
 import Box from "@mui/material/Box";
 import {useTheme} from "@mui/material/styles";
-import {customRect} from "@/src/helpers/klinecharts.helper";
 import RayIcon from "@/src/components/icons/ray";
 import ParChannelIcon from "@/src/components/icons/par-channel";
 
@@ -27,7 +26,6 @@ export default function MapTools({ chart }: any) {
   registerOverlay(fibonacciLine2);
   registerOverlay(longPosition);
   registerOverlay(shortPosition);
-  registerOverlay(customRect);
   registerOverlay(rect);
 
   return (

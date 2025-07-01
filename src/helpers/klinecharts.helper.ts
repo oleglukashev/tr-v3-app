@@ -197,24 +197,36 @@ export const customRectFigure = {
   }
 }
 
-export const customRect = {
-  name: 'custom_rect_overlay',
-  totalStep: 2,
-  needDefaultPointFigure: false,
+export const noneditableRect: any = {
+  name: 'noneditableRect',
+  totalStep: 3,
+  lock: true,
+  //needDefaultXAxisFigure: true,
+  //needDefaultYAxisFigure: true,
+  //needDefaultPointFigure: false,
+  styles: {
+    polygon: {
+      color: 'rgba(22, 119, 255, 0.15)'
+    }
+  },
   createPointFigures: ({ coordinates }) => {
-    if (coordinates.length < 2) return [];
-    console.log(coordinates);
-    return [
-      {
-        type: 'custom_rect',
-        attrs: {
-          coordinates: [coordinates[0], coordinates[1]]
-        },
-        styles: {
-          color: 'rgba(100, 149, 237, 0.3)'
+    if (coordinates.length > 1) {
+      return [
+        {
+          type: 'polygon',
+          attrs: {
+            coordinates: [
+              coordinates[0],
+              { x: coordinates[1].x, y: coordinates[0].y },
+              coordinates[1],
+              { x: coordinates[0].x, y: coordinates[1].y }
+            ]
+          },
+          styles: { style: 'stroke_fill' }
         }
-      }
-    ];
+      ]
+    }
+    return []
   }
 }
 

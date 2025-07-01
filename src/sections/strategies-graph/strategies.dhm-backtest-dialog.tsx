@@ -59,7 +59,7 @@ export function StrategiesDhmBacktestDialog({ pairId, tf, klines }: any) {
     }
     chart.subscribeAction('onCandleBarClick', (event) => {
       const { data, x, y } = event
-      const currentDhm = testDhm.find(item => item.data.kline1Id === data.current.id);
+      const currentDhm = testDhm.find(item => item.data.kline1.id === data.current.id);
       console.log(currentDhm);
     })
   }, [chart, klines, testDhm]);

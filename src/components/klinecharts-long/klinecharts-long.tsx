@@ -72,7 +72,8 @@ const longPosition: any = {
           styles: {
             style: 'fill',
             color: 'rgba(21,181,21,0.3)',
-          }});
+          }
+        });
         //texts.push({ x: startX, y: coordinates?.[1]?.y, baseline: 'bottom' });
 
         lines.push({

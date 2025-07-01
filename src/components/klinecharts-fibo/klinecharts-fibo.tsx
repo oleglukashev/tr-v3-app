@@ -27,7 +27,8 @@ const fibonacciLine2: any = {
       const startX = 0
       const endX = bounding.width
       if (coordinates.length > 1 && typeof points[0].value === 'number' && Number.isFinite(points[0].value) && typeof points[1].value === 'number' && Number.isFinite(points[1].value)) {
-        const percents = [2.414, 1.618, 1, 0.786, 0.618, 0.5, 0.382, 0.236, 0, -0.18, -0.27, -0.618]
+        //const percents = [2.414, 1.618, 1, 0.786, 0.618, 0.5, 0.382, 0.236, 0, -0.18, -0.27, -0.618]
+        const percents = [1, 0.5, 0]
         const yDif = coordinates[0].y - coordinates[1].y
         const valueDif = points[0].value - points[1].value
         percents.forEach(percent => {
