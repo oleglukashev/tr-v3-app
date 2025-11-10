@@ -1,4 +1,4 @@
-import {FormContainer, MultiSelectElement} from "react-hook-form-mui";
+import {FormContainer, MultiSelectElement, CheckboxElement} from "react-hook-form-mui";
 import {Grid} from "@mui/material";
 import CustomFormButton from "@/src/components/custom-form-button/custom-form-button";
 import Container from "@mui/material/Container";
@@ -37,6 +37,9 @@ export function StrategiesFppFiltersForm({ defaultValues, onSubmit }: any) {
                 { id: 'low_last_price_volume', label: 'Low last price volume' }
               ]}
             />
+          </Grid>
+          <Grid item size={12}>
+            <CheckboxElement name='fppCombine' label='Combine' />
           </Grid>
         </Grid>
         <CustomFormButton />

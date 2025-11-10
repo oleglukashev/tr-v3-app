@@ -5,6 +5,8 @@ import {pairApi} from "@/lib/redux/api/pairApi";
 import {clusterApi} from "@/lib/redux/api/clusterApi";
 import {fppApi} from "@/lib/redux/api/fppApi";
 import {strategySettingsApi} from "@/lib/redux/api/strategySettingsApi";
+import {positionApi} from "@/lib/redux/api/positionApi";
+import {tdaPointsApi} from "@/lib/redux/api/tdaPointsApi";
 
 export const reduxStore = configureStore({
   reducer: {
@@ -14,6 +16,8 @@ export const reduxStore = configureStore({
     [clusterApi.reducerPath]: clusterApi.reducer,
     [fppApi.reducerPath]: fppApi.reducer,
     [strategySettingsApi.reducerPath]: strategySettingsApi.reducer,
+    [positionApi.reducerPath]: positionApi.reducer,
+    [tdaPointsApi.reducerPath]: tdaPointsApi.reducer,
   },
   //devTools: process.env.NEXT_PUBLIC_ENV !== "production",
   middleware: (getDefaultMiddleware) =>
@@ -24,5 +28,7 @@ export const reduxStore = configureStore({
       clusterApi.middleware,
       fppApi.middleware,
       strategySettingsApi.middleware,
+      positionApi.middleware,
+      tdaPointsApi.middleware,
     ]),
 });

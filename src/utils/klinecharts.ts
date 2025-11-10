@@ -1,36 +1,87 @@
 import {useCallback} from "react";
 
-export function drawFppPatterns(chart: any, klines: any[], fpp: any, fppFilters: any[]): void {
+export function drawFppPatterns(chart: any, klines: any[], fpp: any, tdaPoints = [], fppFilters: any[], combine: boolean = false): void {
   if (!fpp?.length) { return }
   for (const kline of klines) {
-    const fppItems: any[] = fpp.filter(item => parseInt(item.ts) === kline.timestamp && fppFilters.includes(item.type));
-    const r: any = {up: { s: 0, v: parseFloat(kline.low)}, down: { s: 0, v: parseFloat(kline.high) }};
-    for (const fppItem of fppItems) {
-      r[fppItem.direction].s += 1;
-    }
-    if (r.up.s) {
-      chart.createOverlay({
-        name: `up${r.up.s}Circle`,
-        points: [
-          {
-            timestamp: parseInt(kline.timestamp),
-            value: r.up.v,
-          }
-        ]
-      });
-    }
-    if (r.down.s) {
-      chart.createOverlay({
-        name: `down${r.down.s}Circle`,
-        points: [
-          {
-            timestamp: parseInt(kline.timestamp),
-            value: r.down.v,
-          }
-        ]
-      });
+    const selectedTypes: string[] = Array.isArray(fppFilters) ? fppFilters : [];
+    const includeTda: boolean = selectedTypes.includes('tda');
+    const filtersExcludingTda = selectedTypes.filter(t => t !== 'tda');
+
+    const fppAtTs: any[] = (fpp as any[]).filter((item: any) => parseInt(item.ts) === kline.timestamp);
+    const tdaAtTs: any[] = (tdaPoints as any[] || []).filter((item: any) => parseInt(item.ts) === kline.timestamp);
+
+    if (combine) {
+      // Require that for each selected filter, there is a matching item on the direction
+      const hasAllForDirection = (dir: 'up'|'down') => {
+        // All non-tda filters present on fpp with same direction
+        const okFpp = filtersExcludingTda.every(t => fppAtTs.some(it => it.type === t && it.direction === dir));
+        const okTda = includeTda ? tdaAtTs.some(it => it.side === dir) : true;
+        return okFpp && okTda;
+      };
+
+      if (hasAllForDirection('up')) {
+        chart.createOverlay({
+          name: `up${filtersExcludingTda.length + (includeTda ? 1 : 0)}Circle`,
+          points: [
+            {
+              timestamp: parseInt(kline.timestamp),
+              value: parseFloat(kline.low),
+            }
+          ]
+        });
+      }
+      if (hasAllForDirection('down')) {
+        chart.createOverlay({
+          name: `down${filtersExcludingTda.length + (includeTda ? 1 : 0)}Circle`,
+          points: [
+            {
+              timestamp: parseInt(kline.timestamp),
+              value: parseFloat(kline.high),
+            }
+          ]
+        });
+      }
+    } else {
+      // OR mode (existing behavior): count matches by direction
+      const r: any = {up: { s: 0, v: parseFloat(kline.low)}, down: { s: 0, v: parseFloat(kline.high) }};
+      for (const fppItem of fppAtTs) {
+        if (selectedTypes.includes(fppItem.type)) {
+          r[fppItem.direction].s += 1;
+        }
+      }
+      if (includeTda) {
+        for (const tdaPoint of tdaAtTs) {
+          r[tdaPoint.side].s += 1;
+        }
+      }
+      if (r.up.s) {
+        chart.createOverlay({
+          name: `up${r.up.s}Circle`,
+          points: [
+            {
+              timestamp: parseInt(kline.timestamp),
+              value: r.up.v,
+            }
+          ]
+        });
+      }
+      if (r.down.s) {
+        chart.createOverlay({
+          name: `down${r.down.s}Circle`,
+          points: [
+            {
+              timestamp: parseInt(kline.timestamp),
+              value: r.down.v,
+            }
+          ]
+        });
+      }
     }
   }
+}
+
+export function direction(kline: any) {
+  return parseFloat(kline.close) > parseFloat(kline.open) ? 'up' : 'down';
 }
 
 export function clearFppPatterns(chart: any) {

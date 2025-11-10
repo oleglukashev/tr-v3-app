@@ -1,10 +1,9 @@
 import Box from "@mui/material/Box";
-import {StrategiesBacktestForm} from "@/src/sections/strategies-graph/strategies.backtest-form";
+import {StrategiesBacktestForm} from "@/src/sections/strategies-graph-test/strategies.backtest-form";
 import {useCallback, useEffect, useMemo, useState} from "react";
 import {onSubmitWrapper} from "@/src/utils/submit";
 import {useDeleteAllTestMutation, useGetAllTestQuery, useRunMutation} from "@/lib/redux/api/dhmApi";
 import Button from "@mui/material/Button";
-import {dispose, init} from "klinecharts";
 import {camelCase} from "lodash";
 import ReorderIcon from "@mui/icons-material/Reorder";
 import LinearScaleIcon from "@mui/icons-material/LinearScale";
@@ -23,31 +22,33 @@ export function StrategiesDhmBacktestDialog({ pairId, tf, klines }: any) {
     return onSubmitWrapper(() => removeAllTest({ pairId, tf, ...values }), null, 'Успешно удалено');
   }, [pairId, tf]);
 
-  useEffect(() => {
-    const chart = init('chartBacktest', {
-      // layout: [
-      //   { type: 'indicator', content: ['VOL'], options: { order: 10 }  },
-      // ]
-    });
-    setChart(chart);
-    chart.setPrecision({ price: 5 })
-    return () => {
-      dispose('chartBacktest')
-    }
-  }, [])
+  // useEffect(() => {
+  //   const chart = init('chartBacktest', {
+  //     // layout: [
+  //     //   { type: 'indicator', content: ['VOL'], options: { order: 10 }  },
+  //     // ]
+  //   });
+  //   chart.setSymbol({ ticker: pairId, pricePrecision: 5 })
+  //   chart.setPeriod({ span: tf, type: `minute` })
+  //   setChart(chart);
+  //   //chart.setPrecision({ price: 5 })
+  //   return () => {
+  //     dispose('chartBacktest')
+  //   }
+  // }, [])
 
   useEffect(() => {
     if (!klines) { return }
     if (!testDhm) {return}
     if (!chart) {return}
-    chart.applyNewData(klines.map((item: any) => {
-      // Создаем графическую метку
-      return {
-        ...item,
-        timestamp: parseInt(item.ts),
-        volume: parseInt(item.volume),
-      }
-    }))
+    // chart.applyNewData(klines.map((item: any) => {
+    //   // Создаем графическую метку
+    //   return {
+    //     ...item,
+    //     timestamp: parseInt(item.ts),
+    //     volume: parseInt(item.volume),
+    //   }
+    // }))
 
     for (const item of testDhm) {
       if (['waiting', 'finished', 'finished_by_lose', 'finished_by_length'].includes(item.status)) {
@@ -81,7 +82,6 @@ export function StrategiesDhmBacktestDialog({ pairId, tf, klines }: any) {
 
   return (
     <Box sx={{p: 2}}>
-      <div id="chartBacktest" style={{width: '100%', height: 450}}/>
       <Box>Total: {data?.count}</Box>
       <Box>Created: {data?.created}</Box>
       <Box>Triggered: {data?.triggered}</Box>
@@ -104,24 +104,6 @@ export function StrategiesDhmBacktestDialog({ pairId, tf, klines }: any) {
         onSubmit={onRunSubmit}
       />
       <Button color='error' fullWidth variant='contained' onClick={onDeleteAllTestSubmit}>Remove backtest</Button>
-
-      {[
-        { name: 'fibonacciLine2', icon: ReorderIcon },
-        { name: 'priceLine', icon: LinearScaleIcon },
-        { name: 'rayLine', icon: HorizontalRuleIcon },
-      ].map((item, index) => (
-        <IconButton key={item.name} sx={{
-          position: 'absolute',
-          zIndex: 1,
-          left: '18px',
-          bottom: `${index * 45 + 65}px`,
-          background: '#ececec',
-        }} aria-label="delete" onClick={() => {
-          chart.createOverlay(item.name);
-        }}>
-          <item.icon />
-        </IconButton>
-      ))}
     </Box>
   )
 }

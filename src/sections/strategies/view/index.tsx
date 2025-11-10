@@ -24,7 +24,7 @@ export default function StrategiesIndexView({ tf, pairId }: any) {
   return (
     <Container sx={{ mt: 10 }}>
       <Card>
-        <CardHeader title='Clusters' />
+        <CardHeader title='DHM' />
         <CardContent>
           <Table>
             <TableHead>
@@ -33,8 +33,8 @@ export default function StrategiesIndexView({ tf, pairId }: any) {
                 <TableCell>Status</TableCell>
                 <TableCell>Low/High</TableCell>
                 <TableCell>Buy/Sell</TableCell>
-                <TableCell>Created At</TableCell>
-                <TableCell sx={{ textAlign: 'right' }}>Updated At</TableCell>
+                <TableCell sx={{ textAlign: 'right' }}>Created At</TableCell>
+                {/*<TableCell sx={{ textAlign: 'right' }}>Updated At</TableCell>*/}
               </TableRow>
             </TableHead>
             <TableBody>
@@ -81,8 +81,8 @@ export default function StrategiesIndexView({ tf, pairId }: any) {
                       </Box>
                     ))}
                   </TableCell>
-                  <TableCell>{moment(item.createdAt).format('YYYY-MM-DD HH:mm:ss')}</TableCell>
-                  <TableCell sx={{ textAlign: 'right' }}>{moment(item.updatedAt).format('YYYY-MM-DD HH:mm:ss')}</TableCell>
+                  <TableCell sx={{ textAlign: 'right' }}><Label color='success'>{moment(item.createdAt).format('YYYY-MM-DD HH:mm:ss')}</Label></TableCell>
+                  {/*<TableCell sx={{ textAlign: 'right' }}>{moment(item.updatedAt).format('YYYY-MM-DD HH:mm:ss')}</TableCell>*/}
                 </TableRow>
               ))}
             </TableBody>

@@ -22,13 +22,12 @@ export function StrategiesDhmSettingsDialog() {
       <StrategiesSettingsForm
         defaultValues={{
           enterLevel1: dhmSettings?.data?.enterLevel1,
-          exitLevel1: dhmSettings?.data?.exitLevel1,
+          finishLevel1: dhmSettings?.data?.finishLevel1,
           enterLevel2: dhmSettings?.data?.enterLevel2,
-          exitLevel2: dhmSettings?.data?.exitLevel2,
+          finishLevel2: dhmSettings?.data?.finishLevel2,
           enterLevel3: dhmSettings?.data?.enterLevel3,
-          exitLevel3: dhmSettings?.data?.exitLevel3,
+          finishLevel3: dhmSettings?.data?.finishLevel3,
           triggerLevel: dhmSettings?.data?.triggerLevel,
-          finishLevel: dhmSettings?.data?.finishLevel,
           exitLevel: dhmSettings?.data?.exitLevel,
           minPriceSize: dhmSettings?.data?.minPriceSize,
           orderSize: dhmSettings?.data?.orderSize,

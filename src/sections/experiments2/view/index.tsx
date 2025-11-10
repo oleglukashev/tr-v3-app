@@ -13,9 +13,17 @@ import { useGetAllQuery as useGetAllClustersQuery } from "@/lib/redux/api/cluste
 import {clusterPocRow, klineDirection} from "klines-footprint-patterns";
 import MapTools from "@/src/components/map-tools/map-tools";
 import Map from "@/src/components/map/map";
-import {downCircleBySize, ema, getPriceByWebSocket, upCircleBySize} from "@/src/helpers/klinecharts.helper";
+import {
+  downCircleBySize,
+  ema, getInterception,
+  getPriceByWebSocket,
+  getWeaknessKline,
+  upCircleBySize, cumDelta, bollingerBands, getReverse2
+
+} from "@/src/helpers/klinecharts.helper";
 import {useTheme} from "@mui/material/styles";
 import {direction} from "@/src/utils/klinecharts";
+import moment from "moment";
 
 export default function ExperimentsIndexView({ tf, pairId }: any) {
   const theme = useTheme();
@@ -64,7 +72,6 @@ export default function ExperimentsIndexView({ tf, pairId }: any) {
     }
     drawFppPatterns(fpp);
   }, [chart, fpp]);
-
   useEffect(() => {
     if (typeof window === 'undefined') { return; }
     try {
@@ -81,151 +88,100 @@ export default function ExperimentsIndexView({ tf, pairId }: any) {
     } catch {}
   }, [FPP_FILTERS_STORAGE_KEY]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') { return; }
+    try {
+      const saved = localStorage.getItem(FPP_FILTERS_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length) {
+          setFppFilters(parsed);
+        }
+      }
+    } catch {}
+  }, [FPP_FILTERS_STORAGE_KEY]);
+
   const drawFppPatterns = useCallback((fpp) => {
     if (!fpp?.length) { return }
     if (!clustersAsHashByTs) { return }
     const klines = chart.getDataList();
 
     for (const [index, kline] of klines.entries()) {
-      // const klineMinus1 = index ? klines[index - 1] : null;
-      // const klineMinus2 = index ? klines[index - 2] : null;
-      // const klineMinus3 = index ? klines[index - 3] : null;
-      // const klineMinus4 = index ? klines[index - 4] : null;
+      const klineMinus1 = index ? klines[index - 1] : null;
+      const klineMinus2 = index ? klines[index - 2] : null;
+      const klineMinus3 = index ? klines[index - 3] : null;
+      const klineMinus4 = index ? klines[index - 4] : null;
+      const klineMinus5 = index ? klines[index - 5] : null;
+      const klineMinus6 = index ? klines[index - 6] : null;
+      const klineMinus7 = index ? klines[index - 7] : null;
+      const klineMinus8 = index ? klines[index - 8] : null;
+      const klineMinus9 = index ? klines[index - 9] : null;
+      const klineMinus10 = index ? klines[index - 10] : null;
+      const klineMinus11 = index ? klines[index - 11] : null;
+      const klineMinus12 = index ? klines[index - 12] : null;
+      const klineMinus13 = index ? klines[index - 13] : null;
+      //const klineMinus10 = index ? klines[index - 4] : null;
       // const klinePlus1 = index ? klines[index + 1] : null;
       // const klinePlus2 = index ? klines[index + 2] : null;
-      const cluster = clustersAsHashByTs[kline.timestamp];
-      if (!cluster) { continue; }
-      // if (!klineMinus1) { continue; }
-      // if (!klineMinus2) { continue; }
-      // if (!klineMinus3) { continue; }
-      // if (!klineMinus4) { continue; }
-      // if (!klinePlus1) { continue; }
-      // if (!klinePlus2) { continue; }
+
+      const cluster = clustersAsHashByTs?.[kline.timestamp];
+      const clusterMinus1 = clustersAsHashByTs?.[klineMinus1?.timestamp];
+
+
+      const weakness = getWeaknessKline(kline, cluster);
+      const interception = getInterception(klineMinus1, clusterMinus1, kline, cluster);
+      //const powerTrend = getPowerTrend([kline, klineMinus1, klineMinus2, klineMinus3, klineMinus4, klineMinus5, klineMinus6, klineMinus7, klineMinus8, klineMinus9, klineMinus10, klineMinus11, klineMinus12, klineMinus13]);
+      const reverse2 = getReverse2(kline, cluster);
+
+      let isWeaknessEnabled = false;
+      let isInterceptionEnabled = false;
       //
-      // // up
-      // if (
-      //   parseFloat(kline.high) > parseFloat(klineMinus1.high) &&
-      //   parseFloat(klineMinus1.high) > parseFloat(klineMinus2.high) &&
-      //   //parseFloat(klineMinus2.high) > parseFloat(klineMinus3.high) &&
-      //   //parseFloat(klineMinus3.high) > parseFloat(klineMinus4.high) &&
-      //   //parseFloat(kline.high) > parseFloat(klinePlus1.high) &&
-      //   //parseFloat(klinePlus1.high) > parseFloat(klinePlus2.high) &&
-      //   //parseFloat(klineMinus2.high) > parseFloat(klineMinus3.high) &&
-      //   klineDirection(kline) === 'down'
-      // ) {
-      //   //const sorted = sortedCluster(cluster.data, 'desc');
-      //   //const poc = clusterPocRow(cluster.data);
-      //   //if (!poc || !sorted[0]) { continue; }
-      //   //if (sorted[0].p === poc.p) {
-      //     console.log(111111);
-      //     chart.createOverlay({
-      //       name: `down5Circle`,
-      //       points: [
-      //         {
-      //           timestamp: parseInt(kline.timestamp),
-      //           value: parseFloat(kline.high),
-      //         }
-      //       ]
-      //     });
-      //   //}
-      //   // down
-      // } else if (
-      //   parseFloat(kline.low) < parseFloat(klineMinus1.low) &&
-      //   parseFloat(klineMinus1.low) < parseFloat(klineMinus2.low) &&
-      //   //parseFloat(klineMinus2.low) < parseFloat(klineMinus3.low) &&
-      //   //parseFloat(klineMinus3.low) < parseFloat(klineMinus4.low) &&
-      //   //parseFloat(kline.low) < parseFloat(klinePlus1.low) &&
-      //   //parseFloat(klinePlus1.low) < parseFloat(klinePlus2.low) &&
-      //   //parseFloat(klineMinus2.low) < parseFloat(klineMinus3.low) &&
-      //   klineDirection(kline) === 'up'
-      // ) {
-      //   //const sorted = sortedCluster(cluster.data);
-      //   //const poc = clusterPocRow(cluster.data);
-      //   //if (!poc || !sorted[0]) { continue; }
-      //   //if (sorted[0].p === poc.p) {
-      //     console.log(111111);
-      //     chart.createOverlay({
-      //       name: `up5Circle`,
-      //       points: [
-      //         {
-      //           timestamp: parseInt(kline.timestamp),
-      //           value: parseFloat(kline.low),
-      //         }
-      //       ]
-      //     });
-      //   //}
-      // }
+      if (weakness) {
+        isWeaknessEnabled = true;
+      }
 
-      const klineDirection = direction(kline);
-      const topWickSize =
-        parseFloat(kline.high) -
-        (klineDirection === 'up'
-          ? parseFloat(kline.close)
-          : parseFloat(kline.open));
-      const bottomWickSize =
-        (klineDirection === 'up'
-          ? parseFloat(kline.open)
-          : parseFloat(kline.close)) - parseFloat(kline.low);
-      const bodyWickSize =
-        klineDirection === 'up'
-          ? parseFloat(kline.close) - parseFloat(kline.open)
-          : parseFloat(kline.open) - parseFloat(kline.close);
-      const weaknessEnoughCondition =
-        topWickSize / bottomWickSize > 4 || bottomWickSize / topWickSize > 4;
-      const bodySizeEnoughCondition =
-        (topWickSize + bottomWickSize) / bodyWickSize > 20;
+      if (interception && klineMinus2 && interception.direction === 'down') {
+        isInterceptionEnabled = true;
+      }
+      //
+      if (interception && klineMinus2 && interception.direction === 'up') {
+        isInterceptionEnabled = true;
+      }
 
-      const clusterPoc = clusterPocRow(cluster.data);
-
-      if (!clusterPoc) { continue; }
-
-      if (topWickSize / bottomWickSize > 1) {
-        // down
-        if (
-          weaknessEnoughCondition &&
-          bodySizeEnoughCondition
-          //parseFloat(clusterPoc.p) > parseFloat(kline.open)
-        ) {
-          chart.createOverlay({
-            name: `down5Circle`,
-            points: [
-              {
-                timestamp: parseInt(kline.timestamp),
-                value: parseFloat(kline.high),
-              }
-            ]
-          });
-        }
-      } else {
-        // up
-        if (
-          weaknessEnoughCondition &&
-          bodySizeEnoughCondition
-          //parseFloat(clusterPoc.p) < parseFloat(kline.open)
-        ) {
-              chart.createOverlay({
-                name: `up5Circle`,
-                points: [
-                  {
-                    timestamp: parseInt(kline.timestamp),
-                    value: parseFloat(kline.low),
-                  }
-                ]
-              });
-        }
+      if (weakness) {
+        chart.createOverlay({
+          name: `${weakness.direction}5Circle`,
+          points: [
+            {
+              timestamp: parseInt(kline.timestamp),
+              value: parseFloat(weakness.direction === 'down' ? kline.high : kline.low),
+            }
+          ]
+        });
       }
     }
   }, [chart, clustersAsHashByTs]);
+
+  const setDataLoaderCallback = useCallback(() => {
+    if (fpp && drawFppPatterns) {
+      drawFppPatterns(fpp);
+    }
+  }, [fpp, drawFppPatterns])
 
   useEffect(() => {
     if (!chart) {return}
     if (!fpp) {return}
     //if (!clustersAsHashByTs) {return}
-
     drawFppPatterns(fpp);
+
+    //chart.removeIndicator({ name: 'EMA' })
+    chart.removeIndicator({ name: 'CUM_DELTA' })
+    chart.removeIndicator({ name: 'BOLL' })
+
     // add EMA200 trand indicator
-    chart.createIndicator('EMA', false, { id: 'candle_pane' });
-    // chart.createIndicator('CUM_DELTA', true);
+    //chart.createIndicator('MACD', false, { id: 'candle_pane' });
+    //chart.createIndicator('EMA', false, { id: 'candle_pane' });
+    //chart.createIndicator('CUM_DELTA', true);
     //chart.createOverlay({ name: 'custom_rect_overlay' })
 
     //chart.createOverlay('longPosition');
@@ -261,17 +217,45 @@ export default function ExperimentsIndexView({ tf, pairId }: any) {
     );
   }
 
+  registerIndicator(bollingerBands);
   registerIndicator(ema);
+  registerIndicator({
+    name: 'CUM_DELTA',
+    calc: (dataList) => {
+      let cum = 0;
+      if (!clustersAsHashByTs) {return []}
+      return dataList.map((bar: any) => {
+        //console.log(bar);
+        const cluster = clustersAsHashByTs?.[bar.timestamp];
+        let bv = 0;
+        let sv = 0;
+        for (let key in cluster.data) {
+          bv += parseFloat(cluster.data[key].bv);
+          sv += parseFloat(cluster.data[key].sv);
+        }
+        const delta = parseInt(bv) - parseInt(sv);
+        cum += delta;
+        return { value: cum };
+      });
+    },
+    figures: [
+      {
+        key: 'value',
+        title: 'CUM_DELTA',
+        type: 'line'
+      }
+    ]
+  });
 
   return (
     <main>
       <Map
         pairId={pairId}
         tf={tf}
+        // fpp={fpp}
+        // drawFppPatterns={drawFppPatterns}
+        setDataLoaderCallback={setDataLoaderCallback}
         setParentChart={setChart}
-        setDataLoaderCallback={() => {
-          drawFppPatterns(fpp);
-        }}
       />
 
       <IconButton key='fppSettings' sx={{

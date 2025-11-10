@@ -5,18 +5,20 @@ import {registerFigure, registerOverlay, registerIndicator} from "klinecharts";
 //import {useGetAllQuery as useGetAllKlinesQuery} from "@/lib/redux/api/klineApi";
 import {
   useCreateMutation,
-  useGetAllQuery as useGetAllDhmQuery, useRemoveMutation, useUpdateMutation,
+  useGetAllQuery as useGetAllDhmQuery, useGetAllTestQuery, useRemoveMutation, useUpdateMutation,
 } from "@/lib/redux/api/dhmApi";
 import { useGetAllQuery as useGetAllFppQuery } from "@/lib/redux/api/fppApi";
 import {camelCase, delay} from 'lodash';
 import CustomDialog from 'src/components/custom-dialog/custom-dialog';
 import {onSubmitWrapper} from "@/src/utils/submit";
-import {StrategiesDhmDialog} from "@/src/sections/strategies-graph/strategies.dhm-dialog";
+import {StrategiesDhmDialog} from "@/src/sections/strategies-graph-test/strategies.dhm-dialog";
 import {IconButton} from "@mui/material";
+import SpeedIcon from '@mui/icons-material/Speed';
 import SettingsIcon from '@mui/icons-material/Settings';
-import {StrategiesDhmSettingsDialog} from "@/src/sections/strategies-graph/strategies.dhm-settings-dialog";
-import {StrategiesDhmFppFiltersDialog} from "@/src/sections/strategies-graph/strategies.dhm-fpp-filters-dialog";
-import {StrategiesDhmKlineFppsDialog} from "@/src/sections/strategies-graph/strategies.dhm-kline-fpps-dialog";
+import {StrategiesDhmBacktestDialog} from "@/src/sections/strategies-graph-test/strategies.dhm-backtest-dialog";
+//import {StrategiesDhmSettingsDialog} from "@/src/sections/strategies-graph-test/strategies.dhm-settings-dialog";
+import {StrategiesDhmFppFiltersDialog} from "@/src/sections/strategies-graph-test/strategies.dhm-fpp-filters-dialog";
+import {StrategiesDhmKlineFppsDialog} from "@/src/sections/strategies-graph-test/strategies.dhm-kline-fpps-dialog";
 import moment from "moment/moment";
 import {clearFppPatterns, drawFppPatterns} from "@/src/utils/klinecharts";
 import MapTools from "@/src/components/map-tools/map-tools";
@@ -42,10 +44,12 @@ import {
   useCancelMutation as useCancelPositionMutation,
   useUpdateMutation as useUpdatePositionMutation
 } from "@/lib/redux/api/positionApi";
-import {useGetAllQuery} from "@/lib/redux/api/tdaPointsApi";
+import {useSearchParams} from "next/navigation";
+//import {useGetAllQuery} from "@/lib/redux/api/tdaPointsApi";
 
 export default function DhmIndexView({ tf, pairId }: any) {
   const theme = useTheme();
+  let searchParams = useSearchParams();
   const FPP_FILTERS_STORAGE_KEY = `fppFilter${pairId}`;
   const [chart, setChart] = useState<any>(null);
   const [page, setPage] = useState<number>(1);
@@ -53,7 +57,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [currentPrice, setCurrentPrice] = useState(null);
   const [currentCluster, setCurrentCuster] = useState(null);
   const [currentKlineFpp, setCurrentKlineFpp] = useState<any[]>(null);
-  const [openSettings, setOpenSettings] = useState(false);
+  const [openBacktest, setOpenBacktest] = useState(false);
   const [openFppFilters, setOpenFppFilters] = useState(false);
   const [openKlineFpp, setOpenKlineFpp] = useState(false);
   const [currentDhm, setCurrentDhm] = useState(null);
@@ -77,8 +81,9 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [trigger] = useLazyGetByPairIdAndTfAndTsQuery();
   const { data: position, refetch: refetchPosition } = useGetQuery(pairId);
   const { data: fpp } = useGetAllFppQuery({ pairId, page, limit: 5000, tf });
-  const { data: dhm } = useGetAllDhmQuery({ pairId, tf: 60 });
-  const { data: tdaPoints } = useGetAllQuery({ pairId });
+  // const { data: dhm } = useGetAllDhmQuery({ pairId, tf: 60 });
+  //const { data: tdaPoints } = useGetAllQuery({ pairId });
+  const { data: testDhm } = useGetAllTestQuery({ pairId, tf });
   const [createPositionRtk, { isLoading: isCreatePositionLoading }] = useCreatePositionMutation();
   const [cancelPositionRtk, { isLoading: isCancelPositionLoading }] = useCancelPositionMutation();
   const [updatePositionRtk, { isLoading: isUpdatePositionLoading }] = useUpdatePositionMutation();
@@ -105,8 +110,8 @@ export default function DhmIndexView({ tf, pairId }: any) {
     }
     setOpenFppFilters(false);
     clearFppPatterns(chart);
-    drawFppPatterns(chart, chart.getDataList(), fpp, (tdaPoints || []), values.fppFilters, !!values.fppCombine);
-  }, [FPP_FILTERS_STORAGE_KEY, chart, fpp, tdaPoints]);
+    drawFppPatterns(chart, chart.getDataList(), fpp, [], values.fppFilters, !!values.fppCombine);
+  }, [FPP_FILTERS_STORAGE_KEY, chart, fpp]);
 
   useEffect(() => {
     if (typeof window === 'undefined') { return; }
@@ -123,6 +128,48 @@ export default function DhmIndexView({ tf, pairId }: any) {
       }
     } catch {}
   }, [FPP_FILTERS_STORAGE_KEY]);
+
+  const data = useMemo(() => {
+    if (!testDhm?.length) { return }
+    return {
+      count: testDhm.length,
+      created: testDhm.filter(item => item.status === 'created').length,
+      finished: testDhm.filter(item => item.status === 'finished').length,
+      triggered: testDhm.filter(item => item.status === 'triggered').length,
+      waiting: testDhm.filter(item => item.status === 'waiting').length,
+      finishedBySize: testDhm.filter(item => item.status === 'finished_by_size').length,
+      finishedByLose: testDhm.filter(item => item.status === 'finished_by_lose').length,
+      finishedByLength: testDhm.filter(item => item.status === 'finished_by_length').length,
+      closedByLength: testDhm.filter(item => item.status === 'closed_by_length').length
+    }
+  }, [testDhm]);
+
+  useEffect(() => {
+    if (!testDhm) {return}
+    if (!chart) {return}
+    // chart.applyNewData(klines.map((item: any) => {
+    //   // Создаем графическую метку
+    //   return {
+    //     ...item,
+    //     timestamp: parseInt(item.ts),
+    //     volume: parseInt(item.volume),
+    //   }
+    // }))
+
+    for (const item of testDhm) {
+      if (['waiting', 'finished', 'finished_by_lose', 'finished_by_length'].includes(item.status)) {
+        chart.createOverlay({
+          name: `${camelCase(item.status)}StartKline`,
+          points: [{timestamp: parseInt(item.data.kline1.ts), value: parseFloat(item.data.kline1.close)}],
+        })
+      }
+    }
+    chart.subscribeAction('onCandleBarClick', (event) => {
+      const { data, x, y } = event
+      const currentDhm = testDhm.find(item => item.data.kline1.id === data.current.id);
+      console.log(currentDhm);
+    })
+  }, [chart, testDhm]);
 
   const onCreateSubmit = useCallback(async (values: any) => {
     return onSubmitWrapper(() => create(values), (data) => {
@@ -182,19 +229,19 @@ export default function DhmIndexView({ tf, pairId }: any) {
     }
     if (fpp && drawFppPatterns) {
       const klines = chart.getDataList();
-      drawFppPatterns(chart, klines, fpp, (tdaPoints || []), fppFilters, fppCombine);
+      drawFppPatterns(chart, klines, fpp, [], fppFilters, fppCombine);
     }
-  }, [klinesUpdatedAt, fpp, chart, tdaPoints, fppFilters, fppCombine])
+  }, [klinesUpdatedAt, fpp, chart, fppFilters, fppCombine])
 
   useEffect((): void => {
     if (!chart) { return; }
     if (!fpp?.length) { return; }
-    if (!dhm?.length) { return; }
+    //if (!dhm?.length) { return; }
     const klines = chart.getDataList();
     if (!klines?.length) { return }
     clearFppPatterns(chart);
-    drawFppPatterns(chart, klines, fpp, (tdaPoints || []), fppFilters, fppCombine);
-  }, [chart, dhm, fpp, tdaPoints, fppFilters, fppCombine, klinesUpdatedAt]);
+    drawFppPatterns(chart, klines, fpp, [], fppFilters, fppCombine);
+  }, [chart, fpp, fppFilters, fppCombine, klinesUpdatedAt]);
 
   const onClickClusterHandle = useCallback(async (e: any, kline: any) => {
     console.log('e', e);
@@ -217,43 +264,9 @@ export default function DhmIndexView({ tf, pairId }: any) {
   }, [chart, trigger, pairId, tf])
 
   useEffect(() => {
-    if (!dhm) {return}
     if (!chart) {return}
     if (!fpp) {return}
     //if (!clustersAsHashByTs) {return}
-    const klines = chart.getDataList();
-    for (const item of dhm) {
-      if (['waiting', 'triggered', 'finished', 'finished_by_lose', 'finished_by_length'].includes(item.status) && item.confirmed) {
-        chart.createOverlay({
-          name: `${camelCase(item.status)}StartKline`,
-          points: [{timestamp: parseInt(item.data.kline1.ts), value: parseFloat(item.data.kline1.close)}],
-        })
-        for (const i of [1,2,3]) {
-          if (item.data?.[`poi${i}`]) {
-            chart.createOverlay({
-              name: 'noneditableRect',
-              points: [
-                { timestamp: parseInt(item.data?.[`poi${i}`].ts), value: item.data?.[`poi${i}`].high },
-                { timestamp: parseInt(item.data?.[`poi${i}`].ts) + (100 * 3600000), value: item.data?.[`poi${i}`].low }
-              ]
-            })
-          }
-        }
-        //console.log(item.data.kline1.close);
-      }
-
-      // if (item.confirmed) {
-      //   chart.createOverlay({
-      //     name: `confirmedCircle`,
-      //     points: [
-      //       {
-      //         timestamp: parseInt(item.data.kline1.ts),
-      //         value: parseFloat(item.data.kline1.low)
-      //       }
-      //     ]
-      //   });
-      // }
-    }
 
     // add EMA200 trand indicator
     chart.createIndicator('EMA', false, { id: 'candle_pane' });
@@ -284,21 +297,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
         setCurrentCuster(null);
       }
     })
-  }, [chart, fpp, dhm, onClickClusterHandle]);
-
-  useEffect(() => {
-    console.log(position);
-    if (!chart) {return}
-    if (!position) {
-      chart.removeOverlay({ name: `enterPosition` })
-      chart.removeOverlay({ name: `stopPosition` })
-      chart.removeOverlay({ name: `takePosition` })
-      drawCreatePosition();
-    } else {
-      chart.removeOverlay({ name: `createPosition` })
-      drawPosition(Number(position.enter), Number(position.stop), Number(position.take));
-    }
-  }, [chart, drawCreatePosition, drawPosition, position]);
+  }, [chart, fpp, onClickClusterHandle]);
 
   for (const item of [1,2,3,4,5,6,7]) {
     registerOverlay(
@@ -357,6 +356,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
       <Map
         pairId={pairId}
         tf={tf}
+        defaultTs={searchParams.get('ts')}
         setParentChart={setChart}
         //setCurrentPrice={setCurrentPrice}
         updateWebsocketPriceCallback={() => {
@@ -380,7 +380,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
         <SettingsIcon />
       </IconButton>
 
-      <IconButton key='settings' sx={{
+      <IconButton key='backtest' sx={{
         position: 'absolute',
         zIndex: 1,
         left: '18px',
@@ -390,9 +390,9 @@ export default function DhmIndexView({ tf, pairId }: any) {
           background: theme.palette.grey[300],
         }
       }} aria-label="delete" onClick={() => {
-        setOpenSettings(true);
+        setOpenBacktest(true);
       }}>
-        <SettingsIcon />
+        <SpeedIcon />
       </IconButton>
 
       <MapTools chart={chart} />
@@ -416,11 +416,16 @@ export default function DhmIndexView({ tf, pairId }: any) {
       />
 
       <CustomDialog
-        open={openSettings}
-        onClose={() => setOpenSettings(false)}
-        title={`Settings`}
+        maxWidth='lg'
+        open={openBacktest}
+        onClose={() => setOpenBacktest(false)}
+        title={`Back test`}
         content={(
-          <StrategiesDhmSettingsDialog />
+          <StrategiesDhmBacktestDialog
+            klines={chart ? chart.getDataList() : []}
+            tf={tf}
+            pairId={pairId}
+          />
         )}
       />
 

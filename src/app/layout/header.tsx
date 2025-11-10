@@ -28,6 +28,10 @@ const StyledToolbar = styled(Toolbar)(({ theme }) => ({
 
 export default function Header() {
   const theme = useTheme();
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
   const [anchorPairEl, setAnchorPairEl] = React.useState<null | HTMLElement>(null);
   const [anchorPageEl, setAnchorPageEl] = React.useState<null | HTMLElement>(null);
   const [anchorTfEl, setAnchorTfEl] = React.useState<null | HTMLElement>(null);
@@ -65,9 +69,12 @@ export default function Header() {
   const pathname = usePathname();
   const pages = [
     { url: 'dhm-graph', label: 'DHM (graph)' },
+    { url: 'dhm-graph-test', label: 'DHM (graph) TEST' },
     { url: 'dhm', label: 'DHMs' },
     { url: 'clusters', label: 'Clusters' },
     { url: 'experiments', label: 'Experiments (graph)' },
+    { url: 'experiments2', label: 'Experiments2 (graph)' },
+    { url: 'tda', label: 'TDA' },
   ]
   const router = useRouter();
   const pair = useMemo(() => {
@@ -86,6 +93,8 @@ export default function Header() {
     let pageUrl: any = pathname.split('/')[1];
     return pages.find(item => item.url === pageUrl);
   }, [pathname]);
+
+  console.log(page);
 
   return (
     <AppBar
@@ -115,7 +124,7 @@ export default function Header() {
                   },
                 }}
               >
-                {page?.label}
+                {mounted ? page?.label : ''}
               </Button>
               <Menu
                 anchorEl={anchorPageEl}
@@ -126,7 +135,11 @@ export default function Header() {
                 }}
               >
                 {(pages || []).map((item: any) => (
-                  <MenuItem key={item.url} onClick={() => router.replace(`/${item.url}/${pair.id}/${tf.id}`)}>{item.label}</MenuItem>
+                  item.url === 'tda' ? (
+                    <MenuItem key={item.url} onClick={() => router.replace(`/${item.url}`)}>{item.label}</MenuItem>
+                  ) : (
+                    <MenuItem key={item.url} onClick={() => router.replace(`/${item.url}/${pair?.id || pairs?.[0]?.id}/${tf?.id || tfs?.[0]?.id}`)}>{item.label}</MenuItem>
+                  )
                 ))}
               </Menu>
               <Divider sx={{ mx: 1 }} orientation="vertical" flexItem />
@@ -143,7 +156,7 @@ export default function Header() {
                 aria-expanded={openPair ? 'true' : undefined}
                 onClick={handlePairClick}
               >
-                {pair?.name}
+                {mounted ? pair?.name : ''}
               </Button>
               <Menu
                 anchorEl={anchorPairEl}
@@ -169,7 +182,7 @@ export default function Header() {
                 aria-expanded={openTf ? 'true' : undefined}
                 onClick={handleTfClick}
               >
-                {tf?.label}
+                {mounted ? tf?.label : ''}
               </Button>
               <Menu
                 anchorEl={anchorTfEl}
@@ -180,7 +193,7 @@ export default function Header() {
                 }}
               >
                 {tfs.map((item: any) => (
-                  <MenuItem key={item.id} onClick={() => router.replace(`/${page.url}/${pair.id}/${item.id}`)}>{item.label}</MenuItem>
+                  <MenuItem key={item.id} onClick={() => router.replace(`/${page?.url}/${pair.id}/${item.id}`)}>{item.label}</MenuItem>
                 ))}
               </Menu>
 

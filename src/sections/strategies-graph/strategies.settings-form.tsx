@@ -12,13 +12,12 @@ export function StrategiesSettingsForm({ defaultValues, isLoading, onSubmit }: a
       defaultValues={defaultValues}
       resolver={zodResolver(object({
         enterLevel1: zodNumberSchema(),
-        exitLevel1: zodNumberSchema(),
+        finishLevel1: zodNumberSchema(),
         enterLevel2: zodNumberSchema().nullish(),
-        exitLevel2: zodNumberSchema().nullish(),
+        finishLevel2: zodNumberSchema().nullish(),
         enterLevel3: zodNumberSchema().nullish(),
-        exitLevel3: zodNumberSchema().nullish(),
+        finishLevel3: zodNumberSchema().nullish(),
         triggerLevel: zodNumberSchema(),
-        finishLevel: zodNumberSchema(),
         exitLevel: zodNumberSchema(),
         minPriceSize: zodNumberSchema(),
         orderSize: zodNumberSchema(),
@@ -43,8 +42,8 @@ export function StrategiesSettingsForm({ defaultValues, isLoading, onSubmit }: a
           </Grid>
           <Grid item size={6}>
             <TextFieldElement
-              name='exitLevel1'
-              label='Exit level 1'
+              name='finishLevel1'
+              label='Finish level 1'
               type='number'
               size='small'
               fullWidth
@@ -61,8 +60,8 @@ export function StrategiesSettingsForm({ defaultValues, isLoading, onSubmit }: a
           </Grid>
           <Grid item size={6}>
             <TextFieldElement
-              name='exitLevel2'
-              label='Exit level 2'
+              name='finishLevel2'
+              label='Finish level 2'
               type='number'
               size='small'
               fullWidth
@@ -79,8 +78,8 @@ export function StrategiesSettingsForm({ defaultValues, isLoading, onSubmit }: a
           </Grid>
           <Grid item size={6}>
             <TextFieldElement
-              name='exitLevel3'
-              label='Exit level 3'
+              name='finishLevel3'
+              label='Finish level 3'
               type='number'
               size='small'
               fullWidth
@@ -90,15 +89,6 @@ export function StrategiesSettingsForm({ defaultValues, isLoading, onSubmit }: a
             <TextFieldElement
               name='triggerLevel'
               label='Trigger level'
-              type='number'
-              size='small'
-              fullWidth
-            />
-          </Grid>
-          <Grid item size={12}>
-            <TextFieldElement
-              name='finishLevel'
-              label='Finish level'
               type='number'
               size='small'
               fullWidth
