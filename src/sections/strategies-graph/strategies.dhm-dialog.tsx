@@ -40,6 +40,17 @@ export function StrategiesDhmDialog({currentDhm, currentKline, onCreateSubmit, o
                   High:
                 </Typography>
                 <Label color='default'>{currentDhm.data.high}</Label>
+                <Typography
+                  variant={'caption'}
+                  sx={{
+                    ml: 1,
+                    mb: 3,
+                    fontWeight: 'bold',
+                    color: theme.palette.text.primary,
+                  }}
+                >
+                  {((currentDhm.data.high - currentDhm.data.low) / currentDhm.data.low * 100).toFixed(2)}%
+                </Typography>
               </Box>
               <Box sx={{ mb: 2 }}>
                 <Typography

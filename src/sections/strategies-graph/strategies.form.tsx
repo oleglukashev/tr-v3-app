@@ -17,6 +17,8 @@ export function StrategiesForm({ defaultValues, onSubmit }: any) {
         confirmed: boolean(),
         pairId: zodNumberSchema(),
         tf: zodNumberSchema(),
+        low: zodNumberSchema().nullish(),
+        high: zodNumberSchema().nullish(),
         poi1Ts: zodNumberSchema().nullish(),
         poi1High: zodNumberSchema().nullish(),
         poi1Low: zodNumberSchema().nullish(),
@@ -85,8 +87,8 @@ export function StrategiesForm({ defaultValues, onSubmit }: any) {
         </Grid>
         <Grid item size={12}>
           <TextFieldElement
-            name='poi1Ts'
-            label='POI1 Ts'
+            name='high'
+            label='High'
             type='number'
             size='small'
             fullWidth
@@ -94,76 +96,94 @@ export function StrategiesForm({ defaultValues, onSubmit }: any) {
         </Grid>
         <Grid item size={12}>
           <TextFieldElement
-            name='poi1High'
-            label='POI1 High'
+            name='low'
+            label='Low'
             type='number'
             size='small'
             fullWidth
           />
         </Grid>
-        <Grid item size={12}>
-          <TextFieldElement
-            name='poi1Low'
-            label='POI1 Low'
-            type='number'
-            size='small'
-            fullWidth
-          />
-        </Grid>
-        <Grid item size={12}>
-          <TextFieldElement
-            name='poi2Ts'
-            label='POI2 Ts'
-            type='number'
-            size='small'
-            fullWidth
-          />
-        </Grid>
-        <Grid item size={12}>
-          <TextFieldElement
-            name='poi2High'
-            label='POI2 High'
-            type='number'
-            size='small'
-            fullWidth
-          />
-        </Grid>
-        <Grid item size={12}>
-          <TextFieldElement
-            name='poi2Low'
-            label='POI2 Low'
-            type='number'
-            size='small'
-            fullWidth
-          />
-        </Grid>
-        <Grid item size={12}>
-          <TextFieldElement
-            name='poi3Ts'
-            label='POI3 Ts'
-            type='number'
-            size='small'
-            fullWidth
-          />
-        </Grid>
-        <Grid item size={12}>
-          <TextFieldElement
-            name='poi3High'
-            label='POI3 High'
-            type='number'
-            size='small'
-            fullWidth
-          />
-        </Grid>
-        <Grid item size={12}>
-          <TextFieldElement
-            name='poi3Low'
-            label='POI3 Low'
-            type='number'
-            size='small'
-            fullWidth
-          />
-        </Grid>
+        {/*<Grid item size={12}>*/}
+        {/*  <TextFieldElement*/}
+        {/*    name='poi1Ts'*/}
+        {/*    label='POI1 Ts'*/}
+        {/*    type='number'*/}
+        {/*    size='small'*/}
+        {/*    fullWidth*/}
+        {/*  />*/}
+        {/*</Grid>*/}
+        {/*<Grid item size={12}>*/}
+        {/*  <TextFieldElement*/}
+        {/*    name='poi1High'*/}
+        {/*    label='POI1 High'*/}
+        {/*    type='number'*/}
+        {/*    size='small'*/}
+        {/*    fullWidth*/}
+        {/*  />*/}
+        {/*</Grid>*/}
+        {/*<Grid item size={12}>*/}
+        {/*  <TextFieldElement*/}
+        {/*    name='poi1Low'*/}
+        {/*    label='POI1 Low'*/}
+        {/*    type='number'*/}
+        {/*    size='small'*/}
+        {/*    fullWidth*/}
+        {/*  />*/}
+        {/*</Grid>*/}
+        {/*<Grid item size={12}>*/}
+        {/*  <TextFieldElement*/}
+        {/*    name='poi2Ts'*/}
+        {/*    label='POI2 Ts'*/}
+        {/*    type='number'*/}
+        {/*    size='small'*/}
+        {/*    fullWidth*/}
+        {/*  />*/}
+        {/*</Grid>*/}
+        {/*<Grid item size={12}>*/}
+        {/*  <TextFieldElement*/}
+        {/*    name='poi2High'*/}
+        {/*    label='POI2 High'*/}
+        {/*    type='number'*/}
+        {/*    size='small'*/}
+        {/*    fullWidth*/}
+        {/*  />*/}
+        {/*</Grid>*/}
+        {/*<Grid item size={12}>*/}
+        {/*  <TextFieldElement*/}
+        {/*    name='poi2Low'*/}
+        {/*    label='POI2 Low'*/}
+        {/*    type='number'*/}
+        {/*    size='small'*/}
+        {/*    fullWidth*/}
+        {/*  />*/}
+        {/*</Grid>*/}
+        {/*<Grid item size={12}>*/}
+        {/*  <TextFieldElement*/}
+        {/*    name='poi3Ts'*/}
+        {/*    label='POI3 Ts'*/}
+        {/*    type='number'*/}
+        {/*    size='small'*/}
+        {/*    fullWidth*/}
+        {/*  />*/}
+        {/*</Grid>*/}
+        {/*<Grid item size={12}>*/}
+        {/*  <TextFieldElement*/}
+        {/*    name='poi3High'*/}
+        {/*    label='POI3 High'*/}
+        {/*    type='number'*/}
+        {/*    size='small'*/}
+        {/*    fullWidth*/}
+        {/*  />*/}
+        {/*</Grid>*/}
+        {/*<Grid item size={12}>*/}
+        {/*  <TextFieldElement*/}
+        {/*    name='poi3Low'*/}
+        {/*    label='POI3 Low'*/}
+        {/*    type='number'*/}
+        {/*    size='small'*/}
+        {/*    fullWidth*/}
+        {/*  />*/}
+        {/*</Grid>*/}
       </Grid>
       <CustomFormButton />
     </FormContainer>

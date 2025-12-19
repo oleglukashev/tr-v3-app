@@ -1,18 +1,18 @@
 import { BaseApi } from "./baseApi";
 import {customTrFetchBase} from "../../customFetchBase";
 
-const collectionPath = 'position';
-export const positionApi = (new BaseApi({
+const collectionPath = 'orders';
+export const orderApi = (new BaseApi({
   reducerPath: collectionPath,
   baseQuery: customTrFetchBase,
   collectionPath,
   extraEndpoints: (builder) => {
     return {
       // @ts-ignore
-      get: builder.query<any[], any>({
+      getAll: builder.query<any[], any>({
         query(params: any) {
           return {
-            url: `${collectionPath}/${params.pairId}`
+            url: `${collectionPath}/${params.pairId}/${params.status}`
           };
         },
         providesTags: (result: any) => BaseApi.providesTags(result, collectionPath),
@@ -22,5 +22,5 @@ export const positionApi = (new BaseApi({
 })).create();
 
 export const {
-  useGetQuery,
-} = positionApi;
+  useGetAllQuery,
+} = orderApi;

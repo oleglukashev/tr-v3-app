@@ -48,14 +48,14 @@ export default function takePosition(callback: any) {
             coordinates: [{x: 0, y: coordinates?.[0]?.y}, {x: endX, y: coordinates?.[0]?.y}],
           }],
           styles: {
-            style: 'fill',
+            style: 'dashed',
             color: '#009688',
           },
         }, {
           type: 'text',
           isCheckEvent: false,
           attrs: [{
-            x: bounding.width - 250,
+            x: coordinates[0].x + 200,
             y: coordinates[0].y,
             //text: `Take`,
             text: `Take ${chart.getDecimalFold().format(chart.getThousandsSeparator().format(value.toFixed(precision)))}`,

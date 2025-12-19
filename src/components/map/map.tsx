@@ -33,6 +33,7 @@ export default function Map({
   const [currentCluster, setCurrentCuster] = useState(null);
   const [currentClusterKline, setCurrentClusterKline] = useState(null);
   const [trigger] = useLazyGetByPairIdAndTfAndTsQuery();
+  const [barsLoaded, setBarsLoaded] = useState(false);
 
   const onClickClusterHandle = useCallback(async (e: any, kline: any) => {
     console.log('e', e);
@@ -115,18 +116,20 @@ export default function Map({
   }, [])
 
   useEffect(() => {
-    if (!chart) {return}
+    if (!chart || !setDataLoaderCallback || !setParentChart || !tf || !pairId || !setCurrentClusterKline || !onClickClusterHandle || barsLoaded) {return}
+    setBarsLoaded(true);
+
     chart.setDataLoader({
       getBars: (data: any) => {
         const chartData = chart.getDataList();
-
         const startTs = data.type === 'init' ?
-          moment().subtract(200 * KLINE_TS_SIZE_BY_TF[tf], 'milliseconds').startOf('hour').utc().valueOf() :
+          defaultTs ? moment.unix(defaultTs/ 1000).utc().subtract(200 * KLINE_TS_SIZE_BY_TF[tf], 'milliseconds').startOf('hour').valueOf() : moment().subtract(200 * KLINE_TS_SIZE_BY_TF[tf], 'milliseconds').startOf('hour').utc().valueOf() :
           data.type === 'forward' ?
             moment(chartData[0].timestamp).utc().subtract(200 * KLINE_TS_SIZE_BY_TF[tf], 'milliseconds').startOf('hour').valueOf() :
             moment(chartData[chartData.length - 1].timestamp + KLINE_TS_SIZE_BY_TF[tf]).utc().valueOf();
+
         const endTs = data.type === 'init' ?
-          moment().utc().valueOf() :
+          defaultTs || moment().utc().valueOf() :
           data.type === 'forward' ?
             moment(chartData[0].timestamp).utc().startOf('hour').valueOf() :
             moment(chartData[chartData.length - 1].timestamp + KLINE_TS_SIZE_BY_TF[tf]).add(200 * KLINE_TS_SIZE_BY_TF[tf], 'milliseconds').startOf('hour').utc().valueOf();

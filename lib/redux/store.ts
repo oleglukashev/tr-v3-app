@@ -4,9 +4,11 @@ import {dhmApi} from "@/lib/redux/api/dhmApi";
 import {pairApi} from "@/lib/redux/api/pairApi";
 import {clusterApi} from "@/lib/redux/api/clusterApi";
 import {fppApi} from "@/lib/redux/api/fppApi";
-import {strategySettingsApi} from "@/lib/redux/api/strategySettingsApi";
 import {positionApi} from "@/lib/redux/api/positionApi";
+import {orderApi} from "@/lib/redux/api/orderApi";
 import {tdaPointsApi} from "@/lib/redux/api/tdaPointsApi";
+import { statsApi } from "./api/statsApi";
+import {pnlApi} from "@/lib/redux/api/pnlApi";
 
 export const reduxStore = configureStore({
   reducer: {
@@ -15,9 +17,11 @@ export const reduxStore = configureStore({
     [pairApi.reducerPath]: pairApi.reducer,
     [clusterApi.reducerPath]: clusterApi.reducer,
     [fppApi.reducerPath]: fppApi.reducer,
-    [strategySettingsApi.reducerPath]: strategySettingsApi.reducer,
     [positionApi.reducerPath]: positionApi.reducer,
+    [orderApi.reducerPath]: orderApi.reducer,
     [tdaPointsApi.reducerPath]: tdaPointsApi.reducer,
+    [statsApi.reducerPath]: statsApi.reducer,
+    [pnlApi.reducerPath]: pnlApi.reducer,
   },
   //devTools: process.env.NEXT_PUBLIC_ENV !== "production",
   middleware: (getDefaultMiddleware) =>
@@ -27,8 +31,10 @@ export const reduxStore = configureStore({
       pairApi.middleware,
       clusterApi.middleware,
       fppApi.middleware,
-      strategySettingsApi.middleware,
       positionApi.middleware,
+      orderApi.middleware,
       tdaPointsApi.middleware,
+      statsApi.middleware,
+      pnlApi.middleware,
     ]),
 });

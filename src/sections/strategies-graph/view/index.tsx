@@ -26,7 +26,7 @@ import {
   finishedStartKline,
   godKline, triggeredStartKline,
   waitingStartKline, noneditableRect, clusterKline,
-  upCircleBySize, downCircleBySize, bollingerBands
+  upCircleBySize, downCircleBySize, bollingerBands, createdStartKline
 } from "@/src/helpers/klinecharts.helper";
 import Map from "@/src/components/map/map";
 import {useTheme} from "@mui/material/styles";
@@ -35,14 +35,18 @@ import createPosition from "@/src/components/klinecharts-create-position/klinech
 import stopPosition from "@/src/components/klinecharts-stop-position/klinecharts-stop-position";
 import takePosition from "@/src/components/klinecharts-take-position/klinecharts-take-position";
 import enterPosition from "@/src/components/klinecharts-enter-position/klinecharts-enter-position";
+import limitOrder from "@/src/components/klinecharts-limit-order/klinecharts-limit-order";
+import klinechartPosition from "@/src/components/klinecharts-position/klinecharts-position";
 import {useLazyGetByPairIdAndTfAndTsQuery} from "@/lib/redux/api/clusterApi";
 import {
-  useGetQuery,
-  useCreateMutation as useCreatePositionMutation,
-  useCancelMutation as useCancelPositionMutation,
-  useUpdateMutation as useUpdatePositionMutation
+  //useGetQuery,
+  // useCreateMutation as useCreatePositionMutation,
+  // useCancelMutation as useCancelPositionMutation,
+  // useUpdateMutation as useUpdatePositionMutation
 } from "@/lib/redux/api/positionApi";
 import {useGetAllQuery} from "@/lib/redux/api/tdaPointsApi";
+import {useGetAllQuery as useGetAllOrdersQuery} from "@/lib/redux/api/orderApi";
+import {useGetQuery as useGetPositionQuery} from "@/lib/redux/api/positionApi";
 
 export default function DhmIndexView({ tf, pairId }: any) {
   const theme = useTheme();
@@ -75,16 +79,18 @@ export default function DhmIndexView({ tf, pairId }: any) {
   //const { data: klines } = useGetAllKlinesQuery({ pairId, page, limit: 5000, tf });
   //const { data: clusters } = useGetAllClustersQuery({ pairId, page, limit: 5000, tf });
   const [trigger] = useLazyGetByPairIdAndTfAndTsQuery();
-  const { data: position, refetch: refetchPosition } = useGetQuery(pairId);
+  //const { data: position, refetch: refetchPosition } = useGetQuery(pairId);
   const { data: fpp } = useGetAllFppQuery({ pairId, page, limit: 5000, tf });
   const { data: dhm } = useGetAllDhmQuery({ pairId, tf: 60 });
   const { data: tdaPoints } = useGetAllQuery({ pairId });
-  const [createPositionRtk, { isLoading: isCreatePositionLoading }] = useCreatePositionMutation();
-  const [cancelPositionRtk, { isLoading: isCancelPositionLoading }] = useCancelPositionMutation();
-  const [updatePositionRtk, { isLoading: isUpdatePositionLoading }] = useUpdatePositionMutation();
+  //const [createPositionRtk, { isLoading: isCreatePositionLoading }] = useCreatePositionMutation();
+  //const [cancelPositionRtk, { isLoading: isCancelPositionLoading }] = useCancelPositionMutation();
+  //const [updatePositionRtk, { isLoading: isUpdatePositionLoading }] = useUpdatePositionMutation();
   const [create, { isLoading: isCreateLoading }] = useCreateMutation();
   const [update, { isLoading: isUpdateLoading }] = useUpdateMutation();
   const [remove, { isLoading }] = useRemoveMutation();
+  const { data: orders } = useGetAllOrdersQuery({ pairId, status: 'open' });
+  const { data: position } = useGetPositionQuery({ pairId });
 
   // const clustersAsHashByTs = useMemo(() => {
   //   if (!clusters) { return }
@@ -146,35 +152,73 @@ export default function DhmIndexView({ tf, pairId }: any) {
     }, 'Успешно удалено');
   }, [currentDhm?.id, remove]);
 
-  const drawPosition = useCallback((enterPrice, stopPrice, takePrice) => {
+  // const drawPosition = useCallback((enterPrice, stopPrice, takePrice) => {
+  //   if (!chart) { return }
+  //   chart.removeOverlay({ name: `enterPosition` })
+  //   chart.removeOverlay({ name: `stopPosition` })
+  //   chart.removeOverlay({ name: `takePosition` })
+  //   chart.createOverlay({
+  //     name: `enterPosition`,
+  //     points: [{timestamp: null, value: enterPrice }],
+  //   })
+  //   chart.createOverlay({
+  //     name: `stopPosition`,
+  //     points: [{timestamp: null, value: stopPrice }],
+  //   })
+  //   chart.createOverlay({
+  //     name: `takePosition`,
+  //     points: [{timestamp: null, value: takePrice }],
+  //   })
+  // }, [chart]);
+
+  const drawPosition = useCallback(() => {
     if (!chart) { return }
-    chart.removeOverlay({ name: `enterPosition` })
+    if (!position) { return }
     chart.removeOverlay({ name: `stopPosition` })
     chart.removeOverlay({ name: `takePosition` })
-    chart.createOverlay({
-      name: `enterPosition`,
-      points: [{timestamp: null, value: enterPrice }],
-    })
-    chart.createOverlay({
-      name: `stopPosition`,
-      points: [{timestamp: null, value: stopPrice }],
-    })
-    chart.createOverlay({
-      name: `takePosition`,
-      points: [{timestamp: null, value: takePrice }],
-    })
-  }, [chart]);
+    chart.removeOverlay({ name: `position` })
+    if (position.side === 'long') {
+      chart.createOverlay({
+        name: `position`,
+        points: [{timestamp: null, value: parseFloat(position.data.entryPrice) }],
+      })
+      if (position.data.stopLossPrice) {
+        chart.createOverlay({
+          name: `stopPosition`,
+          points: [{timestamp: null, value: parseFloat(position.data.stopLossPrice) }],
+        })
+      }
+      if (position.data.takeProfitPrice) {
+        chart.createOverlay({
+          name: `takePosition`,
+          points: [{timestamp: null, value: parseFloat(position.data.takeProfitPrice) }],
+        })
+      }
+    }
+  }, [chart, position]);
 
-  const drawCreatePosition = useCallback(async () => {
+  const drawOrders = useCallback(() => {
     if (!chart) { return }
-    const klines = chart.getDataList();
-    if (!klines?.length)  { return }
-    chart.removeOverlay({ name: `createPosition` })
-    chart.createOverlay({
-      name: `createPosition`,
-      points: [{timestamp: null, value: parseFloat(klines[klines.length - 1].close)}],
-    })
-  }, [chart, chart?.getDataList()]);
+    if (!orders?.length) { return }
+    chart.removeOverlay({ name: `limitOrder` })
+    for (const order of orders) {
+      chart.createOverlay({
+        name: `limitOrder`,
+        points: [{timestamp: null, value: parseFloat(order.data.price) }],
+      })
+    }
+  }, [chart, orders]);
+
+  // const drawCreatePosition = useCallback(async () => {
+  //   if (!chart) { return }
+  //   const klines = chart.getDataList();
+  //   if (!klines?.length)  { return }
+  //   chart.removeOverlay({ name: `createPosition` })
+  //   chart.createOverlay({
+  //     name: `createPosition`,
+  //     points: [{timestamp: null, value: parseFloat(klines[klines.length - 1].close)}],
+  //   })
+  // }, [chart, chart?.getDataList()]);
 
   const setDataLoaderCallback = useCallback(() => {
     if (!klinesUpdatedAt) {
@@ -223,7 +267,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
     //if (!clustersAsHashByTs) {return}
     const klines = chart.getDataList();
     for (const item of dhm) {
-      if (['waiting', 'triggered', 'finished', 'finished_by_lose', 'finished_by_length'].includes(item.status) && item.confirmed) {
+      if (['created', 'waiting', 'triggered', 'finished', 'finished_by_lose', 'finished_by_length'].includes(item.status)) {
         chart.createOverlay({
           name: `${camelCase(item.status)}StartKline`,
           points: [{timestamp: parseInt(item.data.kline1.ts), value: parseFloat(item.data.kline1.close)}],
@@ -257,6 +301,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
 
     // add EMA200 trand indicator
     chart.createIndicator('EMA', false, { id: 'candle_pane' });
+    //chart.createIndicator('RSI');
     //chart.createIndicator('BOLL', false, { id: 'candle_pane' });
     // chart.createIndicator('CUM_DELTA', true);
     //chart.createOverlay({ name: 'custom_rect_overlay' })
@@ -287,18 +332,28 @@ export default function DhmIndexView({ tf, pairId }: any) {
   }, [chart, fpp, dhm, onClickClusterHandle]);
 
   useEffect(() => {
-    console.log(position);
     if (!chart) {return}
-    if (!position) {
-      chart.removeOverlay({ name: `enterPosition` })
+    if (orders?.length) {
+      chart.removeOverlay({ name: `limitOrder` })
+      drawOrders();
+    }
+    if (position) {
+      chart.removeOverlay({ name: `position` })
       chart.removeOverlay({ name: `stopPosition` })
       chart.removeOverlay({ name: `takePosition` })
-      drawCreatePosition();
-    } else {
-      chart.removeOverlay({ name: `createPosition` })
-      drawPosition(Number(position.enter), Number(position.stop), Number(position.take));
+      drawPosition();
     }
-  }, [chart, drawCreatePosition, drawPosition, position]);
+
+    // if (!position) {
+    //   chart.removeOverlay({ name: `enterPosition` })
+    //   chart.removeOverlay({ name: `stopPosition` })
+    //   chart.removeOverlay({ name: `takePosition` })
+    //   drawCreatePosition();
+    // } else {
+    //   chart.removeOverlay({ name: `createPosition` })
+    //   drawPosition(Number(position.enter), Number(position.stop), Number(position.take));
+    // }
+  }, [chart, drawOrders, drawPosition, position, orders]);
 
   for (const item of [1,2,3,4,5,6,7]) {
     registerOverlay(
@@ -323,30 +378,35 @@ export default function DhmIndexView({ tf, pairId }: any) {
   registerOverlay(triggeredStartKline);
   registerOverlay(finishedByLoseStartKline);
   registerOverlay(waitingStartKline);
+  registerOverlay(createdStartKline);
   registerOverlay(rect);
   registerOverlay(noneditableRect);
   registerOverlay(clusterKline);
-  registerOverlay(enterPosition(async (e: any) => {
-    await cancelPositionRtk(pairId);
-    await refetchPosition();
+  // registerOverlay(enterPosition(async (e: any) => {
+  //   await cancelPositionRtk(pairId);
+  //   await refetchPosition();
+  // }));
+  registerOverlay(limitOrder(async (e: any) => {
+  }));
+  registerOverlay(klinechartPosition(async (e: any) => {
   }));
   registerOverlay(stopPosition(async (e) => {
-    updatePositionRtk({ pairId, type: 'stopLoss', price})
+    //updatePositionRtk({ pairId, type: 'stopLoss', price})
   }));
   registerOverlay(takePosition((price: any) => {
-    updatePositionRtk({ pairId, type: 'takeProfit', price})
+    //updatePositionRtk({ pairId, type: 'takeProfit', price})
   }));
-  registerOverlay(
-    createPosition(async (e: any) => {
-      const sign = e.figure.attrs[0].text;
-      if (sign === '⬆') {
-        await createPositionRtk({ pairId, side: 'buy' })
-      } else if (sign === '⬇') {
-        await createPositionRtk({ pairId, side: 'sell' })
-      }
-      await refetchPosition();
-    }
-  ));
+  // registerOverlay(
+  //   createPosition(async (e: any) => {
+  //     const sign = e.figure.attrs[0].text;
+  //     if (sign === '⬆') {
+  //       await createPositionRtk({ pairId, side: 'buy' })
+  //     } else if (sign === '⬇') {
+  //       await createPositionRtk({ pairId, side: 'sell' })
+  //     }
+  //     await refetchPosition();
+  //   }
+  // ));
   registerIndicator(ema);
   registerIndicator(bollingerBands);
   registerFigure(godKline);
@@ -360,7 +420,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
         setParentChart={setChart}
         //setCurrentPrice={setCurrentPrice}
         updateWebsocketPriceCallback={() => {
-          drawCreatePosition();
+          //drawCreatePosition();
         }}
         setDataLoaderCallback={setDataLoaderCallback}
       />
@@ -420,7 +480,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
         onClose={() => setOpenSettings(false)}
         title={`Settings`}
         content={(
-          <StrategiesDhmSettingsDialog />
+          <StrategiesDhmSettingsDialog tf={tf} pairId={pairId} />
         )}
       />
 

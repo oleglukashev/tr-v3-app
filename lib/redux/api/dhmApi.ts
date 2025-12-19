@@ -31,9 +31,19 @@ export const dhmApi = (new BaseApi({
         query(params: any) {
           return {
             url: `${collectionPath}/settings`,
+            params: params,
           };
         },
         //providesTags: (result: any) => BaseApi.providesTags(result, collectionPath),
+      }),
+      // @ts-ignore
+      getSettingsByPairIdAndTf: builder.query<any[], any>({
+        query(params: any) {
+          return {
+            url: `${collectionPath}/settings/${params.pairId}/${params.tf}`
+          };
+        },
+        providesTags: (result: any) => BaseApi.providesTags(result, collectionPath),
       }),
       // @ts-ignore
       updateSettings: builder.mutation<any, any>({
@@ -75,6 +85,7 @@ export const {
   useUpdateMutation,
   useRemoveMutation,
   useGetSettingsQuery,
+  useGetSettingsByPairIdAndTfQuery,
   useUpdateSettingsMutation,
   useRunMutation,
   useDeleteAllTestMutation,

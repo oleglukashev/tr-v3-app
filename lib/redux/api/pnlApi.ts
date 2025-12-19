@@ -1,8 +1,8 @@
 import { BaseApi } from "./baseApi";
 import {customTrFetchBase} from "../../customFetchBase";
 
-const collectionPath = 'position';
-export const positionApi = (new BaseApi({
+const collectionPath = 'pnl';
+export const pnlApi = (new BaseApi({
   reducerPath: collectionPath,
   baseQuery: customTrFetchBase,
   collectionPath,
@@ -12,7 +12,7 @@ export const positionApi = (new BaseApi({
       get: builder.query<any[], any>({
         query(params: any) {
           return {
-            url: `${collectionPath}/${params.pairId}`
+            url: `${collectionPath}?${params.sessionIds.map(i => `sessionIds[]=${i}`).join("&")}`,
           };
         },
         providesTags: (result: any) => BaseApi.providesTags(result, collectionPath),
@@ -23,4 +23,4 @@ export const positionApi = (new BaseApi({
 
 export const {
   useGetQuery,
-} = positionApi;
+} = pnlApi;

@@ -27,6 +27,42 @@ const redColors = [
   '#b71c1c',
 ]
 
+// export const limitOrder = {
+//   name: 'limitOrder',
+//   totalStep: 2,
+//   needDefaultPointFigure: true,
+//   needDefaultXAxisFigure: true,
+//   needDefaultYAxisFigure: true,
+//   createPointFigures: ({ chart, coordinates, bounding, overlay, yAxis }: any) => {
+//     let precision = 0
+//     if (yAxis?.isInCandle() ?? true) {
+//       precision = chart.getSymbol()?.pricePrecision ?? 2
+//     } else {
+//       const indicators = chart.getIndicators({ paneId: overlay.paneId })
+//       indicators.forEach(indicator => {
+//         precision = Math.max(precision, indicator.precision)
+//       })
+//     }
+//     const { value = 0 } = (overlay.points)[0]
+//     return [
+//       {
+//         type: 'line',
+//         attrs: { coordinates: [coordinates[0], { x: bounding.width, y: coordinates[0].y }] }
+//       },
+//       {
+//         type: 'text',
+//         ignoreEvent: true,
+//         attrs: {
+//           x: coordinates[0].x,
+//           y: coordinates[0].y,
+//           text: chart.getDecimalFold().format(chart.getThousandsSeparator().format(value.toFixed(precision))),
+//           baseline: 'bottom'
+//         }
+//       }
+//     ]
+//   }
+// }
+
 export const godKline = {
   name: 'godKline',
   draw: (ctx, attrs, styles) => {
@@ -173,11 +209,31 @@ export const waitingStartKline = {
   }
 }
 
+export const createdStartKline = {
+  name: 'createdStartKline',
+  totalStep: 2,
+  createPointFigures: ({ coordinates }) => {
+    return {
+      type: 'godKline',
+      attrs: {
+        x: coordinates[0].x,
+        y: coordinates[0].y,
+        width: 50,
+        height: 50
+      },
+      styles: {
+        style: 'fill',
+        color: 'rgba(246,220,51,0.2)' // Жёлтый с прозрачностью
+      },
+    }
+  }
+}
+
 export const ema = {
   name: 'EMA',
   shortName: 'EMA',
   series: 'price',
-  calcParams: [50],
+  calcParams: [150],
   precision: 2,
   shouldOhlc: true,
   figures: [

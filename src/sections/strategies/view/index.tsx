@@ -11,15 +11,20 @@ import {
   Typography
 } from "@mui/material";
 import {useGetAllQuery} from "@/lib/redux/api/dhmApi";
+import {useGetQuery} from "@/lib/redux/api/pnlApi";
 import moment from "moment";
 import Label from "@/src/components/label";
 import Box from "@mui/material/Box";
 import {useTheme} from "@mui/material/styles";
 import Iconify from "@/src/components/iconify";
+import {useMemo} from "react";
 
 export default function StrategiesIndexView({ tf, pairId }: any) {
   const theme = useTheme();
   const { data: dhmSessions } = useGetAllQuery({ pairId, tf, page: 1, limit: 100 });
+  const { data: pnl } = useGetQuery({ sessionIds: (dhmSessions || []).map(s => s.id) }, { skip: !dhmSessions?.length });
+
+  console.log(pnl);
 
   return (
     <Container sx={{ mt: 10 }}>

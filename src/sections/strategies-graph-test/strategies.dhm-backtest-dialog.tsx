@@ -5,10 +5,6 @@ import {onSubmitWrapper} from "@/src/utils/submit";
 import {useDeleteAllTestMutation, useGetAllTestQuery, useRunMutation} from "@/lib/redux/api/dhmApi";
 import Button from "@mui/material/Button";
 import {camelCase} from "lodash";
-import ReorderIcon from "@mui/icons-material/Reorder";
-import LinearScaleIcon from "@mui/icons-material/LinearScale";
-import HorizontalRuleIcon from "@mui/icons-material/HorizontalRule";
-import {IconButton} from "@mui/material";
 
 export function StrategiesDhmBacktestDialog({ pairId, tf, klines }: any) {
   const [chart, setChart] = useState<any>(null);
@@ -95,10 +91,20 @@ export function StrategiesDhmBacktestDialog({ pairId, tf, klines }: any) {
         defaultValues={{
           pairId,
           tf,
-          exitLevel: '1.618',
+          enterLevel1: '0.5',
+          enterLevel2: '0.618',
+          enterLevel3: '0.768',
+          takeProfitLevel1: '0.382',
+          takeProfitLevel2: '0.5',
+          takeProfitLevel3: '0.618',
+          triggerLevel: '0.5',
+          stopLossLevel: '1.1',
+          finishLevel: '0.382',
           maxSessionLength: 60,
-          minPriceSize: 0.5,
-          startTs: 1704052812000,
+          minPriceSize: 5,
+          startTs: 1735675200000,
+          finishTs: null,
+          direction: 'up',
         }}
         isLoading={isLoading}
         onSubmit={onRunSubmit}

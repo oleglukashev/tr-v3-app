@@ -1,16 +1,10 @@
 export default function limitOrder(callback: any) {
   return {
     name: 'limitOrder',
-    //totalStep: 2,
-    lock: true,
+    totalStep: 2,
     needDefaultPointFigure: true,
     needDefaultXAxisFigure: true,
     needDefaultYAxisFigure: true,
-    onClick: (e) => {
-      if (callback) {
-        callback(e);
-      }
-    },
     createPointFigures: ({ chart, coordinates, bounding, overlay, yAxis }: any) => {
       let precision = 0
       if (yAxis?.isInCandle() ?? true) {
@@ -21,36 +15,34 @@ export default function limitOrder(callback: any) {
           precision = Math.max(precision, indicator.precision)
         })
       }
-      const { value = 0 } = (overlay.points)[0]
-      const endX = bounding.width
+      const value = overlay.points[0].value;
       return [
         {
           type: 'line',
-          attrs: [{
-            coordinates: [{x: 0, y: coordinates?.[0]?.y}, {x: endX, y: coordinates?.[0]?.y}],
-          }],
+          ignoreEvent: true,
           styles: {
-            style: 'fill',
-            color: '#ff9800',
+            style: 'dashed',
+            color: '#009688',
           },
-        }, {
+          attrs: { coordinates: [coordinates[0], { x: bounding.width, y: coordinates[0].y }] }
+        },
+        {
           type: 'text',
-          isCheckEvent: false,
-          attrs: [{
-            x: bounding.width - 250,
-            y: coordinates[0].y,
-            //text: `×`,
-            text: `×  ${chart.getDecimalFold().format(chart.getThousandsSeparator().format(value.toFixed(precision)))}`,
-            baseline: 'bottom',
-          }],
+          ignoreEvent: true,
           styles: {
             style: 'fill',
             size: 13,
-            backgroundColor: '#ff9800',
+            color: '#fff',
+            backgroundColor: '#009688',
+          },
+          attrs: {
+            x: coordinates[0].x + 200,
+            y: coordinates[0].y,
+            text: chart.getDecimalFold().format(chart.getThousandsSeparator().format(`Limit: ${value.toFixed(precision)}`)),
+            baseline: 'bottom'
           }
         }
       ]
-      return [];
-    },
+    }
   };
 }

@@ -28,7 +28,7 @@ import {
   finishedStartKline,
   godKline, triggeredStartKline,
   waitingStartKline, noneditableRect, clusterKline,
-  upCircleBySize, downCircleBySize, bollingerBands
+  upCircleBySize, downCircleBySize, bollingerBands, createdStartKline
 } from "@/src/helpers/klinecharts.helper";
 import Map from "@/src/components/map/map";
 import {useTheme} from "@mui/material/styles";
@@ -40,9 +40,6 @@ import enterPosition from "@/src/components/klinecharts-enter-position/klinechar
 import {useLazyGetByPairIdAndTfAndTsQuery} from "@/lib/redux/api/clusterApi";
 import {
   useGetQuery,
-  useCreateMutation as useCreatePositionMutation,
-  useCancelMutation as useCancelPositionMutation,
-  useUpdateMutation as useUpdatePositionMutation
 } from "@/lib/redux/api/positionApi";
 import {useSearchParams} from "next/navigation";
 //import {useGetAllQuery} from "@/lib/redux/api/tdaPointsApi";
@@ -83,10 +80,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const { data: fpp } = useGetAllFppQuery({ pairId, page, limit: 5000, tf });
   // const { data: dhm } = useGetAllDhmQuery({ pairId, tf: 60 });
   //const { data: tdaPoints } = useGetAllQuery({ pairId });
-  const { data: testDhm } = useGetAllTestQuery({ pairId, tf });
-  const [createPositionRtk, { isLoading: isCreatePositionLoading }] = useCreatePositionMutation();
-  const [cancelPositionRtk, { isLoading: isCancelPositionLoading }] = useCancelPositionMutation();
-  const [updatePositionRtk, { isLoading: isUpdatePositionLoading }] = useUpdatePositionMutation();
+  const { data: testDhm } = useGetAllTestQuery({ pairId, tf: 60 });
   const [create, { isLoading: isCreateLoading }] = useCreateMutation();
   const [update, { isLoading: isUpdateLoading }] = useUpdateMutation();
   const [remove, { isLoading }] = useRemoveMutation();
@@ -157,7 +151,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
     // }))
 
     for (const item of testDhm) {
-      if (['waiting', 'finished', 'finished_by_lose', 'finished_by_length'].includes(item.status)) {
+      if (['created', 'waiting', 'triggered', 'finished', 'finished_by_lose', 'finished_by_length'].includes(item.status)) {
         chart.createOverlay({
           name: `${camelCase(item.status)}StartKline`,
           points: [{timestamp: parseInt(item.data.kline1.ts), value: parseFloat(item.data.kline1.close)}],
@@ -264,12 +258,14 @@ export default function DhmIndexView({ tf, pairId }: any) {
   }, [chart, trigger, pairId, tf])
 
   useEffect(() => {
+    if (!testDhm) {return}
     if (!chart) {return}
     if (!fpp) {return}
     //if (!clustersAsHashByTs) {return}
 
     // add EMA200 trand indicator
     chart.createIndicator('EMA', false, { id: 'candle_pane' });
+    //chart.createIndicator('RSI');
     //chart.createIndicator('BOLL', false, { id: 'candle_pane' });
     // chart.createIndicator('CUM_DELTA', true);
     //chart.createOverlay({ name: 'custom_rect_overlay' })
@@ -284,7 +280,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
       } else {
         setCurrentDhmKline(data.current);
         console.log(event);
-        const currentDhm = dhm.find(item => item.data.kline1.id === data.current.id);
+        const currentDhm = testDhm.find(item => item.data.kline1.id === data.current.id);
         console.log(currentDhm);
         setCurrentDhm(currentDhm);
       }
@@ -297,7 +293,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
         setCurrentCuster(null);
       }
     })
-  }, [chart, fpp, onClickClusterHandle]);
+  }, [chart, fpp, testDhm, onClickClusterHandle]);
 
   for (const item of [1,2,3,4,5,6,7]) {
     registerOverlay(
@@ -321,31 +317,32 @@ export default function DhmIndexView({ tf, pairId }: any) {
   registerOverlay(finishedStartKline);
   registerOverlay(triggeredStartKline);
   registerOverlay(finishedByLoseStartKline);
+  registerOverlay(createdStartKline);
   registerOverlay(waitingStartKline);
   registerOverlay(rect);
   registerOverlay(noneditableRect);
   registerOverlay(clusterKline);
-  registerOverlay(enterPosition(async (e: any) => {
-    await cancelPositionRtk(pairId);
-    await refetchPosition();
-  }));
-  registerOverlay(stopPosition(async (e) => {
-    updatePositionRtk({ pairId, type: 'stopLoss', price})
-  }));
-  registerOverlay(takePosition((price: any) => {
-    updatePositionRtk({ pairId, type: 'takeProfit', price})
-  }));
-  registerOverlay(
-    createPosition(async (e: any) => {
-      const sign = e.figure.attrs[0].text;
-      if (sign === '⬆') {
-        await createPositionRtk({ pairId, side: 'buy' })
-      } else if (sign === '⬇') {
-        await createPositionRtk({ pairId, side: 'sell' })
-      }
-      await refetchPosition();
-    }
-  ));
+  // registerOverlay(enterPosition(async (e: any) => {
+  //   await cancelPositionRtk(pairId);
+  //   await refetchPosition();
+  // }));
+  // registerOverlay(stopPosition(async (e) => {
+  //   updatePositionRtk({ pairId, type: 'stopLoss', price})
+  // }));
+  // registerOverlay(takePosition((price: any) => {
+  //   updatePositionRtk({ pairId, type: 'takeProfit', price})
+  // }));
+  // registerOverlay(
+  //   createPosition(async (e: any) => {
+  //     const sign = e.figure.attrs[0].text;
+  //     if (sign === '⬆') {
+  //       await createPositionRtk({ pairId, side: 'buy' })
+  //     } else if (sign === '⬇') {
+  //       await createPositionRtk({ pairId, side: 'sell' })
+  //     }
+  //     await refetchPosition();
+  //   }
+  // ));
   registerIndicator(ema);
   registerIndicator(bollingerBands);
   registerFigure(godKline);

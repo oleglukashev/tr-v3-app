@@ -9,11 +9,13 @@ import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
 import MenuItem from '@mui/material/MenuItem';
 import {useGetAllQuery} from "@/lib/redux/api/pairApi";
+import {useGetSettingsQuery} from "@/lib/redux/api/dhmApi";
 import Avatar from '@mui/material/Avatar';
 import Menu from '@mui/material/Menu';
 import {usePathname, useRouter} from "next/navigation";
 import {useMemo} from "react";
 import {Divider} from "@mui/material";
+import Iconify from "@/src/components/iconify";
 
 const StyledToolbar = styled(Toolbar)(({ theme }) => ({
   display: 'flex',
@@ -57,6 +59,7 @@ export default function Header() {
     setAnchorTfEl(null);
   };
   const { data: pairs, isLoading } = useGetAllQuery({});
+  const { data: settings } = useGetSettingsQuery({});
   const tfs = [
     {id: 1, label: '1'},
     {id: 5, label: '5'},
@@ -75,6 +78,7 @@ export default function Header() {
     { url: 'experiments', label: 'Experiments (graph)' },
     { url: 'experiments2', label: 'Experiments2 (graph)' },
     { url: 'tda', label: 'TDA' },
+    { url: 'stats', label: 'Stats' },
   ]
   const router = useRouter();
   const pair = useMemo(() => {
@@ -94,7 +98,14 @@ export default function Header() {
     return pages.find(item => item.url === pageUrl);
   }, [pathname]);
 
-  console.log(page);
+  const settingsByPairId = useMemo(() => {
+    const result: any = {}
+    if (!settings?.length) { return result }
+    for (const setting of settings) {
+      result[setting.pairId] = true
+    }
+    return result;
+  }, [settings]);
 
   return (
     <AppBar
@@ -135,7 +146,7 @@ export default function Header() {
                 }}
               >
                 {(pages || []).map((item: any) => (
-                  item.url === 'tda' ? (
+                  item.url === 'tda' || item.url === 'stats' ? (
                     <MenuItem key={item.url} onClick={() => router.replace(`/${item.url}`)}>{item.label}</MenuItem>
                   ) : (
                     <MenuItem key={item.url} onClick={() => router.replace(`/${item.url}/${pair?.id || pairs?.[0]?.id}/${tf?.id || tfs?.[0]?.id}`)}>{item.label}</MenuItem>
@@ -167,7 +178,14 @@ export default function Header() {
                 }}
               >
                 {(pairs || []).map((item: any) => (
-                  <MenuItem key={item.id} onClick={() => router.replace(`/${page.url}/${item.id}/${tf.id}`)}>{item.name}</MenuItem>
+                  <MenuItem key={item.id} onClick={() => router.replace(`/${page.url}/${item.id}/${tf.id}`)}>
+                    {!!settingsByPairId[item.id] ? (
+                      <Iconify icon="eva:checkmark-circle-2-fill" width={16} sx={{ mr: 1, color: theme.palette.primary.main }} />
+                    ) : (
+                      <Box sx={{ mr: 3 }}/>
+                    )}
+                    {item.name}
+                  </MenuItem>
                 ))}
               </Menu>
               <Button
