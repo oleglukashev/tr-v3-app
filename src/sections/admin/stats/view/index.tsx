@@ -19,7 +19,7 @@ export default function StatsIndexView() {
   console.log(stats);
 
   return (
-    <Container sx={{ mt: 10 }}>
+    <Container>
       <Card>
         <CardHeader title='Prices' />
         <CardContent>

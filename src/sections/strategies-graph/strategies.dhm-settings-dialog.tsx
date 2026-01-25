@@ -1,13 +1,13 @@
 import Box from "@mui/material/Box";
 import {StrategiesSettingsForm} from "@/src/sections/strategies-graph/strategies.settings-form";
-import {useGetSettingsByPairIdAndTfQuery, useUpdateSettingsMutation} from "@/lib/redux/api/dhmApi";
+import {useGetSettingsDhmByPairIdAndTfQuery, useUpdateSettingsDhmMutation} from "@/lib/redux/api/dhmApi";
 import {useCallback, useEffect} from "react";
 import {onSubmitWrapper} from "@/src/utils/submit";
 import {useForm} from "react-hook-form";
 
 export function StrategiesDhmSettingsDialog({ tf, pairId }: any) {
-  const { data: dhmSettings } = useGetSettingsByPairIdAndTfQuery({ tf, pairId });
-  const [update, { isLoading }] = useUpdateSettingsMutation();
+  const { data: dhmSettings } = useGetSettingsDhmByPairIdAndTfQuery({ tf, pairId });
+  const [update, { isLoading }] = useUpdateSettingsDhmMutation();
 
   const context = useForm({
     defaultValues: {

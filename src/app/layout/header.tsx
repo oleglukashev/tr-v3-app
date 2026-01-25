@@ -9,7 +9,7 @@ import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
 import MenuItem from '@mui/material/MenuItem';
 import {useGetAllQuery} from "@/lib/redux/api/pairApi";
-import {useGetSettingsQuery} from "@/lib/redux/api/dhmApi";
+import {useGetSettingsDhmQuery} from "@/lib/redux/api/dhmApi";
 import Avatar from '@mui/material/Avatar';
 import Menu from '@mui/material/Menu';
 import {usePathname, useRouter} from "next/navigation";
@@ -59,7 +59,7 @@ export default function Header() {
     setAnchorTfEl(null);
   };
   const { data: pairs, isLoading } = useGetAllQuery({});
-  const { data: settings } = useGetSettingsQuery({});
+  const { data: settings } = useGetSettingsDhmQuery({});
   const tfs = [
     {id: 1, label: '1'},
     {id: 5, label: '5'},
@@ -72,13 +72,15 @@ export default function Header() {
   const pathname = usePathname();
   const pages = [
     { url: 'dhm-graph', label: 'DHM (graph)' },
+    { url: 'dhm2-graph', label: 'DHM2 (graph)' },
     { url: 'dhm-graph-test', label: 'DHM (graph) TEST' },
+    { url: 'dhm2-graph-test', label: 'DHM2 (graph) TEST' },
     { url: 'dhm', label: 'DHMs' },
     { url: 'clusters', label: 'Clusters' },
     { url: 'experiments', label: 'Experiments (graph)' },
     { url: 'experiments2', label: 'Experiments2 (graph)' },
     { url: 'tda', label: 'TDA' },
-    { url: 'stats', label: 'Stats' },
+    { url: 'admin', label: 'Admin' },
   ]
   const router = useRouter();
   const pair = useMemo(() => {
@@ -146,7 +148,7 @@ export default function Header() {
                 }}
               >
                 {(pages || []).map((item: any) => (
-                  item.url === 'tda' || item.url === 'stats' ? (
+                  item.url === 'tda' || item.url === 'admin' ? (
                     <MenuItem key={item.url} onClick={() => router.replace(`/${item.url}`)}>{item.label}</MenuItem>
                   ) : (
                     <MenuItem key={item.url} onClick={() => router.replace(`/${item.url}/${pair?.id || pairs?.[0]?.id}/${tf?.id || tfs?.[0]?.id}`)}>{item.label}</MenuItem>
@@ -178,12 +180,13 @@ export default function Header() {
                 }}
               >
                 {(pairs || []).map((item: any) => (
-                  <MenuItem key={item.id} onClick={() => router.replace(`/${page.url}/${item.id}/${tf.id}`)}>
-                    {!!settingsByPairId[item.id] ? (
-                      <Iconify icon="eva:checkmark-circle-2-fill" width={16} sx={{ mr: 1, color: theme.palette.primary.main }} />
-                    ) : (
-                      <Box sx={{ mr: 3 }}/>
-                    )}
+                  <MenuItem sx={{
+                    backgroundColor: settingsByPairId[item.id] ? theme.palette.primary.main : 'white',
+                    color: settingsByPairId[item.id] ? 'white' : theme.palette.text.primary,
+                    '&:hover': {
+                      backgroundColor: settingsByPairId[item.id] ? theme.palette.primary.main : 'white',
+                    }
+                  }} key={item.id} onClick={() => router.replace(`/${page.url}/${item.id}/${tf.id}`)}>
                     {item.name}
                   </MenuItem>
                 ))}

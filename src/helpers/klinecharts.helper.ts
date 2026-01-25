@@ -72,8 +72,8 @@ export const godKline = {
     ctx.beginPath();
     ctx.moveTo(x - (barSpaceWidth / 2), 0);
     ctx.lineTo(x + (barSpaceWidth / 2), 0);
-    ctx.lineTo(x + (barSpaceWidth / 2), 1000);
-    ctx.lineTo(x - (barSpaceWidth / 2), 1000);
+    ctx.lineTo(x + (barSpaceWidth / 2), 10000);
+    ctx.lineTo(x - (barSpaceWidth / 2), 10000);
     //ctx.lineTo(x, y + height / 2);
     ctx.closePath();
     ctx.fillStyle = color;
@@ -229,6 +229,46 @@ export const createdStartKline = {
   }
 }
 
+export const swingHighKline = {
+  name: 'swingHighKline',
+  totalStep: 2,
+  createPointFigures: ({ coordinates }) => {
+    return {
+      type: 'godKline',
+      attrs: {
+        x: coordinates[0].x,
+        y: coordinates[0].y,
+        width: 50,
+        height: 50
+      },
+      styles: {
+        style: 'fill',
+        color: 'rgba(76,175,80,0.3)' // Green with transparency for swing high
+      },
+    }
+  }
+}
+
+export const swingLowKline = {
+  name: 'swingLowKline',
+  totalStep: 2,
+  createPointFigures: ({ coordinates }) => {
+    return {
+      type: 'godKline',
+      attrs: {
+        x: coordinates[0].x,
+        y: coordinates[0].y,
+        width: 50,
+        height: 50
+      },
+      styles: {
+        style: 'fill',
+        color: 'rgba(244,67,54,0.3)' // Red with transparency for swing low
+      },
+    }
+  }
+}
+
 export const ema = {
   name: 'EMA',
   shortName: 'EMA',
@@ -379,6 +419,194 @@ export function upCircleBySize(size, onClickCallback){
   }
 }
 
+export const dhmUp: any = {
+  name: 'dhmUp',
+  totalStep: 2,
+  styles: {
+    line: { style: 'dashed' }
+  },
+  createPointFigures: ({ overlay, coordinates }) => {
+    let text = ''
+    text = (overlay.extendData ?? '') as string
+    const startX = coordinates[0].x
+    const startY = coordinates[0].y + 5
+    const lineEndY = startY + 10
+    const arrowEndY = lineEndY + 30
+    return [
+      {
+        type: 'line',
+        attrs: { coordinates: [{ x: startX, y: startY }, { x: startX, y: lineEndY }] },
+        ignoreEvent: true,
+        styles: {
+          color: 'rgba(0,89,30, 0.55)',
+          style: 'dashed',
+        }
+      },
+      {
+        type: 'polygon',
+        attrs: { coordinates: [{ x: startX, y: lineEndY }, { x: startX - 5, y: arrowEndY - 20 }, { x: startX + 5, y: arrowEndY - 20 }] },
+        ignoreEvent: true,
+        styles: {
+          color: 'rgba(0,89,30, 0.55)',
+          style: 'fill',
+        }
+      },
+      {
+        type: 'text',
+        attrs: { x: startX, y: arrowEndY, text, align: 'center', baseline: 'bottom' },
+        ignoreEvent: true,
+        styles: {
+          backgroundColor: 'rgba(0,89,30, 0.55)',
+          //color: 'rgba(0,89,30, 0.55)',
+          style: 'fill',
+        }
+      }
+    ]
+  }
+}
+
+export const dhmDown: any = {
+  name: 'dhmDown',
+  totalStep: 2,
+  styles: {
+    line: { style: 'dashed' }
+  },
+  createPointFigures: ({ overlay, coordinates }) => {
+    let text = ''
+    text = (overlay.extendData ?? '') as string
+    const startX = coordinates[0].x
+    const startY = coordinates[0].y + 5
+    const lineEndY = startY + 10
+    const arrowEndY = lineEndY + 30
+    return [
+      {
+        type: 'line',
+        attrs: { coordinates: [{ x: startX, y: startY }, { x: startX, y: lineEndY }] },
+        ignoreEvent: true,
+        styles: {
+          color: 'rgba(244,67,54,0.3)',
+          style: 'dashed',
+        }
+      },
+      {
+        type: 'polygon',
+        attrs: { coordinates: [{ x: startX, y: lineEndY }, { x: startX - 5, y: arrowEndY - 20 }, { x: startX + 5, y: arrowEndY - 20 }] },
+        ignoreEvent: true,
+        styles: {
+          color: 'rgba(244,67,54,0.3)',
+          style: 'fill',
+        }
+      },
+      {
+        type: 'text',
+        attrs: { x: startX, y: arrowEndY, text, align: 'center', baseline: 'bottom' },
+        ignoreEvent: true,
+        styles: {
+          backgroundColor: 'rgba(244,67,54,0.3)',
+          //color: 'rgba(0,89,30, 0.55)',
+          style: 'fill',
+        }
+      }
+    ]
+  }
+}
+
+export const dhmLevel: any = {
+  name: 'dhmLevel',
+  totalStep: 2,
+  styles: {
+    line: { style: 'dashed' }
+  },
+  // createPointFigures: ({ overlay, coordinates }) => {
+  //   const text = '123123123'
+  //   //text = (overlay.extendData ?? '') as string
+  //   const low = (overlay.low ?? '') as string;
+  //   const high = (overlay.high ?? '') as string;
+  //   const startX = coordinates[0].x
+  //   //const startY = parseFloat(low) + ((parseFloat(high) - parseFloat(low)) / 2);
+  //   const startY = coordinates[0].y;
+  //   return [
+  //     {
+  //       type: 'line',
+  //       attrs: { coordinates: [{ x: startX, y: startY }, { x: startX + 1000, y: startY }] },
+  //       ignoreEvent: true,
+  //       styles: {
+  //         color: 'rgba(0,89,30, 0.55)',
+  //         style: 'dashed',
+  //       }
+  //     },
+  //     {
+  //       type: 'text',
+  //       attrs: { x: startX, y: startY, text, align: 'center', baseline: 'bottom' },
+  //       ignoreEvent: true,
+  //       styles: {
+  //         backgroundColor: 'rgba(0,89,30, 0.55)',
+  //         //color: 'rgba(0,89,30, 0.55)',
+  //         style: 'fill',
+  //       }
+  //     }
+  //   ]
+  // }
+  createPointFigures: ({ chart, coordinates, bounding, overlay, yAxis }: any) => {
+    const points = overlay.points
+
+
+
+    if (coordinates.length > 0) {
+      let precision = 0
+      // if (yAxis?.isInCandle() ?? true) {
+      //   precision = chart.getPrecision().price
+      // } else {
+      //   const indicators = chart.getIndicators({ paneId: overlay.paneId })
+      //   indicators.forEach((indicator: any) => {
+      //     precision = Math.max(precision, indicator.precision)
+      //   })
+      // }
+      const indicators = chart.getIndicators({ paneId: overlay.paneId })
+      indicators.forEach((indicator: any) => {
+        precision = Math.max(precision, indicator.precision)
+      })
+      const lines: any[] = []
+      const texts: any[] = []
+      const startX = 0
+      const endX = bounding.width
+      if (coordinates.length > 1 && typeof points[0].value === 'number' && Number.isFinite(points[0].value) && typeof points[1].value === 'number' && Number.isFinite(points[1].value)) {
+        const percents = [0.5]
+        //const percents = [1, 0.5, 0]
+        const yDif = coordinates[0].y - coordinates[1].y
+        const valueDif = points[0].value - points[1].value
+        const baseValue = points[1].value || 0
+        const percentChange = baseValue ? (valueDif / baseValue) * 100 : null
+        percents.forEach(percent => {
+          const y = coordinates[1].y + yDif * percent
+          const value = chart.getDecimalFold().format(chart.getThousandsSeparator().format(((points[1].value ?? 0) + valueDif * percent).toFixed(precision)))
+          const changeText = percent === 1 && percentChange !== null
+            ? ` | ${(percentChange >= 0 ? '+' : '')}${percentChange.toFixed(2)}%`
+            : ''
+          lines.push({ coordinates: [{ x: startX, y }, { x: endX, y }] })
+          texts.push({
+            x: startX,
+            y,
+            text: `${value} (${(percent * 100).toFixed(1)}%)${changeText}`,
+            baseline: 'bottom'
+          })
+        })
+      }
+      return [
+        {
+          type: 'line',
+          attrs: lines
+        }, {
+          type: 'text',
+          isCheckEvent: false,
+          attrs: texts
+        }
+      ]
+    }
+    return []
+  }
+}
+
 export function downCircleBySize(size: number, onClickCallback: any){
   return {
     name: `down${size}Circle`,
@@ -413,7 +641,7 @@ export function getPriceByWebSocket(chart: any, pairId: number, tf: number, call
 
   socket.onopen = () => {
     socket.send(JSON.stringify({
-      type: 'subscribe',
+      type: 'subscribeKlinesByPairIdAndTf',
       pairId: parseInt(pairId),
       tf: parseInt(tf),
     }))
@@ -439,7 +667,9 @@ export function resizeChart(chart: any) {
 
 
 export function clusterKline(data: any) {
+  console.log('data', data);
   const sortedData = sortByPrice(Object.values(data), false);
+  console.log('sortedData', sortedData);
   return {
     name: 'clusterKline',
     lock: true,
@@ -476,8 +706,9 @@ export function clusterKline(data: any) {
           maxDelta = absDeltaValue;
         }
       }
-      for (const item of sortedData) {
+      for (const [index, item] of sortedData.entries()) {
         // if data[price].
+        const priceDelta = sortedData.length >= 2 ? parseFloat(sortedData[1].p) - parseFloat(sortedData[0].p) : null;
         const bv = parseFloat(item.bv);
         const sv = parseFloat(item.sv);
         const v = parseFloat(item.v);
@@ -487,7 +718,7 @@ export function clusterKline(data: any) {
         const deltaText = `${Math.round(deltaValue / delimeter)}${delimeter === 1000000 ? 'm' : delimeter === 1000 ? 'k' : ''}`;
         const buyValueText = `${Math.round(bv / delimeter)}${delimeter === 1000000 ? 'm' : delimeter === 1000 ? 'k' : ''}`;
         const sellValueText = `${Math.round(sv / delimeter)}${delimeter === 1000000 ? 'm' : delimeter === 1000 ? 'k' : ''}`;
-        const text = `${deltaText} (${buyValueText}x${sellValueText})`;
+        const text = `${deltaText} (${sellValueText}x${buyValueText})`;
         const bgColorIndex = getColorIndex(0, maxDelta, absDeltaValue);
         result.push({
           type: 'rect',
@@ -530,8 +761,111 @@ export function clusterKline(data: any) {
             paddingRight: 0,
           }
         })
+
+        if (priceDelta && sortedData[index + 1] && parseFloat(item.p) < (priceDelta + parseFloat(sortedData[index + 1].p))) {
+          result.push({
+            type: 'rect',
+            attrs: {
+              x: coordinates[0].x - 17,
+              y: coordinates[0].y + (i * clusterLevelHeight) + 1,
+              width: 63,
+              height: clusterLevelHeight,
+            },
+            styles: {
+              style: 'stroke_fill',
+              color: '#fff',
+              backgroundColor: '#fff',
+              //borderColor: '#fff',
+              //borderStyle: 'solid',
+              borderSize: 0,
+            }
+          })
+          result.push({
+            type: 'text',
+            attrs: {
+              x: coordinates[0].x - 17,
+              y: coordinates[0].y + (i * clusterLevelHeight) + 1,
+              text,
+              width: 63,
+              height: clusterLevelHeight - 1,
+              //baseline: 'hanging',
+            },
+            styles: {
+              backgroundColor: 'transparent',
+              color: '#757575',
+              size: height > 200 ? height > 350 ? 10 : 8 : 7,
+              weight: 'bold',
+              borderColor: '#fff',
+              //borderStyle: 'solid',
+              borderSize: 0,
+              paddingTop: 0,
+              paddingBottom: 0,
+              paddingLeft: 0,
+              paddingRight: 0,
+            }
+          })
+        }
+
         i++;
       }
+
+      const generalBv = sortedData.reduce((cur, item) => parseFloat(item.bv) + cur, 0);
+      const generalSv = sortedData.reduce((cur, item) => parseFloat(item.sv) + cur, 0);
+      const deltaValue = sortedData.reduce((cur, item) => parseFloat(delta(item)) + cur, 0);
+
+      console.log(generalBv, generalSv, deltaValue, sortedData);
+
+      const absDeltaValue = Math.abs(deltaValue);
+      const delimeter = absDeltaValue >= 1000 ? absDeltaValue >= 1000000 ? 1000000 : 1000 : 1;
+
+      const deltaText = `${Math.round(deltaValue / delimeter)}${delimeter === 1000000 ? 'm' : delimeter === 1000 ? 'k' : ''}`;
+      const buyValueText = `${Math.round(generalBv / delimeter)}${delimeter === 1000000 ? 'm' : delimeter === 1000 ? 'k' : ''}`;
+      const sellValueText = `${Math.round(generalSv / delimeter)}${delimeter === 1000000 ? 'm' : delimeter === 1000 ? 'k' : ''}`;
+
+      const text = `${deltaText} (${buyValueText}x${sellValueText})`;
+      const bgColorIndex = getColorIndex(0, maxDelta, absDeltaValue);
+
+      result.push({
+        type: 'rect',
+        attrs: {
+          x: coordinates[0].x - 17,
+          y: coordinates[0].y + ((Object.keys(data).length + 1) * clusterLevelHeight),
+          width: 63,
+          height: clusterLevelHeight,
+        },
+        styles: {
+          style: 'stroke_fill',
+          color: generalBv > generalSv ? greenColors[bgColorIndex] : redColors[bgColorIndex],
+          backgroundColor: generalBv > generalSv ? greenColors[bgColorIndex] : redColors[bgColorIndex],
+          //borderColor: '#fff',
+          //borderStyle: 'solid',
+          borderSize: 0,
+        }
+      })
+      result.push({
+        type: 'text',
+        attrs: {
+          x: coordinates[0].x - 17,
+          y: coordinates[0].y + ((Object.keys(data).length + 1) * clusterLevelHeight),
+          text,
+          width: 63,
+          height: clusterLevelHeight - 1,
+          //baseline: 'hanging',
+        },
+        styles: {
+          backgroundColor: 'transparent',
+          color: '#fff',
+          size: height > 200 ? height > 350 ? 10 : 8 : 7,
+          weight: 'bold',
+          borderColor: '#fff',
+          //borderStyle: 'solid',
+          borderSize: 0,
+          paddingTop: 0,
+          paddingBottom: 0,
+          paddingLeft: 0,
+          paddingRight: 0,
+        }
+      })
       return result;
     }
   }

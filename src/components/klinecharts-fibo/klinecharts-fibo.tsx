@@ -31,14 +31,19 @@ const fibonacciLine2: any = {
         //const percents = [1, 0.5, 0]
         const yDif = coordinates[0].y - coordinates[1].y
         const valueDif = points[0].value - points[1].value
+        const baseValue = points[1].value || 0
+        const percentChange = baseValue ? (valueDif / baseValue) * 100 : null
         percents.forEach(percent => {
           const y = coordinates[1].y + yDif * percent
           const value = chart.getDecimalFold().format(chart.getThousandsSeparator().format(((points[1].value ?? 0) + valueDif * percent).toFixed(precision)))
+          const changeText = percent === 1 && percentChange !== null
+            ? ` | ${(percentChange >= 0 ? '+' : '')}${percentChange.toFixed(2)}%`
+            : ''
           lines.push({ coordinates: [{ x: startX, y }, { x: endX, y }] })
           texts.push({
             x: startX,
             y,
-            text: `${value} (${(percent * 100).toFixed(1)}%)`,
+            text: `${value} (${(percent * 100).toFixed(1)}%)${changeText}`,
             baseline: 'bottom'
           })
         })

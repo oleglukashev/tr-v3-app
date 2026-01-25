@@ -4,8 +4,8 @@ import {useCallback, useEffect, useMemo, useState} from "react";
 import {registerFigure, registerOverlay, registerIndicator} from "klinecharts";
 //import {useGetAllQuery as useGetAllKlinesQuery} from "@/lib/redux/api/klineApi";
 import {
-  useCreateMutation,
-  useGetAllQuery as useGetAllDhmQuery, useRemoveMutation, useUpdateMutation,
+  useCreateDhmMutation,
+  useGetAllDhmQuery, useRemoveDhmMutation, useUpdateDhmMutation,
 } from "@/lib/redux/api/dhmApi";
 import { useGetAllQuery as useGetAllFppQuery } from "@/lib/redux/api/fppApi";
 import {camelCase, delay} from 'lodash';
@@ -86,9 +86,9 @@ export default function DhmIndexView({ tf, pairId }: any) {
   //const [createPositionRtk, { isLoading: isCreatePositionLoading }] = useCreatePositionMutation();
   //const [cancelPositionRtk, { isLoading: isCancelPositionLoading }] = useCancelPositionMutation();
   //const [updatePositionRtk, { isLoading: isUpdatePositionLoading }] = useUpdatePositionMutation();
-  const [create, { isLoading: isCreateLoading }] = useCreateMutation();
-  const [update, { isLoading: isUpdateLoading }] = useUpdateMutation();
-  const [remove, { isLoading }] = useRemoveMutation();
+  const [create, { isLoading: isCreateLoading }] = useCreateDhmMutation();
+  const [update, { isLoading: isUpdateLoading }] = useUpdateDhmMutation();
+  const [remove, { isLoading }] = useRemoveDhmMutation();
   const { data: orders } = useGetAllOrdersQuery({ pairId, status: 'open' });
   const { data: position } = useGetPositionQuery({ pairId });
 
@@ -270,7 +270,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
       if (['created', 'waiting', 'triggered', 'finished', 'finished_by_lose', 'finished_by_length'].includes(item.status)) {
         chart.createOverlay({
           name: `${camelCase(item.status)}StartKline`,
-          points: [{timestamp: parseInt(item.data.kline1.ts), value: parseFloat(item.data.kline1.close)}],
+          points: [{timestamp: parseInt(item.kline1.ts), value: parseFloat(item.kline1.close)}],
         })
         for (const i of [1,2,3]) {
           if (item.data?.[`poi${i}`]) {

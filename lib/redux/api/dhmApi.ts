@@ -9,7 +9,7 @@ export const dhmApi = (new BaseApi({
   extraEndpoints: (builder) => {
     return {
       // @ts-ignore
-      getAllTest: builder.query<any[], any>({
+      getAllTestDhm: builder.query<any[], any>({
         query(params: any) {
           return {
             url: `${collectionPath}/test/${params.pairId}/${params.tf}`,
@@ -18,7 +18,16 @@ export const dhmApi = (new BaseApi({
         //providesTags: (result: any) => BaseApi.providesTags(result, collectionPath),
       }),
       // @ts-ignore
-      getAll: builder.query<any[], any>({
+      getAllTestDhm2: builder.query<any[], any>({
+        query(params: any) {
+          return {
+            url: `${collectionPath}2/test/${params.pairId}/${params.tf}`,
+          };
+        },
+        //providesTags: (result: any) => BaseApi.providesTags(result, collectionPath),
+      }),
+      // @ts-ignore
+      getAllDhm: builder.query<any[], any>({
         query(params: any) {
           return {
             url: `${collectionPath}/${params.pairId}/${params.tf}`,
@@ -27,7 +36,16 @@ export const dhmApi = (new BaseApi({
         //providesTags: (result: any) => BaseApi.providesTags(result, collectionPath),
       }),
       // @ts-ignore
-      getSettings: builder.query<any[], any>({
+      getAllDhm2: builder.query<any[], any>({
+        query(params: any) {
+          return {
+            url: `${collectionPath}2/${params.pairId}/${params.tf}`,
+          };
+        },
+        //providesTags: (result: any) => BaseApi.providesTags(result, collectionPath),
+      }),
+      // @ts-ignore
+      getSettingsDhm: builder.query<any[], any>({
         query(params: any) {
           return {
             url: `${collectionPath}/settings`,
@@ -37,7 +55,17 @@ export const dhmApi = (new BaseApi({
         //providesTags: (result: any) => BaseApi.providesTags(result, collectionPath),
       }),
       // @ts-ignore
-      getSettingsByPairIdAndTf: builder.query<any[], any>({
+      getSettingsDhm2: builder.query<any[], any>({
+        query(params: any) {
+          return {
+            url: `${collectionPath}2/settings`,
+            params: params,
+          };
+        },
+        //providesTags: (result: any) => BaseApi.providesTags(result, collectionPath),
+      }),
+      // @ts-ignore
+      getSettingsDhmByPairIdAndTf: builder.query<any[], any>({
         query(params: any) {
           return {
             url: `${collectionPath}/settings/${params.pairId}/${params.tf}`
@@ -46,7 +74,16 @@ export const dhmApi = (new BaseApi({
         providesTags: (result: any) => BaseApi.providesTags(result, collectionPath),
       }),
       // @ts-ignore
-      updateSettings: builder.mutation<any, any>({
+      getSettingsDhm2ByPairIdAndTf: builder.query<any[], any>({
+        query(params: any) {
+          return {
+            url: `${collectionPath}2/settings/${params.pairId}/${params.tf}`
+          };
+        },
+        providesTags: (result: any) => BaseApi.providesTags(result, collectionPath),
+      }),
+      // @ts-ignore
+      updateSettingsDhm: builder.mutation<any, any>({
         query(data: any) {
           return {
             url: `${collectionPath}/settings`,
@@ -56,20 +93,107 @@ export const dhmApi = (new BaseApi({
         },
       }),
       // @ts-ignore
-      run: builder.mutation<any, any>({
+      updateSettingsDhm2: builder.mutation<any, any>({
         query(data: any) {
           return {
-            url: `${collectionPath}/test/run`,
+            url: `${collectionPath}2/settings`,
+            method: 'PATCH',
+            body: data,
+          };
+        },
+      }),
+      // @ts-ignore
+      runTestDhm: builder.mutation<any, any>({
+        query(data: any) {
+          return {
+            url: `${collectionPath}/test/run_dhm`,
             method: 'POST',
             body: data,
           };
         },
       }),
       // @ts-ignore
-      deleteAllTest: builder.mutation<any, any>({
+      runTestDhm2: builder.mutation<any, any>({
+        query(data: any) {
+          return {
+            url: `${collectionPath}/test/run_dhm2`,
+            method: 'POST',
+            body: data,
+          };
+        },
+      }),
+      // @ts-ignore
+      createDhm: builder.mutation<any, any>({
+        query(data: any) {
+          return {
+            url: collectionPath,
+            method: 'POST',
+            body: data,
+          };
+        },
+      }),
+      // @ts-ignore
+      createDhm2: builder.mutation<any, any>({
+        query(data: any) {
+          return {
+            url: `${collectionPath}2`,
+            method: 'POST',
+            body: data,
+          };
+        },
+      }),
+      // @ts-ignore
+      updateDhm: builder.mutation<any, any>({
+        query(data: any) {
+          return {
+            url: collectionPath,
+            method: 'PATCH',
+            body: data,
+          };
+        },
+      }),
+      // @ts-ignore
+      updateDhm2: builder.mutation<any, any>({
+        query(data: any) {
+          return {
+            url: `${collectionPath}2`,
+            method: 'PATCH',
+            body: data,
+          };
+        },
+      }),
+      // @ts-ignore
+      removeDhm: builder.mutation<any, any>({
+        query(data: any) {
+          return {
+            url: `${collectionPath}/:id`,
+            method: 'DELETE',
+          };
+        },
+      }),
+      // @ts-ignore
+      removeDhm2: builder.mutation<any, any>({
+        query(data: any) {
+          return {
+            url: `${collectionPath}2/:id`,
+            method: 'DELETE',
+          };
+        },
+      }),
+      // @ts-ignore
+      deleteAllTestDhm: builder.mutation<any, any>({
         query() {
           return {
             url: `${collectionPath}/test`,
+            method: 'DELETE',
+          };
+        },
+      }),
+      // @ts-ignore
+      deleteAllTestDhm2: builder.mutation<any, any>({
+        query() {
+          return {
+            url: `${collectionPath}2/test`,
             method: 'DELETE',
           };
         },
@@ -79,14 +203,24 @@ export const dhmApi = (new BaseApi({
 })).create();
 
 export const {
-  useGetAllQuery,
-  useGetAllTestQuery,
-  useCreateMutation,
-  useUpdateMutation,
-  useRemoveMutation,
-  useGetSettingsQuery,
-  useGetSettingsByPairIdAndTfQuery,
-  useUpdateSettingsMutation,
-  useRunMutation,
-  useDeleteAllTestMutation,
+  useGetAllDhmQuery,
+  useGetAllDhm2Query,
+  useGetAllTestDhmQuery,
+  useGetAllTestDhm2Query,
+  useCreateDhmMutation,
+  useCreateDhm2Mutation,
+  useUpdateDhmMutation,
+  useUpdateDhm2Mutation,
+  useRemoveDhmMutation,
+  useRemoveDhm2Mutation,
+  useGetSettingsDhmQuery,
+  useGetSettingsDhmByPairIdAndTfQuery,
+  useGetSettingsDhm2Query,
+  useGetSettingsDhm2ByPairIdAndTfQuery,
+  useUpdateSettingsDhmMutation,
+  useUpdateSettingsDhm2Mutation,
+  useRunTestDhmMutation,
+  useRunTestDhm2Mutation,
+  useDeleteAllTestDhmMutation,
+  useDeleteAllTestDhm2Mutation,
 } = dhmApi;

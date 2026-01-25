@@ -9,6 +9,7 @@ import {orderApi} from "@/lib/redux/api/orderApi";
 import {tdaPointsApi} from "@/lib/redux/api/tdaPointsApi";
 import { statsApi } from "./api/statsApi";
 import {pnlApi} from "@/lib/redux/api/pnlApi";
+import {storageApi} from "@/lib/redux/api/storageApi";
 
 export const reduxStore = configureStore({
   reducer: {
@@ -22,6 +23,7 @@ export const reduxStore = configureStore({
     [tdaPointsApi.reducerPath]: tdaPointsApi.reducer,
     [statsApi.reducerPath]: statsApi.reducer,
     [pnlApi.reducerPath]: pnlApi.reducer,
+    [storageApi.reducerPath]: storageApi.reducer,
   },
   //devTools: process.env.NEXT_PUBLIC_ENV !== "production",
   middleware: (getDefaultMiddleware) =>
@@ -36,5 +38,6 @@ export const reduxStore = configureStore({
       tdaPointsApi.middleware,
       statsApi.middleware,
       pnlApi.middleware,
+      storageApi.middleware,
     ]),
 });

@@ -1,10 +1,10 @@
 import { BaseApi } from "./baseApi";
-import {customTrApiFetchBase} from "../../customFetchBase";
+import {customTrFetchBase} from "../../customFetchBase";
 
 const collectionPath = 'tda_points';
 export const tdaPointsApi = (new BaseApi({
   reducerPath: collectionPath,
-  baseQuery: customTrApiFetchBase,
+  baseQuery: customTrFetchBase,
   collectionPath,
   extraEndpoints: (builder) => {
     return {
