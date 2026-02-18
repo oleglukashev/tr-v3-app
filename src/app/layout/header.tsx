@@ -12,7 +12,7 @@ import {useGetAllQuery} from "@/lib/redux/api/pairApi";
 import {useGetSettingsDhmQuery} from "@/lib/redux/api/dhmApi";
 import Avatar from '@mui/material/Avatar';
 import Menu from '@mui/material/Menu';
-import {usePathname, useRouter} from "next/navigation";
+import {usePathname, useRouter, useSearchParams} from "next/navigation";
 import {useMemo} from "react";
 import {Divider} from "@mui/material";
 import Iconify from "@/src/components/iconify";
@@ -70,6 +70,7 @@ export default function Header() {
     {id: 1440, label: '1D'},
   ]
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const pages = [
     { url: 'dhm-graph', label: 'DHM (graph)' },
     { url: 'dhm2-graph', label: 'DHM2 (graph)' },
@@ -99,6 +100,7 @@ export default function Header() {
     let pageUrl: any = pathname.split('/')[1];
     return pages.find(item => item.url === pageUrl);
   }, [pathname]);
+  const ts = searchParams.get('ts');
 
   const settingsByPairId = useMemo(() => {
     const result: any = {}
@@ -214,7 +216,12 @@ export default function Header() {
                 }}
               >
                 {tfs.map((item: any) => (
-                  <MenuItem key={item.id} onClick={() => router.replace(`/${page?.url}/${pair.id}/${item.id}`)}>{item.label}</MenuItem>
+                  <MenuItem
+                    key={item.id}
+                    onClick={() => router.replace(`/${page?.url}/${pair.id}/${item.id}${ts ? `?ts=${ts}` : ''}`)}
+                  >
+                    {item.label}
+                  </MenuItem>
                 ))}
               </Menu>
 

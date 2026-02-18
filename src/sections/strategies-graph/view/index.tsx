@@ -47,6 +47,7 @@ import {
 import {useGetAllQuery} from "@/lib/redux/api/tdaPointsApi";
 import {useGetAllQuery as useGetAllOrdersQuery} from "@/lib/redux/api/orderApi";
 import {useGetQuery as useGetPositionQuery} from "@/lib/redux/api/positionApi";
+import {useSearchParams} from "next/navigation";
 
 const DEFAULT_GLOBAL_SETTINGS = {
   fppFilters: [
@@ -75,6 +76,7 @@ const DEFAULT_GLOBAL_SETTINGS = {
 
 export default function DhmIndexView({ tf, pairId }: any) {
   const theme = useTheme();
+  let searchParams = useSearchParams();
   const SETTINGS_STORAGE_KEY = `settings${pairId}`;
   const LEGACY_FPP_FILTERS_STORAGE_KEY = `fppFilter${pairId}`;
   const [chart, setChart] = useState<any>(null);
@@ -470,6 +472,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
       <Map
         pairId={pairId}
         tf={tf}
+        defaultTs={searchParams.get('ts')}
         setParentChart={setChart}
         //setCurrentPrice={setCurrentPrice}
         updateWebsocketPriceCallback={() => {
