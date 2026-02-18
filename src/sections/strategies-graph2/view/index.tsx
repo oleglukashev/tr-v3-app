@@ -326,7 +326,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
     chart.removeOverlay({ name: `dhmDown` })
 
     for (const item of dhm) {
-      if (['created', 'waiting', 'triggered', 'finished', 'finished_by_lose', 'finished_by_length'].includes(item.status)) {
+      //if (['created', 'waiting', 'triggered', 'finished', 'finished_by_lose', 'finished_by_length'].includes(item.status)) {
         chart.createOverlay({
           name: item.direction === 'up' ? 'dhmUp' : 'dhmDown',
           extendData: {
@@ -357,7 +357,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
         //   }
         // }
         //console.log(item.data.kline1.close);
-      }
+      //}
 
       // if (item.confirmed) {
       //   chart.createOverlay({

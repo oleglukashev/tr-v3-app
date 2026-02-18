@@ -1,7 +1,7 @@
 import { BaseApi } from "./baseApi";
 import { customTrClustersFetchBase } from "../../customFetchBase";
 
-const collectionPath = "storages/orderbooks";
+const collectionPath = "storages/bidasks";
 const reducerPath = "bidaskStorage";
 
 export const bidaskStorageApi = (

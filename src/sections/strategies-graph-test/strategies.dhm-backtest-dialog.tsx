@@ -2,15 +2,15 @@ import Box from "@mui/material/Box";
 import {StrategiesBacktestForm} from "@/src/sections/strategies-graph-test/strategies.backtest-form";
 import {useCallback, useEffect, useMemo, useState} from "react";
 import {onSubmitWrapper} from "@/src/utils/submit";
-import {useDeleteAllTestMutation, useGetAllTestQuery, useRunMutation} from "@/lib/redux/api/dhmApi";
+import {useDeleteAllTestDhmMutation, useGetAllTestDhmQuery, useRunTestDhmMutation} from "@/lib/redux/api/dhmApi";
 import Button from "@mui/material/Button";
 import {camelCase} from "lodash";
 
 export function StrategiesDhmBacktestDialog({ pairId, tf, klines }: any) {
   const [chart, setChart] = useState<any>(null);
-  const [run, { isLoading }] = useRunMutation();
-  const [removeAllTest, { isLoading: isRemovalAllLoading }] = useDeleteAllTestMutation();
-  const { data: testDhm } = useGetAllTestQuery({ pairId, tf });
+  const [run, { isLoading }] = useRunTestDhmMutation();
+  const [removeAllTest, { isLoading: isRemovalAllLoading }] = useDeleteAllTestDhmMutation();
+  const { data: testDhm } = useGetAllTestDhmQuery({ pairId, tf });
   const onRunSubmit = useCallback(async (values: any) => {
     return onSubmitWrapper(() => run({ pairId, tf, ...values }), null, 'Успешно запущенно');
   }, [pairId, tf]);

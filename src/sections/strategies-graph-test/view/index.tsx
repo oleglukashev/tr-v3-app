@@ -4,8 +4,7 @@ import {useCallback, useEffect, useMemo, useState} from "react";
 import {registerFigure, registerOverlay, registerIndicator} from "klinecharts";
 //import {useGetAllQuery as useGetAllKlinesQuery} from "@/lib/redux/api/klineApi";
 import {
-  useCreateMutation,
-  useGetAllQuery as useGetAllDhmQuery, useGetAllTestQuery, useRemoveMutation, useUpdateMutation,
+  useGetAllTestDhmQuery, useRemoveDhmMutation, useUpdateDhmMutation,
 } from "@/lib/redux/api/dhmApi";
 import { useGetAllQuery as useGetAllFppQuery } from "@/lib/redux/api/fppApi";
 import {camelCase, delay} from 'lodash';
@@ -80,10 +79,10 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const { data: fpp } = useGetAllFppQuery({ pairId, page, limit: 5000, tf });
   // const { data: dhm } = useGetAllDhmQuery({ pairId, tf: 60 });
   //const { data: tdaPoints } = useGetAllQuery({ pairId });
-  const { data: testDhm } = useGetAllTestQuery({ pairId, tf: 60 });
-  const [create, { isLoading: isCreateLoading }] = useCreateMutation();
-  const [update, { isLoading: isUpdateLoading }] = useUpdateMutation();
-  const [remove, { isLoading }] = useRemoveMutation();
+  const { data: testDhm } = useGetAllTestDhmQuery({ pairId, tf: 60 });
+  //const [create, { isLoading: isCreateLoading }] = useCreateMutation();
+  //const [update, { isLoading: isUpdateLoading }] = useUpdateMutation();
+  //const [remove, { isLoading }] = useRemoveMutation();
 
   // const clustersAsHashByTs = useMemo(() => {
   //   if (!orderbooks) { return }
@@ -165,27 +164,27 @@ export default function DhmIndexView({ tf, pairId }: any) {
     })
   }, [chart, testDhm]);
 
-  const onCreateSubmit = useCallback(async (values: any) => {
-    return onSubmitWrapper(() => create(values), (data) => {
-      if (data.data) {
-        setCurrentDhm(data.data);
-      }
-    }, 'Успешно создано');
-  }, []);
+  // const onCreateSubmit = useCallback(async (values: any) => {
+  //   return onSubmitWrapper(() => create(values), (data) => {
+  //     if (data.data) {
+  //       setCurrentDhm(data.data);
+  //     }
+  //   }, 'Успешно создано');
+  // }, []);
 
-  const onUpdateSubmit = useCallback(async (values: any) => {
-    return onSubmitWrapper(() => update({ id: currentDhm.id, values }), null, 'Успешно создано');
-  }, [currentDhm?.id, update]);
+  // const onUpdateSubmit = useCallback(async (values: any) => {
+  //   return onSubmitWrapper(() => update({ id: currentDhm.id, values }), null, 'Успешно создано');
+  // }, [currentDhm?.id, update]);
 
-  const onRemoveSubmit = useCallback(async () => {
-    return onSubmitWrapper(() => remove(currentDhm?.id), (data: any) => {
-      if (!data?.data) {
-        setCurrentDhm(null);
-        setCurrentDhmKline(null);
-        setCurrentClusterKline(null);
-      }
-    }, 'Успешно удалено');
-  }, [currentDhm?.id, remove]);
+  // const onRemoveSubmit = useCallback(async () => {
+  //   return onSubmitWrapper(() => remove(currentDhm?.id), (data: any) => {
+  //     if (!data?.data) {
+  //       setCurrentDhm(null);
+  //       setCurrentDhmKline(null);
+  //       setCurrentClusterKline(null);
+  //     }
+  //   }, 'Успешно удалено');
+  // }, [currentDhm?.id, remove]);
 
   const drawPosition = useCallback((enterPrice, stopPrice, takePrice) => {
     if (!chart) { return }
@@ -402,9 +401,9 @@ export default function DhmIndexView({ tf, pairId }: any) {
           <StrategiesDhmDialog
             currentDhm={currentDhm}
             currentKline={currentDhmKline}
-            onCreateSubmit={onCreateSubmit}
-            onUpdateSubmit={onUpdateSubmit}
-            onRemoveSubmit={onRemoveSubmit}
+            //onCreateSubmit={onCreateSubmit}
+            //onUpdateSubmit={onUpdateSubmit}
+            //onRemoveSubmit={onRemoveSubmit}
             tf={tf}
             pairId={pairId}
             currentPrice={currentPrice}
