@@ -37,11 +37,29 @@ export const dhmApi = (new BaseApi({
         //providesTags: (result: any) => BaseApi.providesTags(result, collectionPath),
       }),
       // @ts-ignore
+      getAllActiveDhm: builder.query<any[], any>({
+        query(params: any) {
+          return {
+            url: `${collectionPath}/active`,
+          };
+        },
+        //providesTags: (result: any) => BaseApi.providesTags(result, collectionPath),
+      }),
+      // @ts-ignore
       getAllDhm2: builder.query<any[], any>({
         query(params: any) {
           return {
             url: `${collectionPath}2/${params.pairId}/${params.tf}`,
             params: { statuses: params.statusFilters.join(',') },
+          };
+        },
+        //providesTags: (result: any) => BaseApi.providesTags(result, collectionPath),
+      }),
+      // @ts-ignore
+      getAllActiveDhm2: builder.query<any[], any>({
+        query(params: any) {
+          return {
+            url: `${collectionPath}2/active`,
           };
         },
         //providesTags: (result: any) => BaseApi.providesTags(result, collectionPath),
@@ -207,6 +225,8 @@ export const dhmApi = (new BaseApi({
 export const {
   useGetAllDhmQuery,
   useGetAllDhm2Query,
+  useGetAllActiveDhmQuery,
+  useGetAllActiveDhm2Query,
   useGetAllTestDhmQuery,
   useGetAllTestDhm2Query,
   useCreateDhmMutation,

@@ -329,7 +329,7 @@ export default function Map({
         const initialTs = getInitialTs();
         const stepMs =
           KLINE_TS_SIZE_BY_TF[Number(tf) as keyof typeof KLINE_TS_SIZE_BY_TF] || KLINE_TS_SIZE_BY_TF[1];
-        const chunkSize = 400;
+        const chunkSize = 300;
 
         let startTs: number;
         let endTs: number;

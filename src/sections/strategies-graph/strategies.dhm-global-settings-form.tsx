@@ -66,6 +66,9 @@ export function StrategiesDhmGlobalSettingsForm({ defaultValues, onSubmit }: any
           <Grid item size={12}>
             <CheckboxElement name='fppCombine' label='Combine' />
           </Grid>
+          <Grid item size={12}>
+            <CheckboxElement name='showLiquidity' label='Показывать ликвидность?' />
+          </Grid>
         </Grid>
         <CustomFormButton />
       </Container>

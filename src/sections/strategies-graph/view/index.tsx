@@ -5,7 +5,7 @@ import {registerFigure, registerOverlay, registerIndicator} from "klinecharts";
 //import {useGetAllQuery as useGetAllKlinesQuery} from "@/lib/redux/api/klineApi";
 import {
   useCreateDhmMutation,
-  useGetAllDhmQuery, useRemoveDhmMutation, useUpdateDhmMutation,
+  useGetAllDhmQuery, useRemoveDhmMutation, useUpdateDhmMutation, useGetAllActiveDhmQuery,
 } from "@/lib/redux/api/dhmApi";
 import { useGetAllQuery as useGetAllFppQuery } from "@/lib/redux/api/fppApi";
 import {camelCase, delay} from 'lodash';
@@ -18,7 +18,7 @@ import {StrategiesDhmSettingsDialog} from "@/src/sections/strategies-graph/strat
 import {StrategiesDhmFppFiltersDialog} from "@/src/sections/strategies-graph/strategies.dhm-global-settings-dialog";
 import {StrategiesDhmKlineFppsDialog} from "@/src/sections/strategies-graph/strategies.dhm-kline-fpps-dialog";
 import moment from "moment/moment";
-import {clearFppPatterns, drawFppPatterns} from "@/src/utils/klinecharts";
+import {clearFppPatterns, drawFppPatterns, drawHeatmap} from "@/src/utils/klinecharts";
 import MapTools from "@/src/components/map-tools/map-tools";
 import {
   confirmedCircle,
@@ -26,7 +26,7 @@ import {
   finishedStartKline,
   godKline, triggeredStartKline,
   waitingStartKline, noneditableRect, clusterKline,
-  upCircleBySize, downCircleBySize, bollingerBands, createdStartKline, dhmUp, dhmDown
+  upCircleBySize, downCircleBySize, bollingerBands, createdStartKline, dhmUp, dhmDown, heatmapItem
 } from "@/src/helpers/klinecharts.helper";
 import Map from "@/src/components/map/map";
 import {useTheme} from "@mui/material/styles";
@@ -38,6 +38,7 @@ import enterPosition from "@/src/components/klinecharts-enter-position/klinechar
 import limitOrder from "@/src/components/klinecharts-limit-order/klinecharts-limit-order";
 import klinechartPosition from "@/src/components/klinecharts-position/klinecharts-position";
 import {useLazyGetByPairIdAndTfAndTsQuery} from "@/lib/redux/api/clusterApi";
+import Label from "@/src/components/label";
 import {
   //useGetQuery,
   // useCreateMutation as useCreatePositionMutation,
@@ -47,7 +48,19 @@ import {
 import {useGetAllQuery} from "@/lib/redux/api/tdaPointsApi";
 import {useGetAllQuery as useGetAllOrdersQuery} from "@/lib/redux/api/orderApi";
 import {useGetQuery as useGetPositionQuery} from "@/lib/redux/api/positionApi";
-import {useSearchParams} from "next/navigation";
+import {useRouter, useSearchParams} from "next/navigation";
+import { useGetAllQuery as useGetAllOrderbooksQuery } from "@/lib/redux/api/orderbookApi";
+import {
+  Button,
+  Chip,
+  Divider,
+  Drawer,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
+  Typography,
+} from "@mui/material";
 
 const DEFAULT_GLOBAL_SETTINGS = {
   fppFilters: [
@@ -72,10 +85,12 @@ const DEFAULT_GLOBAL_SETTINGS = {
     'finished_by_trend_finish'
   ],
   fppCombine: false,
+  showLiquidity: false,
 };
 
 export default function DhmIndexView({ tf, pairId }: any) {
   const theme = useTheme();
+  const router = useRouter();
   let searchParams = useSearchParams();
   const SETTINGS_STORAGE_KEY = `settings${pairId}`;
   const LEGACY_FPP_FILTERS_STORAGE_KEY = `fppFilter${pairId}`;
@@ -88,17 +103,22 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [openSettings, setOpenSettings] = useState(false);
   const [openFppFilters, setOpenFppFilters] = useState(false);
   const [openKlineFpp, setOpenKlineFpp] = useState(false);
+  const [isDhmSidebarOpen, setIsDhmSidebarOpen] = useState(false);
   const [currentDhm, setCurrentDhm] = useState(null);
   const [currentDhmKline, setCurrentDhmKline] = useState(null);
   const [currentClusterKline, setCurrentClusterKline] = useState(null);
   const [globalSettings, setGlobalSettings] = useState<any>(DEFAULT_GLOBAL_SETTINGS);
-  const { fppFilters, statusFilters, fppCombine } = globalSettings;
+  const { fppFilters, statusFilters, fppCombine, showLiquidity } = globalSettings;
   //const { data: klines } = useGetAllKlinesQuery({ pairId, page, limit: 5000, tf });
-  //const { data: orderbooks } = useGetAllClustersQuery({ pairId, page, limit: 5000, tf });
+  const { data: orderbooks } = useGetAllOrderbooksQuery(
+    { pairId, page, limit: 5000, tf: 5 },
+    { skip: !showLiquidity },
+  );
   const [trigger] = useLazyGetByPairIdAndTfAndTsQuery();
   //const { data: position, refetch: refetchPosition } = useGetQuery(pairId);
   const { data: fpp } = useGetAllFppQuery({ pairId, page, limit: 5000, tf });
-  const { data: dhm } = useGetAllDhmQuery({ pairId, tf, statusFilters });
+  const { data: dhm } = useGetAllDhmQuery({ pairId, tf: 60, statusFilters });
+  const { data: dhmSidebarItems } = useGetAllActiveDhmQuery({ });
   const { data: tdaPoints } = useGetAllQuery({ pairId });
   //const [createPositionRtk, { isLoading: isCreatePositionLoading }] = useCreatePositionMutation();
   //const [cancelPositionRtk, { isLoading: isCancelPositionLoading }] = useCancelPositionMutation();
@@ -123,6 +143,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
       fppFilters: values.fppFilters,
       statusFilters: values.statusFilters,
       fppCombine: !!values.fppCombine,
+      showLiquidity: !!values.showLiquidity,
     };
     setGlobalSettings(nextSettings);
     if (typeof window !== 'undefined') {
@@ -190,6 +211,14 @@ export default function DhmIndexView({ tf, pairId }: any) {
       }
     }, 'Успешно удалено');
   }, [currentDhm?.id, remove]);
+
+  const onDhmSidebarItemClick = useCallback((item: any) => {
+    setCurrentDhm(item);
+    const targetPairId = item?.pairId;
+    const targetTs = item?.kline1Ts ?? item?.kline1?.ts;
+    if (!targetPairId || !targetTs) { return; }
+    router.push(`/dhm-graph/${targetPairId}/60?ts=${targetTs}`);
+  }, [router]);
 
   // const drawPosition = useCallback((enterPrice, stopPrice, takePrice) => {
   //   if (!chart) { return }
@@ -278,6 +307,18 @@ export default function DhmIndexView({ tf, pairId }: any) {
     clearFppPatterns(chart);
     drawFppPatterns(chart, klines, fpp, (tdaPoints || []), fppFilters, fppCombine);
   }, [chart, dhm, fpp, tdaPoints, fppFilters, fppCombine, klinesUpdatedAt]);
+
+  useEffect((): void => {
+    if (!chart) { return; }
+    if (!showLiquidity) {
+      chart.removeOverlay({ name: `heatmapItem` });
+      return;
+    }
+    const klines = chart.getDataList();
+    if (!klines?.length) { return }
+    if (!orderbooks?.length) { return; }
+    drawHeatmap(chart, klines, orderbooks);
+  }, [chart, klinesUpdatedAt, orderbooks, showLiquidity]);
 
   const onClickClusterHandle = useCallback(async (e: any, kline: any) => {
     console.log('e', e);
@@ -435,6 +476,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
   registerOverlay(rect);
   registerOverlay(noneditableRect);
   registerOverlay(clusterKline);
+  registerOverlay(heatmapItem());
   // registerOverlay(enterPosition(async (e: any) => {
   //   await cancelPositionRtk(pairId);
   //   await refetchPosition();
@@ -468,7 +510,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
   //registerIndicator(cumDelta);
 
   return (
-    <main>
+    <main style={{ position: 'relative' }}>
       <Map
         pairId={pairId}
         tf={tf}
@@ -512,6 +554,72 @@ export default function DhmIndexView({ tf, pairId }: any) {
       </IconButton>
 
       <MapTools chart={chart} />
+
+      {!isDhmSidebarOpen && (
+        <Button
+          variant="contained"
+          size="small"
+          onClick={() => setIsDhmSidebarOpen(true)}
+          sx={{
+            position: 'absolute',
+            zIndex: 2,
+            right: '-13px',
+            borderBottomLeftRadius: 0,
+            borderBottomRightRadius: 0,
+            top: '100px',
+            transform: 'rotate(-90deg)',
+            minWidth: 44,
+            px: 1.5,
+          }}
+        >
+          DHM
+        </Button>
+      )}
+
+      <Drawer
+        variant="persistent"
+        anchor="right"
+        open={isDhmSidebarOpen}
+        sx={{
+          '& .MuiDrawer-paper': {
+            width: 312,
+            p: 2,
+            overflowY: 'auto',
+            borderLeft: `1px solid ${theme.palette.divider}`,
+          },
+        }}
+      >
+        <Button
+          variant="outlined"
+          size="small"
+          onClick={() => setIsDhmSidebarOpen(false)}
+          sx={{ mb: 1.5 }}
+        >
+          Hide
+        </Button>
+
+        <Typography variant="h6" sx={{ mb: 1.5 }}>
+          DHM items
+        </Typography>
+
+        <List dense sx={{ mb: 1 }}>
+          {(dhmSidebarItems || []).map((item: any) => (
+            <ListItem key={item.id} disablePadding>
+              <ListItemButton onClick={() => onDhmSidebarItemClick(item)}>
+                <ListItemText
+                  primary={`Pair: ${item.pairId} (${moment(Number(item?.kline1?.ts)).format('DD.MM.YYYY HH:mm')})`}
+                />
+                <Label color={'success'}>{item.status}</Label>
+              </ListItemButton>
+            </ListItem>
+          ))}
+          {!dhmSidebarItems?.length && (
+            <ListItem>
+              <ListItemText primary="No items" />
+            </ListItem>
+          )}
+        </List>
+      </Drawer>
 
       <CustomDialog
         open={currentDhmKline}
