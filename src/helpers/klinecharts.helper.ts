@@ -14,6 +14,19 @@ const greenColors = [
   '#004d40',
 ]
 
+const greenColorsForOrderbooks = [
+  'transparent',
+  '#b2dfdb',
+  '#80cbc4',
+  '#4db6ac',
+  '#26a69a',
+  '#009688',
+  '#00897b',
+  '#00796b',
+  '#00695c',
+  '#004d40',
+]
+
 const redColors = [
   '#ffebee',
   '#ffcdd2',
@@ -26,6 +39,7 @@ const redColors = [
   '#c62828',
   '#b71c1c',
 ]
+
 
 // export const limitOrder = {
 //   name: 'limitOrder',
@@ -427,7 +441,9 @@ export const dhmUp: any = {
   },
   createPointFigures: ({ overlay, coordinates }) => {
     let text = ''
-    text = (overlay.extendData ?? '') as string
+    text = (overlay?.extendData?.ts ?? '') as string
+    const confirmed = overlay?.extendData?.confirmed ?? false
+    const opacity = confirmed ? 0.55 : 0.3;
     const startX = coordinates[0].x
     const startY = coordinates[0].y + 5
     const lineEndY = startY + 10
@@ -438,7 +454,7 @@ export const dhmUp: any = {
         attrs: { coordinates: [{ x: startX, y: startY }, { x: startX, y: lineEndY }] },
         ignoreEvent: true,
         styles: {
-          color: 'rgba(0,89,30, 0.55)',
+          color: `rgba(0,89,30,${opacity})`,
           style: 'dashed',
         }
       },
@@ -447,7 +463,7 @@ export const dhmUp: any = {
         attrs: { coordinates: [{ x: startX, y: lineEndY }, { x: startX - 5, y: arrowEndY - 20 }, { x: startX + 5, y: arrowEndY - 20 }] },
         ignoreEvent: true,
         styles: {
-          color: 'rgba(0,89,30, 0.55)',
+          color: `rgba(0,89,30,${opacity})`,
           style: 'fill',
         }
       },
@@ -456,7 +472,7 @@ export const dhmUp: any = {
         attrs: { x: startX, y: arrowEndY, text, align: 'center', baseline: 'bottom' },
         ignoreEvent: true,
         styles: {
-          backgroundColor: 'rgba(0,89,30, 0.55)',
+          backgroundColor: `rgba(0,89,30,${opacity})`,
           //color: 'rgba(0,89,30, 0.55)',
           style: 'fill',
         }
@@ -473,36 +489,41 @@ export const dhmDown: any = {
   },
   createPointFigures: ({ overlay, coordinates }) => {
     let text = ''
-    text = (overlay.extendData ?? '') as string
+    text = (overlay?.extendData?.ts ?? '') as string
+    const confirmed = overlay?.extendData?.confirmed ?? false
+    const opacity = confirmed ? 0.9 : 0.3;
     const startX = coordinates[0].x
-    const startY = coordinates[0].y + 5
-    const lineEndY = startY + 10
-    const arrowEndY = lineEndY + 30
+    // Draw above kline: shift everything upward from candle
+    const startY = coordinates[0].y - 5
+    const lineEndY = startY - 10
+    const arrowEndY = lineEndY - 30
     return [
       {
         type: 'line',
         attrs: { coordinates: [{ x: startX, y: startY }, { x: startX, y: lineEndY }] },
         ignoreEvent: true,
         styles: {
-          color: 'rgba(244,67,54,0.3)',
+          color: `rgba(244,67,54,${opacity})`,
           style: 'dashed',
         }
       },
       {
         type: 'polygon',
-        attrs: { coordinates: [{ x: startX, y: lineEndY }, { x: startX - 5, y: arrowEndY - 20 }, { x: startX + 5, y: arrowEndY - 20 }] },
+        // Triangle pointing down from the line toward the text
+        attrs: { coordinates: [{ x: startX, y: lineEndY }, { x: startX - 5, y: arrowEndY + 20 }, { x: startX + 5, y: arrowEndY + 20 }] },
         ignoreEvent: true,
         styles: {
-          color: 'rgba(244,67,54,0.3)',
+          color: `rgba(244,67,54,${opacity})`,
           style: 'fill',
         }
       },
       {
         type: 'text',
-        attrs: { x: startX, y: arrowEndY, text, align: 'center', baseline: 'bottom' },
+        // Place text above kline (higher on chart)
+        attrs: { x: startX, y: arrowEndY, text, align: 'center', baseline: 'top' },
         ignoreEvent: true,
         styles: {
-          backgroundColor: 'rgba(244,67,54,0.3)',
+          backgroundColor: `rgba(244,67,54,${opacity})`,
           //color: 'rgba(0,89,30, 0.55)',
           style: 'fill',
         }
@@ -663,8 +684,6 @@ export function resizeChart(chart: any) {
     })
   }
 }
-
-
 
 export function clusterKline(data: any) {
   console.log('data', data);
@@ -871,6 +890,64 @@ export function clusterKline(data: any) {
   }
 }
 
+export function heatmapItem() {
+  return {
+    name: 'heatmapItem',
+    lock: true,
+    createPointFigures: ({ chart, overlay, coordinates }) => {
+      const data = overlay?.extendData;
+      const height = coordinates[1].y - coordinates[0].y;
+      const clusterLevelHeight = height / Object.keys(data).length;
+
+      let maxValue = 0;
+      for (const item of Object.keys(data)) {
+        if (data[item] > maxValue) {
+          maxValue = data[item];
+        }
+      }
+
+      maxValue = maxValue / 10;
+
+      const result = [];
+      const x1 = chart.convertToPixel({ dataIndex: 0, value: 0 }).x
+      const x2 = chart.convertToPixel({ dataIndex: 1, value: 0 }).x
+      const klineWidth = Math.abs(x1) - Math.abs(x2);
+
+      //const a = chart.convertFromPixel(point)
+
+      for (const [index, item] of Object.keys(data).sort().entries()) {
+        const v = data[item.toString()];
+
+        const bgColorIndex = getColorIndex(0, maxValue, v);
+
+        if (bgColorIndex === 0) {
+          continue;
+        }
+
+        result.push({
+          type: 'rect',
+          attrs: {
+            x: coordinates[0].x - (klineWidth * 0.5),
+            y: coordinates[0].y + (index * clusterLevelHeight),
+            width: klineWidth,
+            height: clusterLevelHeight,
+          },
+          styles: {
+            style: 'stroke_fill',
+            color: greenColorsForOrderbooks[bgColorIndex],
+            //backgroundColor: '#00796b',
+            //borderColor: '#fff',
+            //borderStyle: 'solid',
+            borderSize: 0,
+          }
+        })
+      }
+
+      return result;
+    }
+  }
+}
+
 export function getWeaknessKline(kline: any, cluster: any) {
   if (!cluster) { return false }
   // if (!klineMinus1) { continue; }
@@ -1039,6 +1116,14 @@ function getBollMd (dataList: KLineData[], ma: number): number {
 }
 
 function sortByPrice(array: any[], asc = true): any {
+  return [...array].sort((a: any, b: any) => {
+    return asc
+      ? parseFloat(a.p) - parseFloat(b.p)
+      : parseFloat(b.p) - parseFloat(a.p);
+  });
+}
+
+function sortHeatmapByPrice(array: any[], asc = true): any {
   return [...array].sort((a: any, b: any) => {
     return asc
       ? parseFloat(a.p) - parseFloat(b.p)

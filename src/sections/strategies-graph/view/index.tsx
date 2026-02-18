@@ -15,7 +15,7 @@ import {StrategiesDhmDialog} from "@/src/sections/strategies-graph/strategies.dh
 import {IconButton} from "@mui/material";
 import SettingsIcon from '@mui/icons-material/Settings';
 import {StrategiesDhmSettingsDialog} from "@/src/sections/strategies-graph/strategies.dhm-settings-dialog";
-import {StrategiesDhmFppFiltersDialog} from "@/src/sections/strategies-graph/strategies.dhm-fpp-filters-dialog";
+import {StrategiesDhmFppFiltersDialog} from "@/src/sections/strategies-graph/strategies.dhm-global-settings-dialog";
 import {StrategiesDhmKlineFppsDialog} from "@/src/sections/strategies-graph/strategies.dhm-kline-fpps-dialog";
 import moment from "moment/moment";
 import {clearFppPatterns, drawFppPatterns} from "@/src/utils/klinecharts";
@@ -26,7 +26,7 @@ import {
   finishedStartKline,
   godKline, triggeredStartKline,
   waitingStartKline, noneditableRect, clusterKline,
-  upCircleBySize, downCircleBySize, bollingerBands, createdStartKline
+  upCircleBySize, downCircleBySize, bollingerBands, createdStartKline, dhmUp, dhmDown
 } from "@/src/helpers/klinecharts.helper";
 import Map from "@/src/components/map/map";
 import {useTheme} from "@mui/material/styles";
@@ -48,9 +48,35 @@ import {useGetAllQuery} from "@/lib/redux/api/tdaPointsApi";
 import {useGetAllQuery as useGetAllOrdersQuery} from "@/lib/redux/api/orderApi";
 import {useGetQuery as useGetPositionQuery} from "@/lib/redux/api/positionApi";
 
+const DEFAULT_GLOBAL_SETTINGS = {
+  fppFilters: [
+    'interception',
+    'reverse',
+    'locked_volume',
+    'locked_delta',
+    'locked_imbalance',
+    'test_volume',
+    'resistance',
+    'weakness',
+    'low_last_price_volume',
+    //'tda'
+  ],
+  statusFilters: [
+    'created',
+    'waiting',
+    'triggered',
+    'finished',
+    'finished_by_size',
+    'finished_by_lose',
+    'finished_by_trend_finish'
+  ],
+  fppCombine: false,
+};
+
 export default function DhmIndexView({ tf, pairId }: any) {
   const theme = useTheme();
-  const FPP_FILTERS_STORAGE_KEY = `fppFilter${pairId}`;
+  const SETTINGS_STORAGE_KEY = `settings${pairId}`;
+  const LEGACY_FPP_FILTERS_STORAGE_KEY = `fppFilter${pairId}`;
   const [chart, setChart] = useState<any>(null);
   const [page, setPage] = useState<number>(1);
   const [klinesUpdatedAt, setKlinesUpdatedAt] = useState<number | null>(null);
@@ -63,25 +89,14 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [currentDhm, setCurrentDhm] = useState(null);
   const [currentDhmKline, setCurrentDhmKline] = useState(null);
   const [currentClusterKline, setCurrentClusterKline] = useState(null);
-  const [fppFilters, setFppFilters] = useState<any[]>([
-    'interception',
-    'reverse',
-    'locked_volume',
-    'locked_delta',
-    'locked_imbalance',
-    'test_volume',
-    'resistance',
-    'weakness',
-    'low_last_price_volume',
-    //'tda'
-  ]);
-  const [fppCombine, setFppCombine] = useState<boolean>(false);
+  const [globalSettings, setGlobalSettings] = useState<any>(DEFAULT_GLOBAL_SETTINGS);
+  const { fppFilters, statusFilters, fppCombine } = globalSettings;
   //const { data: klines } = useGetAllKlinesQuery({ pairId, page, limit: 5000, tf });
-  //const { data: clusters } = useGetAllClustersQuery({ pairId, page, limit: 5000, tf });
+  //const { data: orderbooks } = useGetAllClustersQuery({ pairId, page, limit: 5000, tf });
   const [trigger] = useLazyGetByPairIdAndTfAndTsQuery();
   //const { data: position, refetch: refetchPosition } = useGetQuery(pairId);
   const { data: fpp } = useGetAllFppQuery({ pairId, page, limit: 5000, tf });
-  const { data: dhm } = useGetAllDhmQuery({ pairId, tf: 60 });
+  const { data: dhm } = useGetAllDhmQuery({ pairId, tf, statusFilters });
   const { data: tdaPoints } = useGetAllQuery({ pairId });
   //const [createPositionRtk, { isLoading: isCreatePositionLoading }] = useCreatePositionMutation();
   //const [cancelPositionRtk, { isLoading: isCancelPositionLoading }] = useCancelPositionMutation();
@@ -93,42 +108,64 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const { data: position } = useGetPositionQuery({ pairId });
 
   // const clustersAsHashByTs = useMemo(() => {
-  //   if (!clusters) { return }
+  //   if (!orderbooks) { return }
   //   const result: any = {};
-  //   for (const item of clusters) {
+  //   for (const item of orderbooks) {
   //     result[item.ts] = item;
   //   }
   //   return result;
-  // }, [clusters]);
+  // }, [orderbooks]);
 
-  const onSaveFppFiltersSubmit = useCallback(async (values: any) => {
-    setFppFilters(values.fppFilters);
-    setFppCombine(!!values.fppCombine);
+  const onSaveGlobalSettingsSubmit = useCallback(async (values: any) => {
+    const nextSettings = {
+      fppFilters: values.fppFilters,
+      statusFilters: values.statusFilters,
+      fppCombine: !!values.fppCombine,
+    };
+    setGlobalSettings(nextSettings);
     if (typeof window !== 'undefined') {
       try {
-        localStorage.setItem(FPP_FILTERS_STORAGE_KEY, JSON.stringify({ filters: values.fppFilters, combine: !!values.fppCombine }));
+        localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(nextSettings));
       } catch {}
     }
     setOpenFppFilters(false);
     clearFppPatterns(chart);
-    drawFppPatterns(chart, chart.getDataList(), fpp, (tdaPoints || []), values.fppFilters, !!values.fppCombine);
-  }, [FPP_FILTERS_STORAGE_KEY, chart, fpp, tdaPoints]);
+    drawFppPatterns(chart, chart.getDataList(), fpp, (tdaPoints || []), nextSettings.fppFilters, nextSettings.fppCombine);
+  }, [SETTINGS_STORAGE_KEY, chart, fpp, tdaPoints]);
 
   useEffect(() => {
     if (typeof window === 'undefined') { return; }
     try {
-      const saved = localStorage.getItem(FPP_FILTERS_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length) {
-          setFppFilters(parsed);
-        } else if (parsed && Array.isArray(parsed.filters)) {
-          setFppFilters(parsed.filters);
-          setFppCombine(!!parsed.combine);
+      const saved = localStorage.getItem(SETTINGS_STORAGE_KEY)
+        || localStorage.getItem(LEGACY_FPP_FILTERS_STORAGE_KEY);
+      if (!saved) { return; }
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length) {
+        setGlobalSettings({
+          ...DEFAULT_GLOBAL_SETTINGS,
+          fppFilters: parsed,
+        });
+        return;
+      }
+      if (parsed && typeof parsed === 'object') {
+        if (Array.isArray(parsed.filters)) {
+          setGlobalSettings({
+            ...DEFAULT_GLOBAL_SETTINGS,
+            fppFilters: parsed.filters,
+            fppCombine: !!parsed.combine,
+          });
+          return;
+        }
+        if (Array.isArray(parsed.fppFilters) || Array.isArray(parsed.statusFilters)) {
+          setGlobalSettings({
+            ...DEFAULT_GLOBAL_SETTINGS,
+            ...parsed,
+            fppCombine: !!parsed.fppCombine,
+          });
         }
       }
     } catch {}
-  }, [FPP_FILTERS_STORAGE_KEY]);
+  }, [SETTINGS_STORAGE_KEY, LEGACY_FPP_FILTERS_STORAGE_KEY]);
 
   const onCreateSubmit = useCallback(async (values: any) => {
     return onSubmitWrapper(() => create(values), (data) => {
@@ -171,43 +208,43 @@ export default function DhmIndexView({ tf, pairId }: any) {
   //   })
   // }, [chart]);
 
-  const drawPosition = useCallback(() => {
-    if (!chart) { return }
-    if (!position) { return }
-    chart.removeOverlay({ name: `stopPosition` })
-    chart.removeOverlay({ name: `takePosition` })
-    chart.removeOverlay({ name: `position` })
-    if (position.side === 'long') {
-      chart.createOverlay({
-        name: `position`,
-        points: [{timestamp: null, value: parseFloat(position.data.entryPrice) }],
-      })
-      if (position.data.stopLossPrice) {
-        chart.createOverlay({
-          name: `stopPosition`,
-          points: [{timestamp: null, value: parseFloat(position.data.stopLossPrice) }],
-        })
-      }
-      if (position.data.takeProfitPrice) {
-        chart.createOverlay({
-          name: `takePosition`,
-          points: [{timestamp: null, value: parseFloat(position.data.takeProfitPrice) }],
-        })
-      }
-    }
-  }, [chart, position]);
+  // const drawPosition = useCallback(() => {
+  //   if (!chart) { return }
+  //   if (!position) { return }
+  //   chart.removeOverlay({ name: `stopPosition` })
+  //   chart.removeOverlay({ name: `takePosition` })
+  //   chart.removeOverlay({ name: `position` })
+  //   if (position.side === 'long') {
+  //     chart.createOverlay({
+  //       name: `position`,
+  //       points: [{timestamp: null, value: parseFloat(position.data.entryPrice) }],
+  //     })
+  //     if (position.data.stopLossPrice) {
+  //       chart.createOverlay({
+  //         name: `stopPosition`,
+  //         points: [{timestamp: null, value: parseFloat(position.data.stopLossPrice) }],
+  //       })
+  //     }
+  //     if (position.data.takeProfitPrice) {
+  //       chart.createOverlay({
+  //         name: `takePosition`,
+  //         points: [{timestamp: null, value: parseFloat(position.data.takeProfitPrice) }],
+  //       })
+  //     }
+  //   }
+  // }, [chart, position]);
 
-  const drawOrders = useCallback(() => {
-    if (!chart) { return }
-    if (!orders?.length) { return }
-    chart.removeOverlay({ name: `limitOrder` })
-    for (const order of orders) {
-      chart.createOverlay({
-        name: `limitOrder`,
-        points: [{timestamp: null, value: parseFloat(order.data.price) }],
-      })
-    }
-  }, [chart, orders]);
+  // const drawOrders = useCallback(() => {
+  //   if (!chart) { return }
+  //   if (!orders?.length) { return }
+  //   chart.removeOverlay({ name: `limitOrder` })
+  //   for (const order of orders) {
+  //     chart.createOverlay({
+  //       name: `limitOrder`,
+  //       points: [{timestamp: null, value: parseFloat(order.data.price) }],
+  //     })
+  //   }
+  // }, [chart, orders]);
 
   // const drawCreatePosition = useCallback(async () => {
   //   if (!chart) { return }
@@ -261,28 +298,42 @@ export default function DhmIndexView({ tf, pairId }: any) {
   }, [chart, trigger, pairId, tf])
 
   useEffect(() => {
+    console.log(dhm);
+    console.log(dhm);
     if (!dhm) {return}
     if (!chart) {return}
-    if (!fpp) {return}
+    //if (!fpp) {return}
     //if (!clustersAsHashByTs) {return}
     const klines = chart.getDataList();
+
+    chart.removeOverlay({ name: `dhmUp` })
+    chart.removeOverlay({ name: `dhmDown` })
+
     for (const item of dhm) {
-      if (['created', 'waiting', 'triggered', 'finished', 'finished_by_lose', 'finished_by_length'].includes(item.status)) {
+      //if (['created', 'waiting', 'triggered', 'finished', 'finished_by_lose', 'finished_by_length'].includes(item.status)) {
         chart.createOverlay({
-          name: `${camelCase(item.status)}StartKline`,
-          points: [{timestamp: parseInt(item.kline1.ts), value: parseFloat(item.kline1.close)}],
+          name: item.direction === 'up' ? 'dhmUp' : 'dhmDown',
+          extendData: {
+            ts: item.direction === 'up' ? item.kline1.low : item.kline1.high,
+            confirmed: item.confirmed
+          },
+          points: [{timestamp: parseInt(item.kline1.ts), value: parseFloat(item.direction === 'up' ? item.kline1.low : item.kline1.high)}],
         })
-        for (const i of [1,2,3]) {
-          if (item.data?.[`poi${i}`]) {
-            chart.createOverlay({
-              name: 'noneditableRect',
-              points: [
-                { timestamp: parseInt(item.data?.[`poi${i}`].ts), value: item.data?.[`poi${i}`].high },
-                { timestamp: parseInt(item.data?.[`poi${i}`].ts) + (100 * 3600000), value: item.data?.[`poi${i}`].low }
-              ]
-            })
-          }
-        }
+        // chart.createOverlay({
+        //   name: `${camelCase(item.status)}StartKline`,
+        //   points: [{timestamp: parseInt(item.kline1.ts), value: parseFloat(item.kline1.close)}],
+        // })
+        // for (const i of [1,2,3]) {
+        //   if (item.data?.[`poi${i}`]) {
+        //     chart.createOverlay({
+        //       name: 'noneditableRect',
+        //       points: [
+        //         { timestamp: parseInt(item.data?.[`poi${i}`].ts), value: item.data?.[`poi${i}`].high },
+        //         { timestamp: parseInt(item.data?.[`poi${i}`].ts) + (100 * 3600000), value: item.data?.[`poi${i}`].low }
+        //       ]
+        //     })
+        //   }
+        // }
         //console.log(item.data.kline1.close);
       }
 
@@ -297,7 +348,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
       //     ]
       //   });
       // }
-    }
+    //}
 
     // add EMA200 trand indicator
     chart.createIndicator('EMA', false, { id: 'candle_pane' });
@@ -316,7 +367,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
       } else {
         setCurrentDhmKline(data.current);
         console.log(event);
-        const currentDhm = dhm.find(item => item.data.kline1.id === data.current.id);
+        const currentDhm = dhm.find(item => Number(item.kline1.ts) === Number(data.current.timestamp));
         console.log(currentDhm);
         setCurrentDhm(currentDhm);
       }
@@ -331,29 +382,29 @@ export default function DhmIndexView({ tf, pairId }: any) {
     })
   }, [chart, fpp, dhm, onClickClusterHandle]);
 
-  useEffect(() => {
-    if (!chart) {return}
-    if (orders?.length) {
-      chart.removeOverlay({ name: `limitOrder` })
-      drawOrders();
-    }
-    if (position) {
-      chart.removeOverlay({ name: `position` })
-      chart.removeOverlay({ name: `stopPosition` })
-      chart.removeOverlay({ name: `takePosition` })
-      drawPosition();
-    }
-
-    // if (!position) {
-    //   chart.removeOverlay({ name: `enterPosition` })
-    //   chart.removeOverlay({ name: `stopPosition` })
-    //   chart.removeOverlay({ name: `takePosition` })
-    //   drawCreatePosition();
-    // } else {
-    //   chart.removeOverlay({ name: `createPosition` })
-    //   drawPosition(Number(position.enter), Number(position.stop), Number(position.take));
-    // }
-  }, [chart, drawOrders, drawPosition, position, orders]);
+  // useEffect(() => {
+  //   if (!chart) {return}
+  //   // if (orders?.length) {
+  //   //   chart.removeOverlay({ name: `limitOrder` })
+  //   //   drawOrders();
+  //   // }
+  //   // if (position) {
+  //   //   chart.removeOverlay({ name: `position` })
+  //   //   chart.removeOverlay({ name: `stopPosition` })
+  //   //   chart.removeOverlay({ name: `takePosition` })
+  //   //   drawPosition();
+  //   // }
+  //
+  //   // if (!position) {
+  //   //   chart.removeOverlay({ name: `enterPosition` })
+  //   //   chart.removeOverlay({ name: `stopPosition` })
+  //   //   chart.removeOverlay({ name: `takePosition` })
+  //   //   drawCreatePosition();
+  //   // } else {
+  //   //   chart.removeOverlay({ name: `createPosition` })
+  //   //   drawPosition(Number(position.enter), Number(position.stop), Number(position.take));
+  //   // }
+  // }, [chart, drawOrders, drawPosition, position, orders]);
 
   for (const item of [1,2,3,4,5,6,7]) {
     registerOverlay(
@@ -410,6 +461,8 @@ export default function DhmIndexView({ tf, pairId }: any) {
   registerIndicator(ema);
   registerIndicator(bollingerBands);
   registerFigure(godKline);
+  registerOverlay(dhmUp);
+  registerOverlay(dhmDown);
   //registerIndicator(cumDelta);
 
   return (
@@ -489,7 +542,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
         onClose={() => setOpenFppFilters(false)}
         title={`Fpp filters`}
         content={(
-          <StrategiesDhmFppFiltersDialog fppFilters={fppFilters} fppCombine={fppCombine} onSubmit={onSaveFppFiltersSubmit} />
+          <StrategiesDhmFppFiltersDialog settings={globalSettings} onSubmit={onSaveGlobalSettingsSubmit} />
         )}
       />
 

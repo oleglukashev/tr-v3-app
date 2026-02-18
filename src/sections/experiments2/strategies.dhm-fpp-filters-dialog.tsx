@@ -1,12 +1,14 @@
 import Box from "@mui/material/Box";
-import {StrategiesFppFiltersForm} from "@/src/sections/strategies-graph/strategies.fpp-filters-form";
+import {StrategiesDhmGlobalSettingsForm} from "@/src/sections/strategies-graph/strategies.dhm-global-settings-form";
 
 export function StrategiesDhmFppFiltersDialog({ fppFilters, onSubmit }: any) {
   return (
     <Box sx={{ p: 2 }}>
-      <StrategiesFppFiltersForm
+      <StrategiesDhmGlobalSettingsForm
         defaultValues={{
           fppFilters: fppFilters,
+          statusFilters: [],
+          fppCombine: false,
         }}
         onSubmit={onSubmit}
       />

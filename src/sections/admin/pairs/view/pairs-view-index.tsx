@@ -21,10 +21,11 @@ export default function AdminPairsIndexView({ }: any) {
       data={pairs}
       isLoading={isLoading}
       tableHead={[
+        { id: 'id', label: 'ID' },
         { id: 'name', label: 'Name' },
         { id: 'active', label: 'Activated?' },
         { id: 'getKlineData', label: 'Get kline data?' },
-        { id: 'getBidasksData', label: 'Get bidasks data?' },
+        { id: 'getBidasksData', label: 'Get orderbooks data?' },
         { id: 'actions', label: null}
       ]}
       CreateForm={PairForm}

@@ -10,6 +10,10 @@ import {tdaPointsApi} from "@/lib/redux/api/tdaPointsApi";
 import { statsApi } from "./api/statsApi";
 import {pnlApi} from "@/lib/redux/api/pnlApi";
 import {storageApi} from "@/lib/redux/api/storageApi";
+import { bidaskStorageApi } from "./api/bidaskStorageApi";
+import { klinesStorageApi } from "./api/klinesStorageApi";
+import { orderbookStorageApi } from "./api/orderbookStorageApi";
+import { orderbookApi } from "./api/orderbookApi";
 
 export const reduxStore = configureStore({
   reducer: {
@@ -24,6 +28,10 @@ export const reduxStore = configureStore({
     [statsApi.reducerPath]: statsApi.reducer,
     [pnlApi.reducerPath]: pnlApi.reducer,
     [storageApi.reducerPath]: storageApi.reducer,
+    [bidaskStorageApi.reducerPath]: bidaskStorageApi.reducer,
+    [klinesStorageApi.reducerPath]: klinesStorageApi.reducer,
+    [orderbookStorageApi.reducerPath]: orderbookStorageApi.reducer,
+    [orderbookApi.reducerPath]: orderbookApi.reducer,
   },
   //devTools: process.env.NEXT_PUBLIC_ENV !== "production",
   middleware: (getDefaultMiddleware) =>
@@ -39,5 +47,9 @@ export const reduxStore = configureStore({
       statsApi.middleware,
       pnlApi.middleware,
       storageApi.middleware,
+      bidaskStorageApi.middleware,
+      klinesStorageApi.middleware,
+      orderbookStorageApi.middleware,
+      orderbookApi.middleware,
     ]),
 });

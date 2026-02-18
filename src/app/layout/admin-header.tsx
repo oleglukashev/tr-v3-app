@@ -132,11 +132,6 @@ export default function AdminHeader() {
               >
                 Stats
               </Button>
-              <Button
-                href="/admin/storages"
-              >
-                Storages
-              </Button>
             </Box>
           </Box>
         </StyledToolbar>

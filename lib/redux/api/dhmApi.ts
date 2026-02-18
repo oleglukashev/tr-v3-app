@@ -31,6 +31,7 @@ export const dhmApi = (new BaseApi({
         query(params: any) {
           return {
             url: `${collectionPath}/${params.pairId}/${params.tf}`,
+            params: { statuses: params.statusFilters.join(',') },
           };
         },
         //providesTags: (result: any) => BaseApi.providesTags(result, collectionPath),
@@ -40,6 +41,7 @@ export const dhmApi = (new BaseApi({
         query(params: any) {
           return {
             url: `${collectionPath}2/${params.pairId}/${params.tf}`,
+            params: { statuses: params.statusFilters.join(',') },
           };
         },
         //providesTags: (result: any) => BaseApi.providesTags(result, collectionPath),
@@ -144,21 +146,21 @@ export const dhmApi = (new BaseApi({
       }),
       // @ts-ignore
       updateDhm: builder.mutation<any, any>({
-        query(data: any) {
+        query(params: any) {
           return {
-            url: collectionPath,
+            url: `${collectionPath}/${params.id}`,
             method: 'PATCH',
-            body: data,
+            body: params.values,
           };
         },
       }),
       // @ts-ignore
       updateDhm2: builder.mutation<any, any>({
-        query(data: any) {
+        query(params: any) {
           return {
-            url: `${collectionPath}2`,
+            url: `${collectionPath}2/${params.id}`,
             method: 'PATCH',
-            body: data,
+            body: params.values,
           };
         },
       }),

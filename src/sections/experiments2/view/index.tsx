@@ -7,7 +7,7 @@ import { useGetAllQuery as useGetAllFppQuery } from "@/lib/redux/api/fppApi";
 import CustomDialog from 'src/components/custom-dialog/custom-dialog';
 import {IconButton} from "@mui/material";
 import SettingsIcon from '@mui/icons-material/Settings';
-import {StrategiesDhmFppFiltersDialog} from "@/src/sections/strategies-graph/strategies.dhm-fpp-filters-dialog";
+import {StrategiesDhmFppFiltersDialog} from "@/src/sections/strategies-graph/strategies.dhm-global-settings-dialog";
 import {StrategiesDhmKlineFppsDialog} from "@/src/sections/strategies-graph/strategies.dhm-kline-fpps-dialog";
 import { useGetAllQuery as useGetAllClustersQuery } from "@/lib/redux/api/clusterApi";
 import {clusterPocRow, klineDirection} from "klines-footprint-patterns";
@@ -280,7 +280,10 @@ export default function ExperimentsIndexView({ tf, pairId }: any) {
         onClose={() => setOpenFppFilters(false)}
         title={`Fpp filters`}
         content={(
-          <StrategiesDhmFppFiltersDialog fppFilters={fppFilters} fppCombine={fppCombine} onSubmit={onSaveFppFiltersSubmit} />
+          <StrategiesDhmFppFiltersDialog
+            settings={{ fppFilters, statusFilters: [], fppCombine }}
+            onSubmit={onSaveFppFiltersSubmit}
+          />
         )}
       />
 

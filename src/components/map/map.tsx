@@ -111,9 +111,9 @@ export default function Map({
     setChart(chart);
     setParentChart(chart);
     return () => {
-      dispose('chart')
+      dispose(id || 'chart');
     }
-  }, [])
+  }, [id])
 
   useEffect(() => {
     if (!chart || !setDataLoaderCallback || !setParentChart || !tf || !pairId || !setCurrentClusterKline || !onClickClusterHandle || barsLoaded) {return}

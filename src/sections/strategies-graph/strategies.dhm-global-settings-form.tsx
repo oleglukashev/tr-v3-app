@@ -3,7 +3,7 @@ import {Grid} from "@mui/material";
 import CustomFormButton from "@/src/components/custom-form-button/custom-form-button";
 import Container from "@mui/material/Container";
 
-export function StrategiesFppFiltersForm({ defaultValues, onSubmit }: any) {
+export function StrategiesDhmGlobalSettingsForm({ defaultValues, onSubmit }: any) {
   return (
     <FormContainer
       defaultValues={defaultValues}
@@ -35,6 +35,31 @@ export function StrategiesFppFiltersForm({ defaultValues, onSubmit }: any) {
                 { id: 'resistance', label: 'Resistance' },
                 { id: 'weakness', label: 'Weakness' },
                 { id: 'low_last_price_volume', label: 'Low last price volume' }
+              ]}
+            />
+          </Grid>
+          <Grid item size={12}>
+            <MultiSelectElement
+              name='statusFilters'
+              fullWidth={true}
+              showCheckbox
+              size='small'
+              label='Status Filters'
+              MenuProps={{
+                PaperProps: {
+                  style: {
+                    maxHeight: 1000, // устанавливаем большую высоту, чтобы избежать скролла
+                  },
+                },
+              }}
+              options={[
+                { id: 'created', label: 'Created' },
+                { id: 'waiting', label: 'Waiting' },
+                { id: 'triggered', label: 'Triggered' },
+                { id: 'finished', label: 'Finished' },
+                { id: 'finished_by_size', label: 'Finished by size' },
+                { id: 'finished_by_lose', label: 'Finished by lose' },
+                { id: 'finished_by_trend_finish', label: 'Finished by trend finish' }
               ]}
             />
           </Grid>

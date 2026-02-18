@@ -7,8 +7,13 @@ import Chip from '@mui/material/Chip';
 import Label from "@/src/components/label";
 import {useTheme} from "@mui/material/styles";
 
+const noop = () => {};
+const noopAsync = async () => {};
+
 export function StrategiesDhmDialog({currentDhm, currentKline, onCreateSubmit, onUpdateSubmit, onRemoveSubmit, pairId, tf, currentPrice}: any) {
   const theme = useTheme();
+  const defaultTs = currentKline?.timestamp ?? currentDhm?.kline1?.ts;
+
   return (
     <Box sx={{ p: 2 }}>
       {currentDhm ? (
@@ -39,7 +44,7 @@ export function StrategiesDhmDialog({currentDhm, currentKline, onCreateSubmit, o
                 >
                   High:
                 </Typography>
-                <Label color='default'>{currentDhm.data.high}</Label>
+                <Label color='default'>{currentDhm.high}</Label>
                 <Typography
                   variant={'caption'}
                   sx={{
@@ -49,7 +54,7 @@ export function StrategiesDhmDialog({currentDhm, currentKline, onCreateSubmit, o
                     color: theme.palette.text.primary,
                   }}
                 >
-                  {((currentDhm.data.high - currentDhm.data.low) / currentDhm.data.low * 100).toFixed(2)}%
+                  {((currentDhm.high - currentDhm.low) / currentDhm.low * 100).toFixed(2)}%
                 </Typography>
               </Box>
               <Box sx={{ mb: 2 }}>
@@ -63,7 +68,7 @@ export function StrategiesDhmDialog({currentDhm, currentKline, onCreateSubmit, o
                 >
                   Low:
                 </Typography>
-                <Label color='default'>{currentDhm.data.low}</Label>
+                <Label color='default'>{currentDhm.low}</Label>
               </Box>
             </Grid>
             <Grid size={6} item textAlign='end'>
@@ -86,22 +91,22 @@ export function StrategiesDhmDialog({currentDhm, currentKline, onCreateSubmit, o
           </Grid>
           <StrategiesForm
             defaultValues={{
-              kline1Ts: currentDhm.data.kline1.ts,
-              kline2Ts: currentDhm.data.kline2.ts,
+              kline1Ts: currentDhm.kline1.ts,
+              kline2Ts: currentDhm.kline2.ts,
               status: currentDhm.status,
               confirmed: currentDhm.confirmed,
               direction: currentDhm.direction,
               pairId,
               tf,
-              poi1Ts: currentDhm.data.poi1?.ts,
-              poi1High: currentDhm.data.poi1?.high,
-              poi1Low: currentDhm.data.poi1?.low,
-              poi2Ts: currentDhm.data.poi2?.ts,
-              poi2High: currentDhm.data.poi2?.high,
-              poi2Low: currentDhm.data.poi2?.low,
-              poi3Ts: currentDhm.data.poi3?.ts,
-              poi3High: currentDhm.data.poi3?.high,
-              poi3Low: currentDhm.data.poi3?.low
+              poi1Ts: currentDhm.poi1?.ts,
+              poi1High: currentDhm.poi1?.high,
+              poi1Low: currentDhm.poi1?.low,
+              poi2Ts: currentDhm.poi2?.ts,
+              poi2High: currentDhm.poi2?.high,
+              poi2Low: currentDhm.poi2?.low,
+              poi3Ts: currentDhm.poi3?.ts,
+              poi3High: currentDhm.poi3?.high,
+              poi3Low: currentDhm.poi3?.low
             }}
             onSubmit={onUpdateSubmit}
           />

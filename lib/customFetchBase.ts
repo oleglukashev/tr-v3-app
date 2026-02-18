@@ -29,6 +29,11 @@ const baseTrClustersQuery = fetchBaseQuery({
   //credentials: "include",
 });
 
+const baseTrOrderbooksQuery = fetchBaseQuery({
+  baseUrl: process.env.NEXT_PUBLIC_TR_ORDERBOOKS_DOMAIN,
+  //credentials: "include",
+});
+
 const fetchBase = async (baseQuery, args: FetchArgs, api, extraOptions) => {
   return baseQuery(args, api, extraOptions);
 }
@@ -63,4 +68,12 @@ export const customTrClustersFetchBase: BaseQueryFn<
   FetchBaseQueryError
 > = async (args: FetchArgs, api, extraOptions) => {
   return fetchBase(baseTrClustersQuery, args, api, extraOptions);
+};
+
+export const customTrOrderbooksFetchBase: BaseQueryFn<
+  FetchArgs,
+  unknown,
+  FetchBaseQueryError
+> = async (args: FetchArgs, api, extraOptions) => {
+  return fetchBase(baseTrOrderbooksQuery, args, api, extraOptions);
 };

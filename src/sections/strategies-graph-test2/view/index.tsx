@@ -74,7 +74,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
   ]);
   const [fppCombine, setFppCombine] = useState<boolean>(false);
   //const { data: klines } = useGetAllKlinesQuery({ pairId, page, limit: 5000, tf });
-  //const { data: clusters } = useGetAllClustersQuery({ pairId, page, limit: 5000, tf });
+  //const { data: orderbooks } = useGetAllClustersQuery({ pairId, page, limit: 5000, tf });
   const [trigger] = useLazyGetByPairIdAndTfAndTsQuery();
   const { data: position, refetch: refetchPosition } = useGetQuery(pairId);
   const { data: fpp } = useGetAllFppQuery({ pairId, page, limit: 5000, tf });
@@ -86,13 +86,13 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [remove, { isLoading }] = useRemoveMutation();
 
   // const clustersAsHashByTs = useMemo(() => {
-  //   if (!clusters) { return }
+  //   if (!orderbooks) { return }
   //   const result: any = {};
-  //   for (const item of clusters) {
+  //   for (const item of orderbooks) {
   //     result[item.ts] = item;
   //   }
   //   return result;
-  // }, [clusters]);
+  // }, [orderbooks]);
 
   const onSaveFppFiltersSubmit = useCallback(async (values: any) => {
     setFppFilters(values.fppFilters);

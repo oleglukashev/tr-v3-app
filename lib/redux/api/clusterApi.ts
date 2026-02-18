@@ -1,7 +1,7 @@
 import { BaseApi } from "./baseApi";
 import {customTrClustersFetchBase} from "../../customFetchBase";
 
-const collectionPath = 'clusters';
+const collectionPath = 'orderbooks';
 export const clusterApi = (new BaseApi({
   reducerPath: collectionPath,
   baseQuery: customTrClustersFetchBase,

@@ -1,5 +1,28 @@
 import {useCallback} from "react";
 
+export function drawHeatmap(chart: any, klines: any[], orderbooks: any[]) {
+  chart.removeOverlay({ name: `heatmapItem` });
+  for (const orderbook of orderbooks) {
+    if (parseInt(orderbook.ts) < 1769956974000) {
+      continue;
+    }
+
+    const prices = Object.keys(orderbook.data)
+      .map(item => parseFloat(item))
+      .sort()
+
+    const points =
+      [prices[0], prices[prices.length - 1]]
+      .map(item => { return { timestamp: parseInt(orderbook.ts), value: item }})
+
+    chart.createOverlay({
+      name: `heatmapItem`,
+      extendData: orderbook.data,
+      points,
+    });
+  }
+}
+
 export function drawFppPatterns(chart: any, klines: any[], fpp: any, tdaPoints = [], fppFilters: any[], combine: boolean = false): void {
   if (!fpp?.length) { return }
   for (const kline of klines) {
@@ -26,7 +49,7 @@ export function drawFppPatterns(chart: any, klines: any[], fpp: any, tdaPoints =
             {
               timestamp: parseInt(kline.timestamp),
               value: parseFloat(kline.low),
-            }
+            },
           ]
         });
       }
