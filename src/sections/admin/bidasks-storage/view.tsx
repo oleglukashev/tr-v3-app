@@ -1,7 +1,10 @@
 import Container from "@mui/material/Container";
 import { Box, Card, CardContent } from "@mui/material";
-import ReactJson from "react-json-view";
 import { useGetAllQuery as useBidasksGetAllQuery } from "@/lib/redux/api/bidaskStorageApi";
+
+import loadable from '@loadable/component';
+const ReactJson = loadable(() => import('react-json-view'));
+
 
 export default function BidasksStorageIndexView() {
   const { data: bidasks } = useBidasksGetAllQuery({});
