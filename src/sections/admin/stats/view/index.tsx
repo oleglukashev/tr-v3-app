@@ -19,7 +19,9 @@ import { useGetAllQuery as useOrderbooksGetAllQuery } from "@/lib/redux/api/orde
 import Label from "src/components/label";
 import moment from "moment";
 import { useState } from "react";
-import ReactJson from 'react-json-view'
+
+import loadable from '@loadable/component';
+const ReactJson = loadable(() => import('react-json-view'));
 
 type StatsData = {
   prices?: unknown[];

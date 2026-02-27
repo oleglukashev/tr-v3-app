@@ -15,6 +15,7 @@
     "@hookform/resolvers": "^5.0.1",
     "@iconify/react": "^4.1.1",
     "@klinecharts/pro": "^0.1.1",
+    "@loadable/component": "^5.16.7",
     "@mui/icons-material": "^7.1.0",
     "@mui/lab": "^5.0.0-alpha.136",
     "@mui/material": "^7.1.0",
