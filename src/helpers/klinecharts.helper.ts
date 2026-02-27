@@ -948,6 +948,142 @@ export function heatmapItem() {
   }
 }
 
+function createSessionOverlay(name: string, color: string, label: string, textColor = '#1f2937'): any {
+  return {
+    name,
+    totalStep: 2,
+    lock: true,
+    needDefaultPointFigure: false,
+    createPointFigures: ({ coordinates, bounding }: any) => {
+      if (!coordinates || coordinates.length < 2) {
+        return [];
+      }
+
+      const left = Math.min(coordinates[0].x, coordinates[1].x);
+      const right = Math.max(coordinates[0].x, coordinates[1].x);
+
+      return [
+        {
+          type: 'polygon',
+          ignoreEvent: true,
+          attrs: {
+            coordinates: [
+              { x: left, y: 0 },
+              { x: right, y: 0 },
+              { x: right, y: bounding.height },
+              { x: left, y: bounding.height }
+            ]
+          },
+          styles: {
+            style: 'fill',
+            color
+          }
+        },
+        {
+          type: 'text',
+          ignoreEvent: true,
+          attrs: {
+            x: left + 6,
+            y: bounding.height - 6,
+            text: label,
+            align: 'left',
+            baseline: 'bottom'
+          },
+          styles: {
+            color: textColor,
+            size: 12,
+            weight: 'bold',
+            backgroundColor: 'transparent'
+          }
+        }
+      ];
+    }
+  };
+}
+
+function drawSessionOverlays(
+  chart: any,
+  klines: any[],
+  sessionName: string,
+  startHour: number,
+  startMinute: number,
+  endHour: number,
+  endMinute: number,
+  isEndNextDay = false
+) {
+  if (!chart || !klines?.length) {
+    return;
+  }
+
+  chart.removeOverlay({ name: sessionName });
+
+  const dayRanges = new Map<string, { startTs: number; endTs: number }>();
+
+  for (const kline of klines) {
+    const ts = Number(kline?.timestamp ?? kline?.ts);
+    if (!Number.isFinite(ts)) {
+      continue;
+    }
+
+    const day = new Date(ts);
+    const dayKey = `${day.getFullYear()}-${day.getMonth()}-${day.getDate()}`;
+
+    if (!dayRanges.has(dayKey)) {
+      const start = new Date(day);
+      start.setHours(startHour, startMinute, 0, 0);
+
+      const end = new Date(start);
+      if (isEndNextDay) {
+        end.setDate(end.getDate() + 1);
+      }
+      end.setHours(endHour, endMinute, 0, 0);
+
+      dayRanges.set(dayKey, { startTs: start.getTime(), endTs: end.getTime() });
+    }
+  }
+
+  for (const range of dayRanges.values()) {
+    chart.createOverlay({
+      name: sessionName,
+      lock: true,
+      points: [
+        { timestamp: range.startTs, value: 0 },
+        { timestamp: range.endTs, value: 0 }
+      ]
+    });
+  }
+}
+
+export const londonSession: any = createSessionOverlay(
+  'londonSession',
+  'rgba(255, 235, 59, 0.2)',
+  'London'
+);
+
+export function drawLondonSessionOverlays(chart: any, klines: any[]) {
+  drawSessionOverlays(chart, klines, 'londonSession', 12, 0, 20, 30, false);
+}
+
+export const mintSession: any = createSessionOverlay(
+  'mintSession',
+  'rgba(62, 180, 137, 0.2)',
+  'New York'
+);
+
+export function drawMintSessionOverlays(chart: any, klines: any[]) {
+  drawSessionOverlays(chart, klines, 'mintSession', 18, 30, 1, 0, true);
+}
+
+export const blueSession: any = createSessionOverlay(
+  'blueSession',
+  'rgba(59, 130, 246, 0.2)',
+  'Tokyo'
+);
+
+export function drawBlueSessionOverlays(chart: any, klines: any[]) {
+  drawSessionOverlays(chart, klines, 'blueSession', 4, 0, 10, 30, false);
+}
+
 export function getWeaknessKline(kline: any, cluster: any) {
   if (!cluster) { return false }
   // if (!klineMinus1) { continue; }

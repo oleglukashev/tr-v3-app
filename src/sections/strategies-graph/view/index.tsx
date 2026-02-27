@@ -26,7 +26,9 @@ import {
   finishedStartKline,
   godKline, triggeredStartKline,
   waitingStartKline, noneditableRect, clusterKline,
-  upCircleBySize, downCircleBySize, bollingerBands, createdStartKline, dhmUp, dhmDown, heatmapItem
+  upCircleBySize, downCircleBySize, bollingerBands, createdStartKline, dhmUp, dhmDown, heatmapItem,
+  londonSession, drawLondonSessionOverlays, mintSession, drawMintSessionOverlays,
+  blueSession, drawBlueSessionOverlays
 } from "@/src/helpers/klinecharts.helper";
 import Map from "@/src/components/map/map";
 import {useTheme} from "@mui/material/styles";
@@ -86,6 +88,7 @@ const DEFAULT_GLOBAL_SETTINGS = {
   ],
   fppCombine: false,
   showLiquidity: false,
+  showSessions: true,
 };
 
 export default function DhmIndexView({ tf, pairId }: any) {
@@ -108,7 +111,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [currentDhmKline, setCurrentDhmKline] = useState(null);
   const [currentClusterKline, setCurrentClusterKline] = useState(null);
   const [globalSettings, setGlobalSettings] = useState<any>(DEFAULT_GLOBAL_SETTINGS);
-  const { fppFilters, statusFilters, fppCombine, showLiquidity } = globalSettings;
+  const { fppFilters, statusFilters, fppCombine, showLiquidity, showSessions } = globalSettings;
   //const { data: klines } = useGetAllKlinesQuery({ pairId, page, limit: 5000, tf });
   const { data: orderbooks } = useGetAllOrderbooksQuery(
     { pairId, page, limit: 5000, tf: 5 },
@@ -144,6 +147,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
       statusFilters: values.statusFilters,
       fppCombine: !!values.fppCombine,
       showLiquidity: !!values.showLiquidity,
+      showSessions: !!values.showSessions,
     };
     setGlobalSettings(nextSettings);
     if (typeof window !== 'undefined') {
@@ -320,6 +324,21 @@ export default function DhmIndexView({ tf, pairId }: any) {
     drawHeatmap(chart, klines, orderbooks);
   }, [chart, klinesUpdatedAt, orderbooks, showLiquidity]);
 
+  useEffect((): void => {
+    if (!chart) { return; }
+    if (!showSessions) {
+      chart.removeOverlay({ name: 'londonSession' });
+      chart.removeOverlay({ name: 'mintSession' });
+      chart.removeOverlay({ name: 'blueSession' });
+      return;
+    }
+    const klines = chart.getDataList();
+    if (!klines?.length) { return; }
+    drawLondonSessionOverlays(chart, klines);
+    drawMintSessionOverlays(chart, klines);
+    drawBlueSessionOverlays(chart, klines);
+  }, [chart, klinesUpdatedAt, showSessions]);
+
   const onClickClusterHandle = useCallback(async (e: any, kline: any) => {
     console.log('e', e);
     //console.log('currentClusterKline', currentClusterKline);
@@ -477,6 +496,9 @@ export default function DhmIndexView({ tf, pairId }: any) {
   registerOverlay(noneditableRect);
   registerOverlay(clusterKline);
   registerOverlay(heatmapItem());
+  registerOverlay(londonSession);
+  registerOverlay(mintSession);
+  registerOverlay(blueSession);
   // registerOverlay(enterPosition(async (e: any) => {
   //   await cancelPositionRtk(pairId);
   //   await refetchPosition();

@@ -69,6 +69,9 @@ export function StrategiesDhmGlobalSettingsForm({ defaultValues, onSubmit }: any
           <Grid item size={12}>
             <CheckboxElement name='showLiquidity' label='Показывать ликвидность?' />
           </Grid>
+          <Grid item size={12}>
+            <CheckboxElement name='showSessions' label='Показывать сессии?' />
+          </Grid>
         </Grid>
         <CustomFormButton />
       </Container>

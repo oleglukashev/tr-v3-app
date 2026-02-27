@@ -29,10 +29,15 @@ export const dhmApi = (new BaseApi({
       // @ts-ignore
       getAllDhm: builder.query<any[], any>({
         query(params: any) {
-          return {
+          const data: any = {
             url: `${collectionPath}/${params.pairId}/${params.tf}`,
-            params: { statuses: params.statusFilters.join(',') },
-          };
+          }
+
+          if (params.statusFilters?.length) {
+            data.params = { statuses: params.statusFilters.join(',') };
+          }
+
+          return data;
         },
         //providesTags: (result: any) => BaseApi.providesTags(result, collectionPath),
       }),
@@ -48,10 +53,15 @@ export const dhmApi = (new BaseApi({
       // @ts-ignore
       getAllDhm2: builder.query<any[], any>({
         query(params: any) {
-          return {
+          const data: any = {
             url: `${collectionPath}2/${params.pairId}/${params.tf}`,
-            params: { statuses: params.statusFilters.join(',') },
-          };
+          }
+
+          if (params.statusFilters?.length) {
+            data.params = { statuses: params.statusFilters.join(',') };
+          }
+
+          return data;
         },
         //providesTags: (result: any) => BaseApi.providesTags(result, collectionPath),
       }),

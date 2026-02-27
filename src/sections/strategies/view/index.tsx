@@ -10,7 +10,7 @@ import {
   TableRow,
   Typography
 } from "@mui/material";
-import {useGetAllQuery} from "@/lib/redux/api/dhmApi";
+import {useGetAllDhmQuery} from "@/lib/redux/api/dhmApi";
 //import {useGetQuery} from "@/lib/redux/api/pnlApi";
 import moment from "moment";
 import Label from "@/src/components/label";
@@ -20,7 +20,7 @@ import Iconify from "@/src/components/iconify";
 
 export default function StrategiesIndexView({ tf, pairId }: any) {
   const theme = useTheme();
-  const { data: dhmSessions } = useGetAllQuery({ pairId, tf, page: 1, limit: 100 });
+  const { data: dhmSessions } = useGetAllDhmQuery({ pairId, tf, page: 1, limit: 100 });
   //const { data: pnl } = useGetQuery({ sessionIds: (dhmSessions || []).map(s => s.id) }, { skip: !dhmSessions?.length });
 
   return (
@@ -40,7 +40,7 @@ export default function StrategiesIndexView({ tf, pairId }: any) {
               </TableRow>
             </TableHead>
             <TableBody>
-              {(dhmSessions || []).filter((item) => ['waiting', 'triggered', 'finished', 'finished_by_lose'].includes(item.status)).map((item: any) => (
+              {(dhmSessions || []).map((item: any) => (
                 <TableRow key={item.id}>
                   <TableCell>
                     {item.id}
@@ -59,12 +59,12 @@ export default function StrategiesIndexView({ tf, pairId }: any) {
                   </TableCell>
                   <TableCell>
                     <Box>
-                      <Label sx={{ mb: 0.5 }} color='default'>{item.data.high}</Label>
+                      <Label sx={{ mb: 0.5 }} color='default'>{item.high}</Label>
                     </Box>
-                    <Label color='default'>{item.data.low}</Label>
+                    <Label color='default'>{item.low}</Label>
                   </TableCell>
                   <TableCell>
-                    {Object.keys(item.data?.orders || {}).map((side: any) => (
+                    {Object.keys(item.orders || {}).map((side: any) => (
                       <Box key={side}>
                         <Typography
                           variant={'caption'}
@@ -75,9 +75,9 @@ export default function StrategiesIndexView({ tf, pairId }: any) {
                         >
                           {side}:
                         </Typography>
-                        {Object.keys(item.data?.orders[side]).map((level: any) => (
+                        {Object.keys(item.orders[side]).map((level: any) => (
                           <Box key={`${side}_${level}`} sx={{ mb: 0.5 }}>
-                            <b>{level}</b>: <Label color='success'>{item.data?.orders[side][level]?.id}</Label>
+                            <b>{level}</b>: <Label color='success'>{item.orders[side][level]?.id}</Label>
                           </Box>
                         ))}
                       </Box>
