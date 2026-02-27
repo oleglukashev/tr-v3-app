@@ -6,6 +6,7 @@ import {Providers} from "@/lib/providers";
 import Header from "@/src/app/layout/header";
 import { usePathname } from "next/navigation";
 import AdminHeader from "@/src/app/layout/admin-header";
+import {Suspense} from "react";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -38,12 +39,14 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} antialiased`}
     >
     <Providers>
-      {isAdmin ? (
-        <AdminHeader />
-      ) : (
-        <Header />
-      )}
-      {children}
+      <Suspense>
+        {isAdmin ? (
+          <AdminHeader />
+        ) : (
+          <Header />
+        )}
+        {children}
+      </Suspense>
     </Providers>
     </body>
     </html>
