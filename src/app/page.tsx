@@ -1,8 +1,5 @@
-'use client'
+import { redirect } from "next/navigation";
 
 export default function Home() {
-  return (
-    <main style={{ padding: 20 }}>
-    </main>
-  )
+  redirect("/dhm-graph/49/60");
 }
