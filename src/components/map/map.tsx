@@ -42,16 +42,17 @@ export default function Map({
   const isInitialSyncRef = useRef(true);
 
   const getInitialTs = useCallback((): number | null => {
+    const nowTs = moment().utc().valueOf();
     const propTs = Number(defaultTs);
     if (Number.isFinite(propTs)) {
-      return propTs;
+      return Math.min(propTs, nowTs);
     }
     if (typeof window === 'undefined') {
       return null;
     }
     const queryTs = Number(new URLSearchParams(window.location.search).get('ts'));
     if (Number.isFinite(queryTs)) {
-      return queryTs;
+      return Math.min(queryTs, nowTs);
     }
     return null;
   }, [defaultTs]);
@@ -325,8 +326,10 @@ export default function Map({
 
     chart.setDataLoader({
       getBars: (data: any) => {
+        const loadType = data.type;
         const chartData = chart.getDataList();
         const initialTs = getInitialTs();
+        const nowTs = moment().utc().valueOf();
         const stepMs =
           KLINE_TS_SIZE_BY_TF[Number(tf) as keyof typeof KLINE_TS_SIZE_BY_TF] || KLINE_TS_SIZE_BY_TF[1];
         const chunkSize = 300;
@@ -334,7 +337,7 @@ export default function Map({
         let startTs: number;
         let endTs: number;
 
-        if (data.type === 'init') {
+        if (loadType === 'init') {
           if (initialTs) {
             // If `defaultTs` is provided, load symmetric window around it: -400 / +400 klines.
             startTs = initialTs - (chunkSize * stepMs);
@@ -345,7 +348,7 @@ export default function Map({
             startTs = latestTs - ((chunkSize * 2) * stepMs);
             endTs = latestTs;
           }
-        } else if (data.type === 'forward') {
+        } else if (loadType === 'forward') {
           // Scroll left: load previous 400 klines before current first kline.
           const firstTs = Number(chartData?.[0]?.timestamp);
           if (!Number.isFinite(firstTs)) {
@@ -354,15 +357,19 @@ export default function Map({
           }
           startTs = firstTs - (chunkSize * stepMs);
           endTs = firstTs;
-        } else if (data.type === 'backward' || data.type === 'update') {
+        } else if (loadType === 'backward' || loadType === 'update') {
           // Scroll right/update: load next 400 klines after current last kline.
           const lastTs = Number(chartData?.[chartData.length - 1]?.timestamp);
           if (!Number.isFinite(lastTs)) {
             data.callback([], false);
             return;
           }
+          if (lastTs >= nowTs) {
+            data.callback([], false);
+            return;
+          }
           startTs = lastTs;
-          endTs = lastTs + (chunkSize * stepMs);
+          endTs = Math.min(lastTs + (chunkSize * stepMs), nowTs);
         } else {
           data.callback([], false);
           return;
@@ -370,8 +377,8 @@ export default function Map({
 
         fetch(`http://klines.traken-trade.ru/api/v1/klines?pairId=${pairId}&startTs=${startTs}&endTs=${endTs}&limit=1000&tf=${tf}`)
           .then(res => res.json())
-          .then(data => {
-            return data.map(item => ({
+          .then((responseData: any[]) => {
+            const mapped = responseData.map((item: any) => ({
               id: item.id,
               open: parseFloat(item.open),
               high: parseFloat(item.high),
@@ -380,15 +387,36 @@ export default function Map({
               timestamp: parseInt(item.ts),
               volume: parseInt(item.volume),
             }));
+            const uniqueByTs = new globalThis.Map<number, any>();
+            for (const item of mapped) {
+              const ts = Number(item?.timestamp);
+              if (!Number.isFinite(ts)) { continue; }
+              uniqueByTs.set(ts, item);
+            }
+            const normalized = Array.from(uniqueByTs.values()).sort(
+              (a: any, b: any) => Number(a.timestamp) - Number(b.timestamp),
+            );
+            const firstTs = Number(chartData?.[0]?.timestamp);
+            const lastTs = Number(chartData?.[chartData.length - 1]?.timestamp);
+            if (loadType === 'forward' && Number.isFinite(firstTs)) {
+              // Klinecharts "forward" means loading older candles to the left.
+              return normalized.filter((item: any) => Number(item.timestamp) < firstTs);
+            }
+            if ((loadType === 'backward' || loadType === 'update') && Number.isFinite(lastTs)) {
+              // Prevent infinite loops caused by repeatedly returning the edge candle.
+              return normalized.filter((item: any) => Number(item.timestamp) > lastTs);
+            }
+            return normalized;
           })
           .then(dataList => {
-            data.callback(dataList, dataList.length > 0);
-            if (data.type === 'init' && initialTs && !isDefaultTsCenteredRef.current) {
+            const hasMore = dataList.length > 0;
+            data.callback(dataList, hasMore);
+            if (loadType === 'init' && initialTs && !isDefaultTsCenteredRef.current) {
               setTimeout(() => {
                 centerChartByDefaultTs(initialTs);
               }, 0);
             }
-            if (data.type === 'init') {
+            if (loadType === 'init') {
               setTimeout(() => {
                 restoreSavedZoom(chart);
               }, 0);
@@ -396,7 +424,7 @@ export default function Map({
                 restoreSavedZoom(chart);
               }, 60);
             }
-            if (data.type === 'init') {
+            if (loadType === 'init') {
               setTimeout(() => {
                 isInitialSyncRef.current = false;
               }, 250);
