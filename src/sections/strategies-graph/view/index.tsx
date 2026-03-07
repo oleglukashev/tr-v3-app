@@ -89,6 +89,7 @@ const DEFAULT_GLOBAL_SETTINGS = {
   fppCombine: false,
   showLiquidity: false,
   showSessions: true,
+  showDhm: true,
 };
 
 export default function DhmIndexView({ tf, pairId }: any) {
@@ -111,7 +112,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [currentDhmKline, setCurrentDhmKline] = useState(null);
   const [currentClusterKline, setCurrentClusterKline] = useState(null);
   const [globalSettings, setGlobalSettings] = useState<any>(DEFAULT_GLOBAL_SETTINGS);
-  const { fppFilters, statusFilters, fppCombine, showLiquidity, showSessions } = globalSettings;
+  const { fppFilters, statusFilters, fppCombine, showLiquidity, showSessions, showDhm } = globalSettings;
   //const { data: klines } = useGetAllKlinesQuery({ pairId, page, limit: 5000, tf });
   const { data: orderbooks } = useGetAllOrderbooksQuery(
     { pairId, page, limit: 5000, tf: 5 },
@@ -120,7 +121,10 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [trigger] = useLazyGetByPairIdAndTfAndTsQuery();
   //const { data: position, refetch: refetchPosition } = useGetQuery(pairId);
   const { data: fpp } = useGetAllFppQuery({ pairId, page, limit: 5000, tf });
-  const { data: dhm } = useGetAllDhmQuery({ pairId, tf: 60, statusFilters });
+  const { data: dhm } = useGetAllDhmQuery(
+    { pairId, tf: 60, statusFilters },
+    { skip: !showDhm },
+  );
   const { data: dhmSidebarItems } = useGetAllActiveDhmQuery({ });
   const { data: tdaPoints } = useGetAllQuery({ pairId });
   //const [createPositionRtk, { isLoading: isCreatePositionLoading }] = useCreatePositionMutation();
@@ -148,6 +152,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
       fppCombine: !!values.fppCombine,
       showLiquidity: !!values.showLiquidity,
       showSessions: !!values.showSessions,
+      showDhm: !!values.showDhm,
     };
     setGlobalSettings(nextSettings);
     if (typeof window !== 'undefined') {
@@ -360,10 +365,15 @@ export default function DhmIndexView({ tf, pairId }: any) {
   }, [chart, trigger, pairId, tf])
 
   useEffect(() => {
+    if (!chart) {return}
+    if (!showDhm) {
+      chart.removeOverlay({ name: `dhmUp` })
+      chart.removeOverlay({ name: `dhmDown` })
+      return;
+    }
     console.log(dhm);
     console.log(dhm);
     if (!dhm) {return}
-    if (!chart) {return}
     //if (!fpp) {return}
     //if (!clustersAsHashByTs) {return}
     const klines = chart.getDataList();
@@ -442,7 +452,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
         setCurrentCuster(null);
       }
     })
-  }, [chart, fpp, dhm, onClickClusterHandle]);
+  }, [chart, fpp, dhm, showDhm, onClickClusterHandle]);
 
   // useEffect(() => {
   //   if (!chart) {return}
