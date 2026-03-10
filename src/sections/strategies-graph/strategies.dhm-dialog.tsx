@@ -6,6 +6,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import Chip from '@mui/material/Chip';
 import Label from "@/src/components/label";
 import {useTheme} from "@mui/material/styles";
+import ReactJson from "react-json-view";
 
 export function StrategiesDhmDialog({currentDhm, currentKline, onCreateSubmit, onUpdateSubmit, onRemoveSubmit, pairId, tf, currentPrice}: any) {
   const theme = useTheme();
@@ -105,6 +106,12 @@ export function StrategiesDhmDialog({currentDhm, currentKline, onCreateSubmit, o
             }}
             onSubmit={onUpdateSubmit}
           />
+          <Box sx={{ mt: 2 }}>
+            <Typography variant='subtitle2' sx={{ mb: 1 }}>
+              Data
+            </Typography>
+            <ReactJson src={(currentDhm ?? {}) as object} collapsed={2} />
+          </Box>
         </Box>
       ) : (
         <>
