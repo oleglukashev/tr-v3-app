@@ -5,13 +5,12 @@ import {boolean, object} from "zod";
 import {zodNumberSchema, zodStringSchema} from "@/src/helpers/form-validation.helper";
 import {zodResolver} from "@hookform/resolvers/zod";
 
-export function StrategiesForm({ defaultValues, onSubmit }: any) {
+export function StrategiesForm({ defaultValues, onSubmit, dhmSettings }: any) {
   return (
     <FormContainer
       defaultValues={defaultValues}
       resolver={zodResolver(object({
         kline1Ts: zodNumberSchema(),
-        kline2Ts: zodNumberSchema(),
         status: zodStringSchema(),
         direction: zodStringSchema(),
         confirmed: boolean(),
@@ -36,15 +35,6 @@ export function StrategiesForm({ defaultValues, onSubmit }: any) {
           <TextFieldElement
             name='kline1Ts'
             label='Kline1 Ts'
-            type='number'
-            size='small'
-            fullWidth
-          />
-        </Grid>
-        <Grid item size={12}>
-          <TextFieldElement
-            name='kline2Ts'
-            label='Kline2 Ts'
             type='number'
             size='small'
             fullWidth
@@ -185,7 +175,7 @@ export function StrategiesForm({ defaultValues, onSubmit }: any) {
         {/*  />*/}
         {/*</Grid>*/}
       </Grid>
-      <CustomFormButton />
+      <CustomFormButton disabled={!dhmSettings?.id} />
     </FormContainer>
   )
 }

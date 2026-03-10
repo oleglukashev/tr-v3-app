@@ -194,18 +194,18 @@ export const dhmApi = (new BaseApi({
       }),
       // @ts-ignore
       removeDhm: builder.mutation<any, any>({
-        query(data: any) {
+        query(id: any) {
           return {
-            url: `${collectionPath}/:id`,
+            url: `${collectionPath}/${id}`,
             method: 'DELETE',
           };
         },
       }),
       // @ts-ignore
       removeDhm2: builder.mutation<any, any>({
-        query(data: any) {
+        query(id: any) {
           return {
-            url: `${collectionPath}2/:id`,
+            url: `${collectionPath}2/${id}`,
             method: 'DELETE',
           };
         },

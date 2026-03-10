@@ -14,6 +14,7 @@ import {onSubmitWrapper} from "@/src/utils/submit";
 import {StrategiesDhmDialog} from "@/src/sections/strategies-graph/strategies.dhm-dialog";
 import {IconButton} from "@mui/material";
 import SettingsIcon from '@mui/icons-material/Settings';
+import DeleteIcon from "@mui/icons-material/Delete";
 import {StrategiesDhmSettingsDialog} from "@/src/sections/strategies-graph/strategies.dhm-settings-dialog";
 import {StrategiesDhmFppFiltersDialog} from "@/src/sections/strategies-graph/strategies.dhm-global-settings-dialog";
 import {StrategiesDhmKlineFppsDialog} from "@/src/sections/strategies-graph/strategies.dhm-kline-fpps-dialog";
@@ -63,6 +64,7 @@ import {
   ListItemText,
   Typography,
 } from "@mui/material";
+import {useGetSettingsDhmByPairIdAndTfQuery} from "@/lib/redux/api/dhmApi";
 
 const DEFAULT_GLOBAL_SETTINGS = {
   fppFilters: [
@@ -118,6 +120,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
     { pairId, page, limit: 5000, tf: 5 },
     { skip: !showLiquidity },
   );
+  const { data: dhmSettings } = useGetSettingsDhmByPairIdAndTfQuery({ tf, pairId });
   const [trigger] = useLazyGetByPairIdAndTfAndTsQuery();
   //const { data: position, refetch: refetchPosition } = useGetQuery(pairId);
   const { data: fpp } = useGetAllFppQuery({ pairId, page, limit: 5000, tf });
@@ -656,7 +659,16 @@ export default function DhmIndexView({ tf, pairId }: any) {
       <CustomDialog
         open={currentDhmKline}
         onClose={() => setCurrentDhmKline(null)}
-        title={`Kline ${currentDhmKline?.timestamp}`}
+        title={(
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>{`Kline ${currentDhmKline?.timestamp}`}</span>
+            {!!currentDhm && (
+              <IconButton aria-label="delete" onClick={onRemoveSubmit} size="small">
+                <DeleteIcon />
+              </IconButton>
+            )}
+          </div>
+        )}
         content={(
           <StrategiesDhmDialog
             currentDhm={currentDhm}
@@ -667,6 +679,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
             tf={tf}
             pairId={pairId}
             currentPrice={currentPrice}
+            dhmSettings={dhmSettings}
           />
         )}
       />
@@ -676,7 +689,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
         onClose={() => setOpenSettings(false)}
         title={`Settings`}
         content={(
-          <StrategiesDhmSettingsDialog tf={tf} pairId={pairId} />
+          <StrategiesDhmSettingsDialog dhmSettings={dhmSettings} tf={tf} pairId={pairId} />
         )}
       />
 
