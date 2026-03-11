@@ -560,7 +560,7 @@ export const dhmDown: any = {
     if (overlay?.extendData?.confirmed) {
       result.push({
         type: 'text',
-        attrs: { x: startX, y: arrowEndY - 40, text: text2, align: 'center', baseline: 'bottom' },
+        attrs: { x: startX, y: arrowEndY + 20, text: text2, align: 'center', baseline: 'bottom' },
         ignoreEvent: true,
         styles: {
           backgroundColor: `rgba(0,89,30,0)`,
