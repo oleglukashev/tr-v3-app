@@ -390,7 +390,8 @@ export default function DhmIndexView({ tf, pairId }: any) {
           name: item.direction === 'up' ? 'dhmUp' : 'dhmDown',
           extendData: {
             ts: item.direction === 'up' ? item.kline1.low : item.kline1.high,
-            confirmed: item.confirmed
+            confirmed: item.confirmed,
+            status: item.status,
           },
           points: [{timestamp: parseInt(item.kline1.ts), value: parseFloat(item.direction === 'up' ? item.kline1.low : item.kline1.high)}],
         })

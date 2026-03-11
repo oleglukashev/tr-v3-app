@@ -5,8 +5,9 @@ import {StrategiesForm} from "@/src/sections/strategies-graph/strategies.form";
 import Chip from '@mui/material/Chip';
 import Label from "@/src/components/label";
 import {useTheme} from "@mui/material/styles";
-import ReactJson from "react-json-view";
 import {useState} from "react";
+import loadable from '@loadable/component';
+const ReactJson = loadable(() => import('react-json-view'));
 
 export function StrategiesDhmDialog({currentDhm, currentKline, onCreateSubmit, onUpdateSubmit, onRemoveSubmit, pairId, tf, currentPrice, dhmSettings}: any) {
   const theme = useTheme();

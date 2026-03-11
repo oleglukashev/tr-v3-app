@@ -40,6 +40,11 @@ const redColors = [
   '#b71c1c',
 ]
 
+const transSuccessColor = 'rgba(0,89,30,0.95)';
+const successColor = 'rgba(0,89,30)';
+const transErrorColor = 'rgba(244,67,54,0.95)';
+const errorColor = 'rgba(244,67,54)';
+
 
 // export const limitOrder = {
 //   name: 'limitOrder',
@@ -441,14 +446,17 @@ export const dhmUp: any = {
   },
   createPointFigures: ({ overlay, coordinates }) => {
     let text = ''
-    text = (overlay?.extendData?.ts ?? '') as string
+    text = (overlay?.extendData?.ts ?? '') as string;
+    const status = overlay?.extendData?.status ?? '';
+    const text2 = '•';
     const confirmed = overlay?.extendData?.confirmed ?? false
-    const opacity = confirmed ? 0.55 : 0.3;
+    const opacity = confirmed ? 0.95 : 0.3;
     const startX = coordinates[0].x
     const startY = coordinates[0].y + 5
-    const lineEndY = startY + 10
-    const arrowEndY = lineEndY + 30
-    return [
+    const lineEndY = startY + 10;
+    const arrowEndY = lineEndY + 30;
+
+    const result = [
       {
         type: 'line',
         attrs: { coordinates: [{ x: startX, y: startY }, { x: startX, y: lineEndY }] },
@@ -477,7 +485,23 @@ export const dhmUp: any = {
           style: 'fill',
         }
       }
-    ]
+    ];
+
+    if (overlay?.extendData?.confirmed) {
+      result.push({
+        type: 'text',
+        attrs: { x: startX, y: arrowEndY + 40, text: text2, align: 'center', baseline: 'bottom' },
+        ignoreEvent: true,
+        styles: {
+          backgroundColor: `rgba(0,89,30,0)`,
+          color: status === 'finished' ? successColor : status === 'finished_by_lose' ? errorColor : 'transparent',
+          size: 50,
+          style: 'fill',
+        }
+      });
+    }
+
+    return result;
   }
 }
 
@@ -490,14 +514,17 @@ export const dhmDown: any = {
   createPointFigures: ({ overlay, coordinates }) => {
     let text = ''
     text = (overlay?.extendData?.ts ?? '') as string
+    const status = overlay?.extendData?.status ?? '';
+    const text2 = '•';
     const confirmed = overlay?.extendData?.confirmed ?? false
     const opacity = confirmed ? 0.9 : 0.3;
     const startX = coordinates[0].x
     // Draw above kline: shift everything upward from candle
     const startY = coordinates[0].y - 5
-    const lineEndY = startY - 10
-    const arrowEndY = lineEndY - 30
-    return [
+    const lineEndY = startY - 10;
+    const arrowEndY = lineEndY - 30;
+
+    const result = [
       {
         type: 'line',
         attrs: { coordinates: [{ x: startX, y: startY }, { x: startX, y: lineEndY }] },
@@ -528,7 +555,23 @@ export const dhmDown: any = {
           style: 'fill',
         }
       }
-    ]
+    ];
+
+    if (overlay?.extendData?.confirmed) {
+      result.push({
+        type: 'text',
+        attrs: { x: startX, y: arrowEndY - 40, text: text2, align: 'center', baseline: 'bottom' },
+        ignoreEvent: true,
+        styles: {
+          backgroundColor: `rgba(0,89,30,0)`,
+          color: status === 'finished' ? successColor : status === 'finished_by_lose' ? errorColor : 'transparent',
+          size: 50,
+          style: 'fill',
+        }
+      });
+    }
+
+    return result;
   }
 }
 
