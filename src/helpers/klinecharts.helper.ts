@@ -447,6 +447,7 @@ export const dhmUp: any = {
   createPointFigures: ({ overlay, coordinates }) => {
     let text = ''
     text = (overlay?.extendData?.ts ?? '') as string;
+    text = `${text} (${overlay?.extendData?.tf})`;
     const status = overlay?.extendData?.status ?? '';
     const text2 = '•';
     const confirmed = overlay?.extendData?.confirmed ?? false
@@ -513,7 +514,8 @@ export const dhmDown: any = {
   },
   createPointFigures: ({ overlay, coordinates }) => {
     let text = ''
-    text = (overlay?.extendData?.ts ?? '') as string
+    text = (overlay?.extendData?.ts ?? '') as string;
+    text = `${text} (${overlay?.extendData?.tf})`;
     const status = overlay?.extendData?.status ?? '';
     const text2 = '•';
     const confirmed = overlay?.extendData?.confirmed ?? false
@@ -874,9 +876,6 @@ export function clusterKline(data: any) {
       const generalBv = sortedData.reduce((cur, item) => parseFloat(item.bv) + cur, 0);
       const generalSv = sortedData.reduce((cur, item) => parseFloat(item.sv) + cur, 0);
       const deltaValue = sortedData.reduce((cur, item) => parseFloat(delta(item)) + cur, 0);
-
-      console.log(generalBv, generalSv, deltaValue, sortedData);
-
       const absDeltaValue = Math.abs(deltaValue);
       const delimeter = absDeltaValue >= 1000 ? absDeltaValue >= 1000000 ? 1000000 : 1000 : 1;
 

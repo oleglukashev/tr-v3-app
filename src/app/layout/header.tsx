@@ -14,8 +14,9 @@ import Avatar from '@mui/material/Avatar';
 import Menu from '@mui/material/Menu';
 import {usePathname, useRouter, useSearchParams} from "next/navigation";
 import {useMemo} from "react";
-import {Divider} from "@mui/material";
+import {Divider, IconButton} from "@mui/material";
 import Iconify from "@/src/components/iconify";
+import SettingsIcon from '@mui/icons-material/Settings';
 
 const StyledToolbar = styled(Toolbar)(({ theme }) => ({
   display: 'flex',
@@ -101,6 +102,7 @@ export default function Header() {
     return pages.find(item => item.url === pageUrl);
   }, [pathname]);
   const ts = searchParams.get('ts');
+  const showChartSettingsButton = page?.url === 'dhm-graph';
 
   const settingsByPairId = useMemo(() => {
     const result: any = {}
@@ -227,6 +229,20 @@ export default function Header() {
 
             </Box>
           </Box>
+          {showChartSettingsButton && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <IconButton
+                size="small"
+                aria-label="Open chart settings"
+                onClick={() => {
+                  if (typeof window === 'undefined') { return; }
+                  window.dispatchEvent(new Event('open-chart-settings-dialog'));
+                }}
+              >
+                <Iconify icon="icon-park-outline:chart-line" width={22} />
+              </IconButton>
+            </Box>
+          )}
         </StyledToolbar>
       </Container>
     </AppBar>
