@@ -649,7 +649,23 @@ export default function DhmIndexView({ tf, pairId }: any) {
             <ListItem key={item.id} disablePadding>
               <ListItemButton onClick={() => onDhmSidebarItemClick(item)}>
                 <ListItemText
-                  primary={`Pair: ${item.pairId} (${moment(Number(item?.kline1?.ts)).format('DD.MM.YYYY HH:mm')})`}
+                  primary={(
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      <span
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          backgroundColor: item.direction === 'down'
+                            ? theme.palette.error.main
+                            : theme.palette.success.main,
+                          display: 'inline-block',
+                          flexShrink: 0,
+                        }}
+                      />
+                      {`Pair: ${item.pairId} (${moment(Number(item?.kline1?.ts)).format('DD.MM.YYYY HH:mm')})`}
+                    </span>
+                  )}
                 />
                 <Label color={'success'}>{item.status}</Label>
               </ListItemButton>
