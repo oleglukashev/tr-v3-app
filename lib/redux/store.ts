@@ -14,6 +14,7 @@ import { bidaskStorageApi } from "./api/bidaskStorageApi";
 import { klinesStorageApi } from "./api/klinesStorageApi";
 import { orderbookStorageApi } from "./api/orderbookStorageApi";
 import { orderbookApi } from "./api/orderbookApi";
+import {balanceApi} from "@/lib/redux/api/balanceApi";
 
 export const reduxStore = configureStore({
   reducer: {
@@ -32,6 +33,7 @@ export const reduxStore = configureStore({
     [klinesStorageApi.reducerPath]: klinesStorageApi.reducer,
     [orderbookStorageApi.reducerPath]: orderbookStorageApi.reducer,
     [orderbookApi.reducerPath]: orderbookApi.reducer,
+    [balanceApi.reducerPath]: balanceApi.reducer,
   },
   //devTools: process.env.NEXT_PUBLIC_ENV !== "production",
   middleware: (getDefaultMiddleware) =>
@@ -51,5 +53,6 @@ export const reduxStore = configureStore({
       klinesStorageApi.middleware,
       orderbookStorageApi.middleware,
       orderbookApi.middleware,
+      balanceApi.middleware,
     ]),
 });

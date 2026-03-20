@@ -14,9 +14,9 @@ import Avatar from '@mui/material/Avatar';
 import Menu from '@mui/material/Menu';
 import {usePathname, useRouter, useSearchParams} from "next/navigation";
 import {useMemo} from "react";
-import {Divider, IconButton} from "@mui/material";
+import {Divider, IconButton, Typography} from "@mui/material";
 import Iconify from "@/src/components/iconify";
-import SettingsIcon from '@mui/icons-material/Settings';
+import {useGetQuery} from "@/lib/redux/api/balanceApi";
 
 const StyledToolbar = styled(Toolbar)(({ theme }) => ({
   display: 'flex',
@@ -60,6 +60,7 @@ export default function Header() {
     setAnchorTfEl(null);
   };
   const { data: pairs, isLoading } = useGetAllQuery({});
+  const { data: balance, isLoading: isBalanceLoading } = useGetQuery({});
   const { data: settings } = useGetSettingsDhmQuery({});
   const tfs = [
     {id: 1, label: '1'},
@@ -228,6 +229,10 @@ export default function Header() {
               </Menu>
 
             </Box>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography sx={{ color: '#4caf50', fontWeight: 'bold'}}>{balance?.up ? Number(balance.up).toFixed(2) : '-'}</Typography>
+            <Typography sx={{ color: '#f44336', fontWeight: 'bold', mr: 2 }}>{balance?.down ? Number(balance.down).toFixed(2) : '-'}</Typography>
           </Box>
           {showChartSettingsButton && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
