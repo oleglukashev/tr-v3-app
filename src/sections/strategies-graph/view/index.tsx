@@ -116,6 +116,21 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [currentClusterKline, setCurrentClusterKline] = useState(null);
   const [globalSettings, setGlobalSettings] = useState<any>(DEFAULT_GLOBAL_SETTINGS);
   const { fppFilters, statusFilters, fppCombine, showLiquidity, showSessions, showDhm } = globalSettings;
+  const getLimitOrderPrice = useCallback((order: any, level: any) => {
+    const candidates = [
+      order?.data?.price,
+      order?.price,
+      order?.limitPrice,
+      level,
+    ];
+    for (const candidate of candidates) {
+      const value = Number(candidate);
+      if (Number.isFinite(value) && value > 0) {
+        return value;
+      }
+    }
+    return null;
+  }, []);
   //const { data: klines } = useGetAllKlinesQuery({ pairId, page, limit: 5000, tf });
   const { data: orderbooks } = useGetAllOrderbooksQuery(
     { pairId, page, limit: 5000, tf: 5 },
@@ -394,6 +409,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
     if (!showDhm) {
       chart.removeOverlay({ name: `dhmUp` })
       chart.removeOverlay({ name: `dhmDown` })
+      chart.removeOverlay({ name: `limitOrder` })
       return;
     }
     if (!dhm) {return}
@@ -403,6 +419,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
 
     chart.removeOverlay({ name: `dhmUp` })
     chart.removeOverlay({ name: `dhmDown` })
+    chart.removeOverlay({ name: `limitOrder` })
 
     for (const item of dhm) {
       //if (['created', 'waiting', 'triggered', 'finished', 'finished_by_lose', 'finished_by_length'].includes(item.status)) {
@@ -416,6 +433,28 @@ export default function DhmIndexView({ tf, pairId }: any) {
           },
           points: [{timestamp: parseInt(item.kline1.ts), value: parseFloat(item.direction === 'up' ? item.kline1.low : item.kline1.high)}],
         })
+
+        if (
+          item?.direction === 'up'
+          && ['triggered', 'waiting'].includes(item?.status)
+          && item?.orders
+          && typeof item.orders === 'object'
+        ) {
+          for (const side of Object.keys(item.orders)) {
+            const sideOrders = item.orders[side];
+            if (!sideOrders || typeof sideOrders !== 'object') { continue; }
+            for (const level of Object.keys(sideOrders)) {
+              const order = sideOrders[level];
+              if (!order?.id || order?.status !== 'success') { continue; }
+              const limitOrderPrice = getLimitOrderPrice(order, level);
+              if (!limitOrderPrice) { continue; }
+              chart.createOverlay({
+                name: `limitOrder`,
+                points: [{ timestamp: null, value: limitOrderPrice }],
+              });
+            }
+          }
+        }
         // chart.createOverlay({
         //   name: `${camelCase(item.status)}StartKline`,
         //   points: [{timestamp: parseInt(item.kline1.ts), value: parseFloat(item.kline1.close)}],
@@ -477,7 +516,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
         setCurrentCuster(null);
       }
     })
-  }, [chart, fpp, dhm, showDhm, onClickClusterHandle]);
+  }, [chart, fpp, dhm, showDhm, onClickClusterHandle, getLimitOrderPrice]);
 
   // useEffect(() => {
   //   if (!chart) {return}
