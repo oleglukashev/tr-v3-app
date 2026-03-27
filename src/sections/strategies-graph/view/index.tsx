@@ -435,7 +435,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
         })
 
         if (
-          item?.direction === 'up'
+          ['up', 'down'].includes(item?.direction)
           && ['triggered', 'waiting'].includes(item?.status)
           && item?.orders
           && typeof item.orders === 'object'
