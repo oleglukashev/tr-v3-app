@@ -120,11 +120,13 @@ export default function Header() {
   );
 
   const sessionStats = React.useMemo(() => {
-    if (!dhmSessions?.length) return {};
-    return dhmSessions.reduce((acc: Record<string, number>, s: any) => {
-      acc[s.status] = (acc[s.status] || 0) + 1;
+    const empty = { long: {} as Record<string, number>, short: {} as Record<string, number> };
+    if (!dhmSessions?.length) return empty;
+    return (dhmSessions as any[]).reduce((acc, s) => {
+      const side: 'long' | 'short' = s.direction === 'up' ? 'long' : 'short';
+      acc[side][s.status] = (acc[side][s.status] || 0) + 1;
       return acc;
-    }, {} as Record<string, number>);
+    }, empty);
   }, [dhmSessions]);
 
   const getStatusColor = (status: string): 'success' | 'warning' | 'error' | 'default' => {
@@ -307,26 +309,54 @@ export default function Header() {
                 {/* Statistics */}
                 <Box sx={{ px: 2, py: 1.5, borderBottom: `1px solid ${theme.palette.divider}` }}>
                   <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
-                    DHM Sessions ({dhmSessions?.length ?? 0})
+                    DHM Sessions ({(dhmSessions as any[])?.length ?? 0})
                   </Typography>
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-                    {Object.entries(sessionStats).map(([status, count]) => (
-                      <Chip
-                        key={status}
-                        label={`${status}: ${count}`}
-                        size="small"
-                        color={getStatusColor(status) === 'error' ? 'error' : getStatusColor(status) === 'success' ? 'success' : 'warning'}
-                        variant="outlined"
-                        sx={{ fontSize: 11 }}
-                      />
-                    ))}
-                  </Box>
+                  {/* Long stats */}
+                  {Object.keys(sessionStats.long).length > 0 && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.75, mb: 0.75 }}>
+                      <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: '#4caf50', flexShrink: 0 }} />
+                      <Typography variant="caption" sx={{ fontWeight: 'bold', color: '#4caf50', mr: 0.5 }}>Long</Typography>
+                      {Object.entries(sessionStats.long).map(([status, count]) => (
+                        <Chip
+                          key={status}
+                          label={`${status}: ${count}`}
+                          size="small"
+                          color={getStatusColor(status) === 'error' ? 'error' : getStatusColor(status) === 'success' ? 'success' : 'warning'}
+                          variant="outlined"
+                          sx={{ fontSize: 11 }}
+                        />
+                      ))}
+                    </Box>
+                  )}
+                  {/* Short stats */}
+                  {Object.keys(sessionStats.short).length > 0 && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.75 }}>
+                      <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: '#f44336', flexShrink: 0 }} />
+                      <Typography variant="caption" sx={{ fontWeight: 'bold', color: '#f44336', mr: 0.5 }}>Short</Typography>
+                      {Object.entries(sessionStats.short).map(([status, count]) => (
+                        <Chip
+                          key={status}
+                          label={`${status}: ${count}`}
+                          size="small"
+                          color={getStatusColor(status) === 'error' ? 'error' : getStatusColor(status) === 'success' ? 'success' : 'warning'}
+                          variant="outlined"
+                          sx={{ fontSize: 11 }}
+                        />
+                      ))}
+                    </Box>
+                  )}
                 </Box>
                 {/* Sessions list */}
                 <Box sx={{ overflowY: 'auto', flex: 1 }}>
-                  {(dhmSessions || []).map((item: any) => (
+                  {((dhmSessions as any[]) || []).map((item: any) => (
                     <Box
                       key={item.id}
+                      onClick={() => {
+                        const targetTs = item?.kline1?.ts;
+                        if (!rawPairId || !targetTs) { return; }
+                        setAnchorSessionsEl(null);
+                        router.push(`/dhm-graph/${rawPairId}/${rawTf}?ts=${targetTs}`);
+                      }}
                       sx={{
                         px: 2,
                         py: 1,
@@ -335,9 +365,20 @@ export default function Header() {
                         justifyContent: 'space-between',
                         borderBottom: `1px solid ${theme.palette.divider}`,
                         '&:last-child': { borderBottom: 0 },
+                        cursor: 'pointer',
+                        '&:hover': { bgcolor: theme.palette.action.hover },
                       }}
                     >
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Box
+                          sx={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: '50%',
+                            flexShrink: 0,
+                            bgcolor: item.direction === 'up' ? '#4caf50' : '#f44336',
+                          }}
+                        />
                         <Typography variant="caption" sx={{ color: theme.palette.text.disabled, minWidth: 28 }}>
                           #{item.id}
                         </Typography>
@@ -350,7 +391,7 @@ export default function Header() {
                       </Typography>
                     </Box>
                   ))}
-                  {!dhmSessions?.length && (
+                  {!(dhmSessions as any[])?.length && (
                     <Box sx={{ px: 2, py: 3, textAlign: 'center' }}>
                       <Typography variant="body2" sx={{ color: theme.palette.text.disabled }}>
                         No sessions

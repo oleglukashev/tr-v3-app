@@ -34,12 +34,24 @@ export default function Map({
   const [currentClusterKline, setCurrentClusterKline] = useState(null);
   const [trigger] = useLazyGetByPairIdAndTfAndTsQuery();
   const [barsLoaded, setBarsLoaded] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const isDefaultTsCenteredRef = useRef(false);
+  const prevDefaultTsRef = useRef<any>(defaultTs);
   const lastQueryTsRef = useRef<number | null>(null);
   const scrollEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const zoomSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasUserInteractedRef = useRef(false);
   const isInitialSyncRef = useRef(true);
+
+  useEffect(() => {
+    const newTs = Number(defaultTs);
+    const prevTs = Number(prevDefaultTsRef.current);
+    prevDefaultTsRef.current = defaultTs;
+    if (!chart || !Number.isFinite(newTs) || newTs === prevTs) { return; }
+    isDefaultTsCenteredRef.current = false;
+    setBarsLoaded(false);
+    setReloadKey((k) => k + 1);
+  }, [chart, defaultTs]);
 
   const getInitialTs = useCallback((): number | null => {
     const nowTs = moment().utc().valueOf();
@@ -467,7 +479,7 @@ export default function Map({
     })
     // setChart(chart);
     // setParentChart(chart);
-  }, [chart, setDataLoaderCallback, setParentChart, tf, pairId, setCurrentClusterKline, onClickClusterHandle, centerChartByDefaultTs, updateTsQueryByVisibleCenter, getInitialTs, scheduleTsQueryUpdate, scheduleZoomSave, saveZoomNow, restoreSavedZoom]);
+  }, [chart, setDataLoaderCallback, setParentChart, tf, pairId, setCurrentClusterKline, onClickClusterHandle, centerChartByDefaultTs, updateTsQueryByVisibleCenter, getInitialTs, scheduleTsQueryUpdate, scheduleZoomSave, saveZoomNow, restoreSavedZoom, reloadKey]);
 
   // get last price by websocket
   useEffect(() => {
