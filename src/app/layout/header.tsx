@@ -9,14 +9,16 @@ import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
 import MenuItem from '@mui/material/MenuItem';
 import {useGetAllQuery} from "@/lib/redux/api/pairApi";
-import {useGetSettingsDhmQuery} from "@/lib/redux/api/dhmApi";
+import {useGetAllDhmQuery, useGetSettingsDhmQuery} from "@/lib/redux/api/dhmApi";
 import Avatar from '@mui/material/Avatar';
 import Menu from '@mui/material/Menu';
 import {usePathname, useRouter, useSearchParams} from "next/navigation";
 import {useMemo} from "react";
-import {Divider, IconButton, Typography} from "@mui/material";
+import {Chip, Divider, IconButton, Popover, Typography} from "@mui/material";
 import Iconify from "@/src/components/iconify";
 import {useGetQuery} from "@/lib/redux/api/balanceApi";
+import Label from "@/src/components/label";
+import moment from "moment";
 
 const StyledToolbar = styled(Toolbar)(({ theme }) => ({
   display: 'flex',
@@ -59,6 +61,9 @@ export default function Header() {
   const handleTfClose = () => {
     setAnchorTfEl(null);
   };
+  const [anchorSessionsEl, setAnchorSessionsEl] = React.useState<null | HTMLElement>(null);
+  const openSessions = Boolean(anchorSessionsEl);
+
   const { data: pairs, isLoading } = useGetAllQuery({});
   const { data: balance, isLoading: isBalanceLoading } = useGetQuery({});
   const { data: settings } = useGetSettingsDhmQuery({});
@@ -104,6 +109,29 @@ export default function Header() {
   }, [pathname]);
   const ts = searchParams.get('ts');
   const showChartSettingsButton = page?.url === 'dhm-graph';
+
+  const rawPairId = pathname.split('/')[2] || null;
+  const rawTf = pathname.split('/')[3] || null;
+  const showSessionsButton = Boolean(rawPairId && rawTf);
+
+  const { data: dhmSessions } = useGetAllDhmQuery(
+    { pairId: rawPairId, tf: rawTf, page: 1, limit: 100 },
+    { skip: !showSessionsButton }
+  );
+
+  const sessionStats = React.useMemo(() => {
+    if (!dhmSessions?.length) return {};
+    return dhmSessions.reduce((acc: Record<string, number>, s: any) => {
+      acc[s.status] = (acc[s.status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [dhmSessions]);
+
+  const getStatusColor = (status: string): 'success' | 'warning' | 'error' | 'default' => {
+    if (status === 'finished') return 'success';
+    if (status === 'created' || status === 'waiting' || status === 'triggered') return 'warning';
+    return 'error';
+  };
 
   const settingsByPairId = useMemo(() => {
     const result: any = {}
@@ -246,6 +274,91 @@ export default function Header() {
               >
                 <Iconify icon="icon-park-outline:chart-line" width={22} />
               </IconButton>
+            </Box>
+          )}
+          {showSessionsButton && (
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <IconButton
+                size="small"
+                aria-label="DHM sessions"
+                onClick={(e) => setAnchorSessionsEl(e.currentTarget)}
+              >
+                <Iconify icon="eva:list-fill" width={22} />
+              </IconButton>
+              <Popover
+                open={openSessions}
+                anchorEl={anchorSessionsEl}
+                onClose={() => setAnchorSessionsEl(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                slotProps={{
+                  paper: {
+                    sx: {
+                      mt: 1,
+                      width: 380,
+                      maxHeight: 520,
+                      overflow: 'hidden',
+                      display: 'flex',
+                      flexDirection: 'column',
+                    },
+                  },
+                }}
+              >
+                {/* Statistics */}
+                <Box sx={{ px: 2, py: 1.5, borderBottom: `1px solid ${theme.palette.divider}` }}>
+                  <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
+                    DHM Sessions ({dhmSessions?.length ?? 0})
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                    {Object.entries(sessionStats).map(([status, count]) => (
+                      <Chip
+                        key={status}
+                        label={`${status}: ${count}`}
+                        size="small"
+                        color={getStatusColor(status) === 'error' ? 'error' : getStatusColor(status) === 'success' ? 'success' : 'warning'}
+                        variant="outlined"
+                        sx={{ fontSize: 11 }}
+                      />
+                    ))}
+                  </Box>
+                </Box>
+                {/* Sessions list */}
+                <Box sx={{ overflowY: 'auto', flex: 1 }}>
+                  {(dhmSessions || []).map((item: any) => (
+                    <Box
+                      key={item.id}
+                      sx={{
+                        px: 2,
+                        py: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        borderBottom: `1px solid ${theme.palette.divider}`,
+                        '&:last-child': { borderBottom: 0 },
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="caption" sx={{ color: theme.palette.text.disabled, minWidth: 28 }}>
+                          #{item.id}
+                        </Typography>
+                        <Label color={getStatusColor(item.status)} sx={{ fontSize: 11 }}>
+                          {item.status}
+                        </Label>
+                      </Box>
+                      <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
+                        {moment(item.createdAt).format('MM-DD HH:mm:ss')}
+                      </Typography>
+                    </Box>
+                  ))}
+                  {!dhmSessions?.length && (
+                    <Box sx={{ px: 2, py: 3, textAlign: 'center' }}>
+                      <Typography variant="body2" sx={{ color: theme.palette.text.disabled }}>
+                        No sessions
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
+              </Popover>
             </Box>
           )}
         </StyledToolbar>
