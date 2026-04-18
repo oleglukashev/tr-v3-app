@@ -483,7 +483,7 @@ export default function Map({
 
   // get last price by websocket
   useEffect(() => {
-    getPriceByWebSocket(chart, pairId, tf, (msg: any): void => {
+    const socket = getPriceByWebSocket(chart, pairId, tf, (msg: any): void => {
       const websocketKlineData = JSON.parse(msg.data);
       if (websocketKlineData.type === 'kline') {
         console.log('Пришла свеча:', websocketKlineData.data)
@@ -519,6 +519,9 @@ export default function Map({
         //chart.resetData(klines);
       }
     })
+    return () => {
+      socket?.close()
+    }
   }, [chart, pairId, tf, updateWebsocketPriceCallback])
 
   // resize map

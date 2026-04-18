@@ -701,8 +701,8 @@ export function downCircleBySize(size: number, onClickCallback: any){
   }
 }
 
-export function getPriceByWebSocket(chart: any, pairId: number, tf: number, callback: any) {
-  if (!chart) { return }
+export function getPriceByWebSocket(chart: any, pairId: number, tf: number, callback: any): WebSocket | null {
+  if (!chart) { return null }
   const socket = new WebSocket('ws://klines.traken-trade.ru/ws/')
 
   socket.onopen = () => {
@@ -716,6 +716,8 @@ export function getPriceByWebSocket(chart: any, pairId: number, tf: number, call
   socket.onmessage = (msg) => {
     callback(msg);
   }
+
+  return socket
 }
 
 export function resizeChart(chart: any) {
