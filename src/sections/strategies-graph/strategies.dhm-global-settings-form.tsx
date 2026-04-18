@@ -1,7 +1,66 @@
-import {FormContainer, MultiSelectElement, CheckboxElement} from "react-hook-form-mui";
-import {Grid} from "@mui/material";
+import {FormContainer, MultiSelectElement, CheckboxElement, useFormContext} from "react-hook-form-mui";
+import {Grid, Checkbox, FormControlLabel, Box, Typography} from "@mui/material";
 import CustomFormButton from "@/src/components/custom-form-button/custom-form-button";
 import Container from "@mui/material/Container";
+
+const DHM_STATUSES = [
+  { id: 'created', label: 'Created' },
+  { id: 'waiting', label: 'Waiting' },
+  { id: 'triggered', label: 'Triggered' },
+  { id: 'finished', label: 'Finished' },
+  { id: 'finished_by_lose', label: 'Finished by lose' },
+  { id: 'finished_by_size', label: 'Finished by size' },
+];
+
+function DhmStatusCheckboxes() {
+  const { setValue, watch } = useFormContext();
+  const dhmVisibleStatuses: string[] = watch('dhmVisibleStatuses') || [];
+
+  const allChecked = DHM_STATUSES.every(s => dhmVisibleStatuses.includes(s.id));
+  const someChecked = DHM_STATUSES.some(s => dhmVisibleStatuses.includes(s.id));
+
+  const handleMasterChange = (checked: boolean) => {
+    setValue('dhmVisibleStatuses', checked ? DHM_STATUSES.map(s => s.id) : [], { shouldDirty: true });
+  };
+
+  const handleStatusChange = (statusId: string, checked: boolean) => {
+    const next = checked
+      ? [...dhmVisibleStatuses, statusId]
+      : dhmVisibleStatuses.filter(s => s !== statusId);
+    setValue('dhmVisibleStatuses', next, { shouldDirty: true });
+  };
+
+  return (
+    <Box>
+      <FormControlLabel
+        label={<Typography variant="body2" fontWeight="bold">Показывать DHM сессии</Typography>}
+        control={
+          <Checkbox
+            size="small"
+            checked={allChecked}
+            indeterminate={someChecked && !allChecked}
+            onChange={(e) => handleMasterChange(e.target.checked)}
+          />
+        }
+      />
+      <Box sx={{ pl: 3, display: 'flex', flexDirection: 'column' }}>
+        {DHM_STATUSES.map(status => (
+          <FormControlLabel
+            key={status.id}
+            label={<Typography variant="body2">{status.label}</Typography>}
+            control={
+              <Checkbox
+                size="small"
+                checked={dhmVisibleStatuses.includes(status.id)}
+                onChange={(e) => handleStatusChange(status.id, e.target.checked)}
+              />
+            }
+          />
+        ))}
+      </Box>
+    </Box>
+  );
+}
 
 export function StrategiesDhmGlobalSettingsForm({ defaultValues, onSubmit }: any) {
   return (
@@ -21,7 +80,7 @@ export function StrategiesDhmGlobalSettingsForm({ defaultValues, onSubmit }: any
               MenuProps={{
                 PaperProps: {
                   style: {
-                    maxHeight: 1000, // устанавливаем большую высоту, чтобы избежать скролла
+                    maxHeight: 1000,
                   },
                 },
               }}
@@ -48,7 +107,7 @@ export function StrategiesDhmGlobalSettingsForm({ defaultValues, onSubmit }: any
               MenuProps={{
                 PaperProps: {
                   style: {
-                    maxHeight: 1000, // устанавливаем большую высоту, чтобы избежать скролла
+                    maxHeight: 1000,
                   },
                 },
               }}
@@ -73,7 +132,7 @@ export function StrategiesDhmGlobalSettingsForm({ defaultValues, onSubmit }: any
             <CheckboxElement name='showSessions' label='Показывать сессии?' />
           </Grid>
           <Grid item size={12}>
-            <CheckboxElement name='showDhm' label='Показывать DHM?' />
+            <DhmStatusCheckboxes />
           </Grid>
         </Grid>
         <CustomFormButton />

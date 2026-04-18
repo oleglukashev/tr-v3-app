@@ -91,7 +91,7 @@ const DEFAULT_GLOBAL_SETTINGS = {
   fppCombine: false,
   showLiquidity: false,
   showSessions: true,
-  showDhm: true,
+  dhmVisibleStatuses: ['created', 'waiting', 'triggered', 'finished', 'finished_by_lose', 'finished_by_size'],
 };
 
 export default function DhmIndexView({ tf, pairId }: any) {
@@ -115,7 +115,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [currentDhmKline, setCurrentDhmKline] = useState(null);
   const [currentClusterKline, setCurrentClusterKline] = useState(null);
   const [globalSettings, setGlobalSettings] = useState<any>(DEFAULT_GLOBAL_SETTINGS);
-  const { fppFilters, statusFilters, fppCombine, showLiquidity, showSessions, showDhm } = globalSettings;
+  const { fppFilters, statusFilters, fppCombine, showLiquidity, showSessions, dhmVisibleStatuses } = globalSettings;
   const getLimitOrderPrice = useCallback((order: any, level: any) => {
     const candidates = [
       order?.data?.price,
@@ -142,7 +142,6 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const { data: fpp } = useGetAllFppQuery({ pairId, page, limit: 5000, tf });
   const { data: dhm } = useGetAllDhmQuery(
     { pairId, tf: 60, statusFilters },
-    { skip: !showDhm },
   );
   const { data: dhmSidebarItems } = useGetAllActiveDhmQuery({ });
   const { data: tdaPoints } = useGetAllQuery({ pairId });
@@ -171,7 +170,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
       fppCombine: !!values.fppCombine,
       showLiquidity: !!values.showLiquidity,
       showSessions: !!values.showSessions,
-      showDhm: !!values.showDhm,
+      dhmVisibleStatuses: values.dhmVisibleStatuses || [],
     };
     setGlobalSettings(nextSettings);
     if (typeof window !== 'undefined') {
@@ -406,12 +405,6 @@ export default function DhmIndexView({ tf, pairId }: any) {
 
   useEffect(() => {
     if (!chart) {return}
-    if (!showDhm) {
-      chart.removeOverlay({ name: `dhmUp` })
-      chart.removeOverlay({ name: `dhmDown` })
-      chart.removeOverlay({ name: `limitOrder` })
-      return;
-    }
     if (!dhm) {return}
     //if (!fpp) {return}
     //if (!clustersAsHashByTs) {return}
@@ -422,6 +415,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
     chart.removeOverlay({ name: `limitOrder` })
 
     for (const item of dhm) {
+      if (!(dhmVisibleStatuses || []).includes(item.status)) { continue; }
       //if (['created', 'waiting', 'triggered', 'finished', 'finished_by_lose', 'finished_by_length'].includes(item.status)) {
         chart.createOverlay({
           name: item.direction === 'up' ? 'dhmUp' : 'dhmDown',
@@ -516,7 +510,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
         setCurrentCuster(null);
       }
     })
-  }, [chart, fpp, dhm, showDhm, onClickClusterHandle, getLimitOrderPrice]);
+  }, [chart, fpp, dhm, dhmVisibleStatuses, onClickClusterHandle, getLimitOrderPrice]);
 
   // useEffect(() => {
   //   if (!chart) {return}

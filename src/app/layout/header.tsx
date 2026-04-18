@@ -14,7 +14,7 @@ import Avatar from '@mui/material/Avatar';
 import Menu from '@mui/material/Menu';
 import {usePathname, useRouter, useSearchParams} from "next/navigation";
 import {useMemo} from "react";
-import {Chip, Divider, IconButton, Popover, Typography} from "@mui/material";
+import {Chip, Divider, IconButton, Popover, Tab, Tabs, Typography} from "@mui/material";
 import Iconify from "@/src/components/iconify";
 import {useGetQuery} from "@/lib/redux/api/balanceApi";
 import Label from "@/src/components/label";
@@ -62,6 +62,7 @@ export default function Header() {
     setAnchorTfEl(null);
   };
   const [anchorSessionsEl, setAnchorSessionsEl] = React.useState<null | HTMLElement>(null);
+  const [sessionsTab, setSessionsTab] = React.useState<string>('all');
   const openSessions = Boolean(anchorSessionsEl);
 
   const { data: pairs, isLoading } = useGetAllQuery({});
@@ -128,6 +129,17 @@ export default function Header() {
       return acc;
     }, empty);
   }, [dhmSessions]);
+
+  const uniqueStatuses = React.useMemo(() => {
+    if (!(dhmSessions as any[])?.length) return [];
+    return Array.from(new Set((dhmSessions as any[]).map((s: any) => s.status)));
+  }, [dhmSessions]);
+
+  const filteredSessions = React.useMemo(() => {
+    const list = (dhmSessions as any[]) || [];
+    if (sessionsTab === 'all') return list;
+    return list.filter((s: any) => s.status === sessionsTab);
+  }, [dhmSessions, sessionsTab]);
 
   const getStatusColor = (status: string): 'success' | 'warning' | 'error' | 'default' => {
     if (status === 'finished') return 'success';
@@ -311,44 +323,58 @@ export default function Header() {
                   <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
                     DHM Sessions ({(dhmSessions as any[])?.length ?? 0})
                   </Typography>
-                  {/* Long stats */}
                   {Object.keys(sessionStats.long).length > 0 && (
                     <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.75, mb: 0.75 }}>
                       <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: '#4caf50', flexShrink: 0 }} />
                       <Typography variant="caption" sx={{ fontWeight: 'bold', color: '#4caf50', mr: 0.5 }}>Long</Typography>
                       {Object.entries(sessionStats.long).map(([status, count]) => (
-                        <Chip
-                          key={status}
-                          label={`${status}: ${count}`}
-                          size="small"
+                        <Chip key={status} label={`${status}: ${count}`} size="small"
                           color={getStatusColor(status) === 'error' ? 'error' : getStatusColor(status) === 'success' ? 'success' : 'warning'}
-                          variant="outlined"
-                          sx={{ fontSize: 11 }}
-                        />
+                          variant="outlined" sx={{ fontSize: 11 }} />
                       ))}
                     </Box>
                   )}
-                  {/* Short stats */}
                   {Object.keys(sessionStats.short).length > 0 && (
                     <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.75 }}>
                       <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: '#f44336', flexShrink: 0 }} />
                       <Typography variant="caption" sx={{ fontWeight: 'bold', color: '#f44336', mr: 0.5 }}>Short</Typography>
                       {Object.entries(sessionStats.short).map(([status, count]) => (
-                        <Chip
-                          key={status}
-                          label={`${status}: ${count}`}
-                          size="small"
+                        <Chip key={status} label={`${status}: ${count}`} size="small"
                           color={getStatusColor(status) === 'error' ? 'error' : getStatusColor(status) === 'success' ? 'success' : 'warning'}
-                          variant="outlined"
-                          sx={{ fontSize: 11 }}
-                        />
+                          variant="outlined" sx={{ fontSize: 11 }} />
                       ))}
                     </Box>
                   )}
                 </Box>
+                {/* Tabs */}
+                <Tabs
+                  value={sessionsTab}
+                  onChange={(_, v) => setSessionsTab(v)}
+                  variant="scrollable"
+                  scrollButtons="auto"
+                  sx={{ borderBottom: `1px solid ${theme.palette.divider}`, minHeight: 36, flexShrink: 0 }}
+                  TabIndicatorProps={{ style: { height: 2 } }}
+                >
+                  <Tab label={`Все (${(dhmSessions as any[])?.length ?? 0})`} value="all" sx={{ minHeight: 36, fontSize: 12, py: 0 }} />
+                  {uniqueStatuses.map((status: string) => {
+                    const count = ((dhmSessions as any[]) || []).filter((s: any) => s.status === status).length;
+                    return (
+                      <Tab key={status} value={status} sx={{ minHeight: 36, fontSize: 12, py: 0 }}
+                        label={
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <span>{status}</span>
+                            <Chip label={count} size="small"
+                              color={getStatusColor(status) === 'error' ? 'error' : getStatusColor(status) === 'success' ? 'success' : 'warning'}
+                              sx={{ height: 16, fontSize: 10, '.MuiChip-label': { px: 0.75 } }} />
+                          </Box>
+                        }
+                      />
+                    );
+                  })}
+                </Tabs>
                 {/* Sessions list */}
                 <Box sx={{ overflowY: 'auto', flex: 1 }}>
-                  {((dhmSessions as any[]) || []).map((item: any) => (
+                  {filteredSessions.map((item: any) => (
                     <Box
                       key={item.id}
                       onClick={() => {
@@ -370,15 +396,7 @@ export default function Header() {
                       }}
                     >
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Box
-                          sx={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: '50%',
-                            flexShrink: 0,
-                            bgcolor: item.direction === 'up' ? '#4caf50' : '#f44336',
-                          }}
-                        />
+                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, bgcolor: item.direction === 'up' ? '#4caf50' : '#f44336' }} />
                         <Typography variant="caption" sx={{ color: theme.palette.text.disabled, minWidth: 28 }}>
                           #{item.id}
                         </Typography>
@@ -391,7 +409,7 @@ export default function Header() {
                       </Typography>
                     </Box>
                   ))}
-                  {!(dhmSessions as any[])?.length && (
+                  {!filteredSessions.length && (
                     <Box sx={{ px: 2, py: 3, textAlign: 'center' }}>
                       <Typography variant="body2" sx={{ color: theme.palette.text.disabled }}>
                         No sessions
