@@ -42,6 +42,7 @@ export default function Map({
   const zoomSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasUserInteractedRef = useRef(false);
   const isInitialSyncRef = useRef(true);
+  const subscribeBarCallbackRef = useRef<((data: any) => void) | null>(null);
 
   useEffect(() => {
     const newTs = Number(defaultTs);
@@ -447,8 +448,12 @@ export default function Map({
             }
           })
       },
-      subscribe: (params) => {},
-      unsubscribe: (params) => {}
+      subscribeBar: ({ callback }: any) => {
+        subscribeBarCallbackRef.current = callback;
+      },
+      unsubscribeBar: () => {
+        subscribeBarCallbackRef.current = null;
+      }
     })
     chart.subscribeAction('onCandleBarClick', async (event) => {
       const bar = chart.getBarSpace();
@@ -486,37 +491,23 @@ export default function Map({
     const socket = getPriceByWebSocket(chart, pairId, tf, (msg: any): void => {
       const websocketKlineData = JSON.parse(msg.data);
       if (websocketKlineData.type === 'kline') {
-        console.log('Пришла свеча:', websocketKlineData.data)
-        console.log('d', websocketKlineData.data.ts);
-        //setCurrentPrice(websocketKlineData?.data?.close);
-        const klines = chart.getDataList();
-        console.log(klines[klines.length - 1].timestamp);
+        const d = websocketKlineData.data;
+        const klineBar = {
+          timestamp: parseInt(d.ts),
+          open:      parseFloat(d.open),
+          high:      parseFloat(d.high),
+          low:       parseFloat(d.low),
+          close:     parseFloat(d.close),
+          volume:    parseFloat(d.volume ?? 0),
+        };
 
-        if (parseInt(websocketKlineData.data.ts) == klines[klines.length - 1].timestamp) {
-          klines[klines.length - 1].close = parseFloat(websocketKlineData?.data?.close);
-          if (klines[klines.length - 1].low > klines[klines.length - 1].close) {
-            klines[klines.length - 1].low = klines[klines.length - 1].close
-          }
-          if (klines[klines.length - 1].high < klines[klines.length - 1].close) {
-            klines[klines.length - 1].high = klines[klines.length - 1].close
-          }
-          if (updateWebsocketPriceCallback) {
-            updateWebsocketPriceCallback();
-          }
-        } else {
-          // klines.push({
-          //   high: parseFloat(websocketKlineData?.data?.high),
-          //   low: parseFloat(websocketKlineData?.data?.low),
-          //   close: parseFloat(websocketKlineData?.data?.close),
-          //   open: parseFloat(websocketKlineData?.data?.open),
-          //   timestamp: parseFloat(websocketKlineData?.data?.ts),
-          // })
+        if (subscribeBarCallbackRef.current) {
+          subscribeBarCallbackRef.current(klineBar);
         }
 
-
-        // resize helps redraw last kline. I don't know why!!!
-        chart.resize();
-        //chart.resetData(klines);
+        if (updateWebsocketPriceCallback) {
+          updateWebsocketPriceCallback();
+        }
       }
     })
     return () => {
