@@ -517,7 +517,8 @@ export default function Map({
 
   // resize map
   useEffect(() => {
-    resizeChart(chart);
+    const cleanup = resizeChart(chart);
+    return () => { cleanup?.() }
   }, [chart]);
 
   return (

@@ -725,10 +725,12 @@ export function resizeChart(chart: any) {
   if (typeof window !== 'undefined') {
     chart._container.style.height = `${window.innerHeight}px`;
     chart.resize();
-    window.addEventListener('resize', () => {
+    const handler = () => {
       chart._container.style.height = `${window.innerHeight}px`;
       chart.resize();
-    })
+    }
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
   }
 }
 
