@@ -182,7 +182,7 @@ export default function MapTools({ chart, pairId, tf, showDrawingElements = true
               position: 'absolute',
               zIndex: 10,
               left: 0,
-              bottom: `${index * 40 + 110}px`,
+              bottom: `${index * 50 + 115}px`,
               background: theme.palette.grey[200],
               opacity: isOpen ? 1 : 0,
               transform: isOpen ? 'scale(1) translateY(0)' : 'scale(0.6) translateY(8px)',
