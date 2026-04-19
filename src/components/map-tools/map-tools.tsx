@@ -90,6 +90,7 @@ export default function MapTools({ chart, pairId, tf, showDrawingElements = true
         id: elementId,
         name: element.type,
         points: element.data?.points || [],
+        styles: { line: { size: 2 } },
         onPressedMoveEnd: (event: any) => {
           updateMutationRef.current({
             id: elementId,
@@ -116,6 +117,7 @@ export default function MapTools({ chart, pairId, tf, showDrawingElements = true
 
     chart.createOverlay({
       name,
+      styles: { line: { size: 2 } },
       onDrawEnd: (event: any) => {
         const { overlay } = event;
         createMutationRef.current({
