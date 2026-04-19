@@ -248,6 +248,13 @@ export default function Map({
       //   { type: 'indicator', content: ['VOL'], options: { order: 10 }  },
       // ]
     });
+    chart.setStyles({
+      separator: {
+        size: 1,
+        color: 'rgba(150, 150, 150, 0.3)',
+        fill: false,
+      },
+    });
     //chart.setPrecision({ price: 5 })
     chart.setSymbol({ ticker: pairId, pricePrecision: 5 })
     chart.setPeriod({ span: tf, type: `minute` })
