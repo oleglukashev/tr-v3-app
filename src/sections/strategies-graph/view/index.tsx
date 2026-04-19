@@ -395,7 +395,11 @@ export default function DhmIndexView({ tf, pairId }: any) {
     }
     const klines = chart.getDataList();
     if (!klines?.length) { return; }
-    chart.createIndicator('VOL', false, { id: 'vol_pane', height: 80 });
+    chart.createIndicator(
+      { name: 'VOL', styles: { lines: [{ size: 0 }, { size: 0 }] } },
+      false,
+      { id: 'vol_pane', height: 80 },
+    );
   }, [chart, klinesUpdatedAt, showVolume]);
 
   const onClickClusterHandle = useCallback(async (e: any, kline: any) => {
