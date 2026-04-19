@@ -29,7 +29,7 @@ import {
   waitingStartKline, noneditableRect, clusterKline,
   upCircleBySize, downCircleBySize, bollingerBands, createdStartKline, dhmUp, dhmDown, heatmapItem,
   londonSession, drawLondonSessionOverlays, mintSession, drawMintSessionOverlays,
-  blueSession, drawBlueSessionOverlays
+  blueSession, drawBlueSessionOverlays, volBarsOnly,
 } from "@/src/helpers/klinecharts.helper";
 import Map from "@/src/components/map/map";
 import {useTheme} from "@mui/material/styles";
@@ -395,11 +395,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
     }
     const klines = chart.getDataList();
     if (!klines?.length) { return; }
-    chart.createIndicator(
-      { name: 'VOL', styles: { lines: [{ size: 0 }, { size: 0 }] } },
-      false,
-      { id: 'vol_pane', height: 80 },
-    );
+    chart.createIndicator('VOL', false, { id: 'vol_pane', height: 80 });
   }, [chart, klinesUpdatedAt, showVolume]);
 
   const onClickClusterHandle = useCallback(async (e: any, kline: any) => {
@@ -613,6 +609,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
   // ));
   registerIndicator(ema);
   registerIndicator(bollingerBands);
+  registerIndicator(volBarsOnly);
   registerFigure(godKline);
   registerOverlay(dhmUp);
   registerOverlay(dhmDown);

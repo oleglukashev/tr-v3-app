@@ -1331,3 +1331,32 @@ function getColorIndex(min, max, current) {
   const ratio = (clamped - min) / (max - min)           // нормализуем в диапазон [0,1]
   return Math.floor(ratio * 9)                          // масштабируем в [0–9]
 }
+
+export const volBarsOnly = {
+  name: 'VOL',
+  shortName: 'VOL',
+  series: 'normal',
+  calcParams: [],
+  precision: 0,
+  figures: [
+    {
+      key: 'volume',
+      title: 'VOL: ',
+      type: 'bar',
+      baseValue: 0,
+      styles: (data: any, indicator: any, defaultStyles: any) => {
+        const klineData = data.current.kLineData;
+        const isUp = klineData &&
+          parseFloat(klineData.close) >= parseFloat(klineData.open);
+        return {
+          style: 'fill',
+          color: isUp
+            ? (defaultStyles?.bars?.[0]?.upColor ?? 'rgba(38, 166, 154, 0.7)')
+            : (defaultStyles?.bars?.[0]?.downColor ?? 'rgba(239, 83, 80, 0.7)'),
+        };
+      },
+    },
+  ],
+  calc: (dataList: any[]) =>
+    dataList.map((kLineData: any) => ({ volume: kLineData.volume ?? 0 })),
+};
