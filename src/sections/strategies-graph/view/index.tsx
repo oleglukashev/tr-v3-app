@@ -374,7 +374,8 @@ export default function DhmIndexView({ tf, pairId }: any) {
     drawHeatmap(chart, klines, orderbooks);
   }, [chart, klinesUpdatedAt, orderbooks, showLiquidity]);
 
-  const SESSION_ZOOM_THRESHOLD = 20;
+  // Sessions are hidden when zoomed out too much (bar.bar < threshold)
+  const SESSION_ZOOM_THRESHOLD = 5;
 
   useEffect((): void => {
     if (!chart) { return; }
@@ -398,8 +399,9 @@ export default function DhmIndexView({ tf, pairId }: any) {
       const bar = chart.getBarSpace();
       const bw = bar?.bar ?? 0;
       console.log('[sessions] bar.bar =', bw);
-      const isZoomedIn = bw > SESSION_ZOOM_THRESHOLD;
-      if (!showSessionsRef.current || isZoomedIn) {
+      // Hide when zoomed out (small bar width), show when zoomed in
+      const isZoomedOut = bw < SESSION_ZOOM_THRESHOLD;
+      if (!showSessionsRef.current || isZoomedOut) {
         chart.removeOverlay({ name: 'londonSession' });
         chart.removeOverlay({ name: 'mintSession' });
         chart.removeOverlay({ name: 'blueSession' });
