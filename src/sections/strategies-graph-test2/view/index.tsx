@@ -392,7 +392,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
         <SpeedIcon />
       </IconButton>
 
-      <MapTools chart={chart} />
+      <MapTools chart={chart} pairId={pairId} tf={tf} />
 
       <CustomDialog
         open={currentDhmKline}

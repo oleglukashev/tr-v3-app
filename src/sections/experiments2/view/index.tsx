@@ -273,7 +273,7 @@ export default function ExperimentsIndexView({ tf, pairId }: any) {
         <SettingsIcon/>
       </IconButton>
 
-      <MapTools chart={chart} />
+      <MapTools chart={chart} pairId={pairId} tf={tf} />
 
       <CustomDialog
         open={openFppFilters}

@@ -91,6 +91,7 @@ const DEFAULT_GLOBAL_SETTINGS = {
   fppCombine: false,
   showLiquidity: false,
   showSessions: true,
+  showDrawingElements: true,
   dhmVisibleStatuses: ['created', 'waiting', 'triggered', 'finished', 'finished_by_lose', 'finished_by_size'],
 };
 
@@ -115,7 +116,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [currentDhmKline, setCurrentDhmKline] = useState(null);
   const [currentClusterKline, setCurrentClusterKline] = useState(null);
   const [globalSettings, setGlobalSettings] = useState<any>(DEFAULT_GLOBAL_SETTINGS);
-  const { fppFilters, statusFilters, fppCombine, showLiquidity, showSessions, dhmVisibleStatuses } = globalSettings;
+  const { fppFilters, statusFilters, fppCombine, showLiquidity, showSessions, showDrawingElements, dhmVisibleStatuses } = globalSettings;
   const getLimitOrderPrice = useCallback((order: any, level: any) => {
     const candidates = [
       order?.data?.price,
@@ -170,6 +171,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
       fppCombine: !!values.fppCombine,
       showLiquidity: !!values.showLiquidity,
       showSessions: !!values.showSessions,
+      showDrawingElements: values.showDrawingElements !== false,
       dhmVisibleStatuses: values.dhmVisibleStatuses || [],
     };
     setGlobalSettings(nextSettings);
@@ -628,7 +630,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
         <SettingsIcon />
       </IconButton>
 
-      <MapTools chart={chart} />
+      <MapTools chart={chart} pairId={pairId} tf={tf} showDrawingElements={showDrawingElements} />
 
       {!isDhmSidebarOpen && (
         <Button
