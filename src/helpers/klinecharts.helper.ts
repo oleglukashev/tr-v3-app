@@ -1345,7 +1345,7 @@ export const volBarsOnly = {
       type: 'bar',
       baseValue: 0,
       styles: (data: any, indicator: any, defaultStyles: any) => {
-        const klineData = data.current.kLineData;
+        const klineData = data?.current?.kLineData;
         const isUp = klineData &&
           parseFloat(klineData.close) >= parseFloat(klineData.open);
         return {
