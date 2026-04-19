@@ -1,145 +1,69 @@
-// import {
-//   type CustomFigureDrawResult,
-//   type DrawTool,
-//   type DrawToolMouseEventParams,
-//   type DrawToolRenderParams
-// } from 'klinecharts'
-
 const longPosition: any = {
   name: 'longPosition',
   totalStep: 4,
   needDefaultPointFigure: true,
   needDefaultXAxisFigure: true,
   needDefaultYAxisFigure: true,
-  // createPointFigures: ({ chart, data, coordinates, bounding, overlay, yAxis }: any) => {
-  //   console.log('data', data);
-  //   const [entryCoord, stopCoord, takeCoord] = coordinates
-  //   const [entryData, stopData, takeData] = data
-  //
-  //   if (!entryCoord || !stopCoord || !takeCoord) return []
-  //
-  //   const risk = Math.abs(entryData.value - stopData.value)
-  //   const reward = Math.abs(takeData.value - entryData.value)
-  //   const rrRatio = reward / risk
+  createPointFigures: ({ chart, coordinates, overlay }: any) => {
+    const points = overlay.points;
 
-  createPointFigures: ({ chart, coordinates, bounding, overlay, yAxis }: any) => {
-    const points = overlay.points
+    if (coordinates.length === 0) return [];
 
-    if (coordinates.length > 0) {
-      let precision = 0
-      // if (yAxis?.isInCandle() ?? true) {
-      //   precision = chart.getPrecision().price
-      // } else {
-      //   const indicators = chart.getIndicators({ paneId: overlay.paneId })
-      //   indicators.forEach((indicator: any) => {
-      //     precision = Math.max(precision, indicator.precision)
-      //   })
-      // }
-      const indicators = chart.getIndicators({ paneId: overlay.paneId })
-      indicators.forEach((indicator: any) => {
-        precision = Math.max(precision, indicator.precision)
-      })
-      const lines: any[] = []
-      const texts: any[] = []
-      const startX = coordinates?.[0]?.x;
-      const endX = coordinates?.[2]?.x;
-      const startTakeY = coordinates?.[0]?.y;
-      const endTakeY = coordinates?.[1]?.y;
-      const startStopY = coordinates?.[1]?.y;
-      const endStopY = coordinates?.[2]?.y;
+    const startX = coordinates?.[0]?.x ?? 0;
+    const endX = coordinates?.[2]?.x ?? coordinates?.[1]?.x ?? startX;
 
-      if (
-        coordinates.length > 2 &&
-        typeof points[0].value === 'number' &&
-        Number.isFinite(points[0].value) &&
-        typeof points[1].value === 'number' &&
-        Number.isFinite(points[1].value)
-      ) {
-        const part1Height = coordinates?.[1]?.y - coordinates?.[0]?.y;
-        const part2Height = coordinates?.[2]?.y - coordinates?.[1]?.y;
+    if (
+      coordinates.length > 2 &&
+      typeof points[0]?.value === 'number' && Number.isFinite(points[0]?.value) &&
+      typeof points[1]?.value === 'number' && Number.isFinite(points[1]?.value) &&
+      typeof points[2]?.value === 'number' && Number.isFinite(points[2]?.value)
+    ) {
+      // Sort by Y: smaller Y = higher on chart = higher price
+      const sorted = [0, 1, 2]
+        .map(i => ({ y: coordinates[i].y, value: points[i].value }))
+        .sort((a, b) => a.y - b.y);
 
-        lines.push({
-          coordinates: [{ x: startX, y: coordinates?.[0]?.y }, { x: endX, y: coordinates?.[0]?.y }],
-          styles: {
-            style: 'fill',
-            color: 'rgba(21,181,21,0.3)',
-          }
-        });
-        texts.push({ x: startX, y: coordinates?.[0]?.y, text: `Take: ${(part1Height / part2Height).toFixed(2)}`, baseline: 'bottom' });
+      // longPosition: take = top (highest price), entry = middle, stop = bottom (lowest price)
+      const takeY  = sorted[0].y;
+      const enterY = sorted[1].y;
+      const stopY  = sorted[2].y;
 
-        lines.push({
-          coordinates: [{ x: startX, y: coordinates?.[1]?.y }, { x: endX, y: coordinates?.[1]?.y }],
-          styles: {
-            style: 'fill',
-            color: 'rgba(21,181,21,0.3)',
-          }
-        });
-        //texts.push({ x: startX, y: coordinates?.[1]?.y, baseline: 'bottom' });
+      const takeZoneH = enterY - takeY;
+      const stopZoneH = stopY  - enterY;
+      const rrRatio   = stopZoneH > 0 ? (takeZoneH / stopZoneH).toFixed(2) : '∞';
 
-        lines.push({
-          coordinates: [{ x: startX, y: coordinates?.[2]?.y }, { x: endX, y: coordinates?.[2]?.y }],
-          styles: {
-            style: 'fill',
-            color: 'rgba(255, 0, 0, 0.5)',
-          }
-        });
-        texts.push({ x: startX, y: coordinates?.[2]?.y, text: 'Stop: 1', baseline: 'bottom' });
-
-
-
-        // points.forEach((point: any, index: number) => {
-        //   const y = coordinates[index].y
-        //   //const value = chart.getDecimalFold().format(chart.getThousandsSeparator().format(((points[1].value ?? 0) + valueDif * percent.value).toFixed(precision)))
-        //   lines.push({
-        //     coordinates: [{ x: startX, y }, { x: endX, y }],
-        //   })
-        //   texts.push({
-        //     x: startX,
-        //     y,
-        //     text: value,
-        //     baseline: 'bottom'
-        //   })
-        // })
-      }
       return [
         {
           type: 'line',
-          attrs: lines
-        }, {
+          attrs: [
+            { coordinates: [{ x: startX, y: takeY  }, { x: endX, y: takeY  }], styles: { style: 'fill', color: 'rgba(21,181,21,0.8)' } },
+            { coordinates: [{ x: startX, y: enterY }, { x: endX, y: enterY }], styles: { style: 'fill', color: 'rgba(21,181,21,0.8)' } },
+            { coordinates: [{ x: startX, y: stopY  }, { x: endX, y: stopY  }], styles: { style: 'fill', color: 'rgba(255,0,0,0.8)'   } },
+          ],
+        },
+        {
           type: 'rect',
-          attrs: {
-            x: startX,
-            y: startTakeY,
-            width: endX - startX,
-            height: endTakeY - startTakeY,
-          },
-          styles: {
-            style: 'fill',
-            color: 'rgba(21,181,21,0.3)',
-          }
-        }, {
+          attrs: { x: startX, y: takeY, width: endX - startX, height: takeZoneH },
+          styles: { style: 'fill', color: 'rgba(21,181,21,0.15)' },
+        },
+        {
           type: 'rect',
-          attrs: {
-            x: startX,
-            y: startStopY,
-            width: endX - startX,
-            height: endStopY - startStopY,
-          },
-          styles: {
-            style: 'fill',
-            color: 'rgba(255, 0, 0, 0.5)',
-          }
-        }, {
+          attrs: { x: startX, y: enterY, width: endX - startX, height: stopZoneH },
+          styles: { style: 'fill', color: 'rgba(255,0,0,0.15)' },
+        },
+        {
           type: 'text',
           isCheckEvent: false,
-          attrs: texts
-        }
-      ]
+          attrs: [
+            { x: startX, y: takeY,  text: `Take: ${rrRatio}`, baseline: 'bottom' },
+            { x: startX, y: stopY,  text: 'Stop: 1',          baseline: 'bottom' },
+          ],
+        },
+      ];
     }
-    return []
-  },
 
-  // Можно передвинуть точки после рисования
+    return [];
+  },
   performMouseMove: true,
 }
 
