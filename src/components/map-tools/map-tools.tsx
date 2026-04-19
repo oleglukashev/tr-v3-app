@@ -180,9 +180,9 @@ export default function MapTools({ chart, pairId, tf, showDrawingElements = true
           <IconButton
             sx={{
               position: 'absolute',
-              zIndex: 1,
+              zIndex: 10,
               left: 0,
-              bottom: `${index * 40 + 62}px`,
+              bottom: `${index * 40 + 110}px`,
               background: theme.palette.grey[200],
               opacity: isOpen ? 1 : 0,
               transform: isOpen ? 'scale(1) translateY(0)' : 'scale(0.6) translateY(8px)',
@@ -207,9 +207,9 @@ export default function MapTools({ chart, pairId, tf, showDrawingElements = true
       <IconButton
         sx={{
           position: 'absolute',
-          zIndex: 2,
+          zIndex: 10,
           left: 0,
-          bottom: '18px',
+          bottom: '65px',
           background: isOpen ? theme.palette.grey[400] : theme.palette.grey[200],
           transition: 'background 0.2s ease, transform 0.2s ease',
           transform: isOpen ? 'rotate(45deg)' : 'rotate(0deg)',
