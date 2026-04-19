@@ -1,6 +1,6 @@
 'use client'
 
-import {useCallback, useEffect, useMemo, useRef, useState} from "react";
+import {useCallback, useEffect, useMemo, useState} from "react";
 import {registerFigure, registerOverlay, registerIndicator} from "klinecharts";
 //import {useGetAllQuery as useGetAllKlinesQuery} from "@/lib/redux/api/klineApi";
 import {
@@ -118,8 +118,6 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [currentClusterKline, setCurrentClusterKline] = useState(null);
   const [globalSettings, setGlobalSettings] = useState<any>(DEFAULT_GLOBAL_SETTINGS);
   const { fppFilters, statusFilters, fppCombine, showLiquidity, showSessions, showVolume, showDrawingElements, dhmVisibleStatuses } = globalSettings;
-  const showSessionsRef = useRef(showSessions);
-  useEffect(() => { showSessionsRef.current = showSessions; }, [showSessions]);
   const getLimitOrderPrice = useCallback((order: any, level: any) => {
     const candidates = [
       order?.data?.price,
@@ -374,9 +372,6 @@ export default function DhmIndexView({ tf, pairId }: any) {
     drawHeatmap(chart, klines, orderbooks);
   }, [chart, klinesUpdatedAt, orderbooks, showLiquidity]);
 
-  // Sessions are hidden when zoomed out too much (bar.bar < threshold)
-  const SESSION_ZOOM_THRESHOLD = 5;
-
   useEffect((): void => {
     if (!chart) { return; }
     if (!showSessions) {
@@ -391,38 +386,6 @@ export default function DhmIndexView({ tf, pairId }: any) {
     drawMintSessionOverlays(chart, klines);
     drawBlueSessionOverlays(chart, klines);
   }, [chart, klinesUpdatedAt, showSessions]);
-
-  useEffect(() => {
-    if (!chart) { return; }
-
-    const handleZoom = () => {
-      const bar = chart.getBarSpace();
-      const bw = bar?.bar ?? 0;
-      console.log('[sessions] bar.bar =', bw);
-      // Hide when zoomed out (small bar width), show when zoomed in
-      const isZoomedOut = bw < SESSION_ZOOM_THRESHOLD;
-      if (!showSessionsRef.current || isZoomedOut) {
-        chart.removeOverlay({ name: 'londonSession' });
-        chart.removeOverlay({ name: 'mintSession' });
-        chart.removeOverlay({ name: 'blueSession' });
-      } else {
-        const klines = chart.getDataList();
-        if (klines?.length) {
-          drawLondonSessionOverlays(chart, klines);
-          drawMintSessionOverlays(chart, klines);
-          drawBlueSessionOverlays(chart, klines);
-        }
-      }
-    };
-
-    chart.subscribeAction('onZoom', handleZoom);
-    chart.subscribeAction('onVisibleRangeChange', handleZoom);
-
-    return () => {
-      try { chart.unsubscribeAction('onZoom', handleZoom); } catch {}
-      try { chart.unsubscribeAction('onVisibleRangeChange', handleZoom); } catch {}
-    };
-  }, [chart]);
 
   useEffect((): void => {
     if (!chart) { return; }
