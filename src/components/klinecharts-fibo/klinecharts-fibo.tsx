@@ -51,7 +51,8 @@ const fibonacciLine2: any = {
       return [
         {
           type: 'line',
-          attrs: lines
+          attrs: lines,
+          styles: { size: 2 },
         }, {
           type: 'text',
           isCheckEvent: false,

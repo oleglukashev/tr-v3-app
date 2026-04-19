@@ -22,7 +22,7 @@ const rect: any = {
               { x: coordinates[0].x, y: coordinates[1].y }
             ]
           },
-          styles: { style: 'stroke_fill' }
+          styles: { style: 'stroke_fill', borderSize: 2 }
         }
       ]
     }
