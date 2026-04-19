@@ -141,7 +141,19 @@ export default function MapTools({ chart, pairId, tf, showDrawingElements = true
     if (!chart) return;
 
     if (!SAVED_DRAWING_TYPES.includes(name)) {
-      chart.createOverlay(name);
+      chart.createOverlay({
+        name,
+        onSelected: (event: any) => {
+          selectedOverlayRef.current = event.overlay;
+          return false;
+        },
+        onDeselected: (event: any) => {
+          if (selectedOverlayRef.current?.id === event.overlay.id) {
+            selectedOverlayRef.current = null;
+          }
+          return false;
+        },
+      });
       return;
     }
 
