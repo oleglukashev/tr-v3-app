@@ -91,6 +91,7 @@ const DEFAULT_GLOBAL_SETTINGS = {
   fppCombine: false,
   showLiquidity: false,
   showSessions: true,
+  showVolume: true,
   showDrawingElements: true,
   dhmVisibleStatuses: ['created', 'waiting', 'triggered', 'finished', 'finished_by_lose', 'finished_by_size'],
 };
@@ -116,7 +117,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [currentDhmKline, setCurrentDhmKline] = useState(null);
   const [currentClusterKline, setCurrentClusterKline] = useState(null);
   const [globalSettings, setGlobalSettings] = useState<any>(DEFAULT_GLOBAL_SETTINGS);
-  const { fppFilters, statusFilters, fppCombine, showLiquidity, showSessions, showDrawingElements, dhmVisibleStatuses } = globalSettings;
+  const { fppFilters, statusFilters, fppCombine, showLiquidity, showSessions, showVolume, showDrawingElements, dhmVisibleStatuses } = globalSettings;
   const getLimitOrderPrice = useCallback((order: any, level: any) => {
     const candidates = [
       order?.data?.price,
@@ -171,6 +172,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
       fppCombine: !!values.fppCombine,
       showLiquidity: !!values.showLiquidity,
       showSessions: !!values.showSessions,
+      showVolume: values.showVolume !== false,
       showDrawingElements: values.showDrawingElements !== false,
       dhmVisibleStatuses: values.dhmVisibleStatuses || [],
     };
@@ -384,6 +386,17 @@ export default function DhmIndexView({ tf, pairId }: any) {
     drawMintSessionOverlays(chart, klines);
     drawBlueSessionOverlays(chart, klines);
   }, [chart, klinesUpdatedAt, showSessions]);
+
+  useEffect((): void => {
+    if (!chart) { return; }
+    if (!showVolume) {
+      chart.removeIndicator('vol_pane', 'VOL');
+      return;
+    }
+    const klines = chart.getDataList();
+    if (!klines?.length) { return; }
+    chart.createIndicator('VOL', false, { id: 'vol_pane', height: 80 });
+  }, [chart, klinesUpdatedAt, showVolume]);
 
   const onClickClusterHandle = useCallback(async (e: any, kline: any) => {
     console.log('e', e);
