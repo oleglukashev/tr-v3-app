@@ -506,7 +506,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
     //}
 
     // add EMA200 trand indicator
-    chart.createIndicator('EMA', false, { id: 'candle_pane' });
+    //chart.createIndicator('EMA', false, { id: 'candle_pane' });
     //chart.createIndicator('RSI');
     //chart.createIndicator('BOLL', false, { id: 'candle_pane' });
     // chart.createIndicator('CUM_DELTA', true);
