@@ -63,10 +63,30 @@ export default function MapTools({ chart, pairId, tf, showDrawingElements = true
   const createMutationRef = useRef(createMutation);
   const updateMutationRef = useRef(updateMutation);
   const removeMutationRef = useRef(removeMutation);
+  const selectedOverlayRef = useRef<any>(null);
 
   useEffect(() => { createMutationRef.current = createMutation; }, [createMutation]);
   useEffect(() => { updateMutationRef.current = updateMutation; }, [updateMutation]);
   useEffect(() => { removeMutationRef.current = removeMutation; }, [removeMutation]);
+
+  // Delete selected overlay on Backspace / Delete key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Backspace' && e.key !== 'Delete') return;
+      const active = document.activeElement;
+      if (
+        active &&
+        (active.tagName === 'INPUT' ||
+          active.tagName === 'TEXTAREA' ||
+          (active as HTMLElement).isContentEditable)
+      ) return;
+      if (!chart || !selectedOverlayRef.current) return;
+      chart.removeOverlay({ id: selectedOverlayRef.current.id });
+      selectedOverlayRef.current = null;
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [chart]);
 
   // Remove drawing overlays when toggle is turned off
   useEffect(() => {
@@ -91,6 +111,16 @@ export default function MapTools({ chart, pairId, tf, showDrawingElements = true
         name: element.type,
         points: element.data?.points || [],
         styles: { line: { size: 2 } },
+        onSelected: (event: any) => {
+          selectedOverlayRef.current = event.overlay;
+          return false;
+        },
+        onDeselected: (event: any) => {
+          if (selectedOverlayRef.current?.id === event.overlay.id) {
+            selectedOverlayRef.current = null;
+          }
+          return false;
+        },
         onPressedMoveEnd: (event: any) => {
           updateMutationRef.current({
             id: elementId,
@@ -118,6 +148,16 @@ export default function MapTools({ chart, pairId, tf, showDrawingElements = true
     chart.createOverlay({
       name,
       styles: { line: { size: 2 } },
+      onSelected: (event: any) => {
+        selectedOverlayRef.current = event.overlay;
+        return false;
+      },
+      onDeselected: (event: any) => {
+        if (selectedOverlayRef.current?.id === event.overlay.id) {
+          selectedOverlayRef.current = null;
+        }
+        return false;
+      },
       onDrawEnd: (event: any) => {
         const { overlay } = event;
         createMutationRef.current({
