@@ -24,7 +24,7 @@ import {
   useRemoveMutation,
 } from "@/lib/redux/api/drawingElementsApi";
 
-const SAVED_DRAWING_TYPES = ['priceLine', 'horizontalStraightLine', 'rayLine', 'rect'];
+const SAVED_DRAWING_TYPES = ['priceLine', 'horizontalStraightLine', 'rayLine', 'rect', 'priceChannelLine'];
 
 const TOOLBAR_ITEMS = [
   { name: 'longPosition', icon: LongIcon },
