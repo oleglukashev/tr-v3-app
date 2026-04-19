@@ -1,8 +1,8 @@
 'use client'
 
 import { registerOverlay } from "klinecharts";
-import { IconButton } from "@mui/material";
-import { useEffect, useRef, useCallback } from "react";
+import { IconButton, Tooltip } from "@mui/material";
+import { useEffect, useRef, useCallback, useState } from "react";
 import fibonacciLine2 from "@/src/components/klinecharts-fibo/klinecharts-fibo";
 import longPosition from "@/src/components/klinecharts-long/klinecharts-long";
 import LongIcon from "@/src/components/icons/long-icon";
@@ -37,8 +37,18 @@ const TOOLBAR_ITEMS = [
   { name: 'rayLine', icon: RayIcon },
 ];
 
+const DrawToolsIcon = () => (
+  <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 19l7-7 3 3-7 7-3-3z" />
+    <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+    <path d="M2 2l7.586 7.586" />
+    <circle cx="11" cy="11" r="2" />
+  </svg>
+);
+
 export default function MapTools({ chart, pairId, tf, showDrawingElements = true }: any) {
   const theme = useTheme();
+  const [isOpen, setIsOpen] = useState(false);
 
   const [createMutation] = useCreateMutation();
   const [updateMutation] = useUpdateMutation();
@@ -164,20 +174,54 @@ export default function MapTools({ chart, pairId, tf, showDrawingElements = true
       left: '18px',
       zIndex: 1,
     }}>
+      {/* Tool buttons — appear above the toggle when open */}
       {TOOLBAR_ITEMS.map((item, index) => (
-        <IconButton key={item.name} sx={{
+        <Tooltip key={item.name} title={item.name} placement="right">
+          <IconButton
+            sx={{
+              position: 'absolute',
+              zIndex: 1,
+              left: 0,
+              bottom: `${index * 40 + 62}px`,
+              background: theme.palette.grey[200],
+              opacity: isOpen ? 1 : 0,
+              transform: isOpen ? 'scale(1) translateY(0)' : 'scale(0.6) translateY(8px)',
+              transition: `opacity 0.18s ease ${index * 0.03}s, transform 0.18s ease ${index * 0.03}s`,
+              pointerEvents: isOpen ? 'auto' : 'none',
+              '&:hover': {
+                background: theme.palette.grey[300],
+              },
+            }}
+            aria-label={item.name}
+            onClick={() => {
+              handleDrawingClick(item.name);
+              setIsOpen(false);
+            }}
+          >
+            <item.icon />
+          </IconButton>
+        </Tooltip>
+      ))}
+
+      {/* Toggle button */}
+      <IconButton
+        sx={{
           position: 'absolute',
-          zIndex: 1,
+          zIndex: 2,
           left: 0,
-          bottom: `${index * 45 + 65}px`,
-          background: theme.palette.grey[200],
+          bottom: '18px',
+          background: isOpen ? theme.palette.grey[400] : theme.palette.grey[200],
+          transition: 'background 0.2s ease, transform 0.2s ease',
+          transform: isOpen ? 'rotate(45deg)' : 'rotate(0deg)',
           '&:hover': {
             background: theme.palette.grey[300],
-          }
-        }} aria-label={item.name} onClick={() => handleDrawingClick(item.name)}>
-          <item.icon />
-        </IconButton>
-      ))}
+          },
+        }}
+        aria-label="drawing-tools-toggle"
+        onClick={() => setIsOpen(prev => !prev)}
+      >
+        <DrawToolsIcon />
+      </IconButton>
     </Box>
   )
 }
