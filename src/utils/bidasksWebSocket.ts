@@ -5,7 +5,7 @@ export function getBidasksWebSocketUrl(): string {
   if (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_TR_BIDASKS_WS_URL) {
     return String(process.env.NEXT_PUBLIC_TR_BIDASKS_WS_URL).replace(/\/$/, '');
   }
-  return 'ws://bidasks.traken-trade.ru/ws';
+  return 'ws://bidasks.traken-trade.ru/ws/';
 }
 
 /** Cluster TF in bidasks service (AppService, Map clusters fetch). */
