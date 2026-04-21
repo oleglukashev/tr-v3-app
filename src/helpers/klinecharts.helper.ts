@@ -772,6 +772,9 @@ export function clusterKline(data?: any) {
       const candleLeftX = coordinates[0].x - halfBar;
       const blockX = candleLeftX + leftInset;
       const frameX = candleLeftX + leftInset;
+      const showClusterText = Number.isFinite(barWidth) ? barWidth > 80 : true;
+      const cellTextSize = Math.max(10, Math.min(20, Math.floor(clusterLevelHeight * 0.70)));
+      const cellTextPaddingLeft = Math.max(2, Math.floor(blockWidth * 0.04));
       //const maxVolume = 0;
       let i = 0;
       const poc = pocFromCluster(data);
@@ -830,30 +833,32 @@ export function clusterKline(data?: any) {
             borderSize: 0,
           }
         })
-        result.push({
-          type: 'text',
-          attrs: {
-            x: blockX,
-            y: coordinates[0].y + (i * clusterLevelHeight),
-            text,
-            width: blockWidth,
-            height: clusterLevelHeight - 1,
-            //baseline: 'hanging',
-          },
-          styles: {
-            backgroundColor: 'transparent',
-            color: poc.v === v ? '#000' : bgColorIndex > 3 ? '#fff' : '#757575',
-            size: height > 200 ? height > 350 ? 10 : 8 : 7,
-            weight: 'bold',
-            borderColor: '#fff',
-            //borderStyle: 'solid',
-            borderSize: 0,
-            paddingTop: 0,
-            paddingBottom: 0,
-            paddingLeft: 0,
-            paddingRight: 0,
-          }
-        })
+        if (showClusterText) {
+          result.push({
+            type: 'text',
+            attrs: {
+              x: blockX,
+              y: coordinates[0].y + (i * clusterLevelHeight) + (clusterLevelHeight / 2),
+              text,
+              width: blockWidth,
+              height: clusterLevelHeight - 1,
+              baseline: 'middle',
+            },
+            styles: {
+              backgroundColor: 'transparent',
+              color: poc.v === v ? '#000' : bgColorIndex > 3 ? '#fff' : '#757575',
+              size: cellTextSize,
+              weight: 'bold',
+              borderColor: '#fff',
+              //borderStyle: 'solid',
+              borderSize: 0,
+              paddingTop: 0,
+              paddingBottom: 0,
+              paddingLeft: cellTextPaddingLeft,
+              paddingRight: 0,
+            }
+          })
+        }
 
         if (priceDelta && sortedData[index + 1] && parseFloat(item.p) < (priceDelta + parseFloat(sortedData[index + 1].p))) {
           result.push({
@@ -873,30 +878,32 @@ export function clusterKline(data?: any) {
               borderSize: 0,
             }
           })
-          result.push({
-            type: 'text',
-            attrs: {
-              x: blockX,
-              y: coordinates[0].y + (i * clusterLevelHeight) + 1,
-              text,
-              width: blockWidth,
-              height: clusterLevelHeight - 1,
-              //baseline: 'hanging',
-            },
-            styles: {
-              backgroundColor: 'transparent',
-              color: '#757575',
-              size: height > 200 ? height > 350 ? 10 : 8 : 7,
-              weight: 'bold',
-              borderColor: '#fff',
-              //borderStyle: 'solid',
-              borderSize: 0,
-              paddingTop: 0,
-              paddingBottom: 0,
-              paddingLeft: 0,
-              paddingRight: 0,
-            }
-          })
+          if (showClusterText) {
+            result.push({
+              type: 'text',
+              attrs: {
+                x: blockX,
+                y: coordinates[0].y + (i * clusterLevelHeight) + 1 + (clusterLevelHeight / 2),
+                text,
+                width: blockWidth,
+                height: clusterLevelHeight - 1,
+                baseline: 'middle',
+              },
+              styles: {
+                backgroundColor: 'transparent',
+                color: '#757575',
+                size: cellTextSize,
+                weight: 'bold',
+                borderColor: '#fff',
+                //borderStyle: 'solid',
+                borderSize: 0,
+                paddingTop: 0,
+                paddingBottom: 0,
+                paddingLeft: cellTextPaddingLeft,
+                paddingRight: 0,
+              }
+            })
+          }
         }
 
         i++;
@@ -932,30 +939,32 @@ export function clusterKline(data?: any) {
           borderSize: 0,
         }
       })
-      result.push({
-        type: 'text',
-        attrs: {
-          x: blockX,
-          y: coordinates[0].y + ((keyCount + 1) * clusterLevelHeight),
-          text,
-          width: blockWidth,
-          height: clusterLevelHeight - 1,
-          //baseline: 'hanging',
-        },
-        styles: {
-          backgroundColor: 'transparent',
-          color: '#fff',
-          size: height > 200 ? height > 350 ? 10 : 8 : 7,
-          weight: 'bold',
-          borderColor: '#fff',
-          //borderStyle: 'solid',
-          borderSize: 0,
-          paddingTop: 0,
-          paddingBottom: 0,
-          paddingLeft: 0,
-          paddingRight: 0,
-        }
-      })
+      if (showClusterText) {
+        result.push({
+          type: 'text',
+          attrs: {
+            x: blockX,
+            y: coordinates[0].y + ((keyCount + 1) * clusterLevelHeight) + (clusterLevelHeight / 2),
+            text,
+            width: blockWidth,
+            height: clusterLevelHeight - 1,
+            baseline: 'middle',
+          },
+          styles: {
+            backgroundColor: 'transparent',
+            color: '#fff',
+            size: cellTextSize,
+            weight: 'bold',
+            borderColor: '#fff',
+            //borderStyle: 'solid',
+            borderSize: 0,
+            paddingTop: 0,
+            paddingBottom: 0,
+            paddingLeft: cellTextPaddingLeft,
+            paddingRight: 0,
+          }
+        })
+      }
       return result;
     }
   }
