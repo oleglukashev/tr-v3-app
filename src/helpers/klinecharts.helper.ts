@@ -743,7 +743,7 @@ export function clusterKline(data?: any) {
   return {
     name: 'clusterKline',
     lock: true,
-    createPointFigures: ({ coordinates, overlay }: any) => {
+    createPointFigures: ({ chart, coordinates, overlay }: any) => {
       const data = overlay?.extendData ?? closureData;
       if (!data || typeof data !== 'object') {
         return [];
@@ -756,15 +756,31 @@ export function clusterKline(data?: any) {
       const result = [];
       const height = coordinates[1].y - coordinates[0].y;
       const clusterLevelHeight = height / keyCount;
+      // Keep old visual ratio at bar=25 (~63px) and scale with zoom.
+      const barSpace = chart?.getBarSpace?.();
+      const barWidth = Number(barSpace?.bar);
+      const halfBar = Number.isFinite(Number(barSpace?.halfBar))
+        ? Number(barSpace.halfBar)
+        : (Number.isFinite(barWidth) ? barWidth / 2 : 0);
+      // Keep 15% left inset and 10% right inset relative to candle width.
+      const leftInset = Number.isFinite(barWidth) ? barWidth * 0.15 : 0;
+      const rightInset = Number.isFinite(barWidth) ? barWidth * 0.10 : 0;
+      const blockWidth = Number.isFinite(barWidth)
+        ? Math.max(1, barWidth - leftInset - rightInset)
+        : 63;
+      const frameWidth = blockWidth;
+      const candleLeftX = coordinates[0].x - halfBar;
+      const blockX = candleLeftX + leftInset;
+      const frameX = candleLeftX + leftInset;
       //const maxVolume = 0;
       let i = 0;
       const poc = pocFromCluster(data);
       result.push({
         type: 'rect',
         attrs: {
-          x: coordinates[0].x - 18,
+          x: frameX,
           y: coordinates[0].y - 1,
-          width: 65,
+          width: frameWidth,
           height: height + 2,
         },
         styles: {
@@ -800,9 +816,9 @@ export function clusterKline(data?: any) {
         result.push({
           type: 'rect',
           attrs: {
-            x: coordinates[0].x - 17,
+            x: blockX,
             y: coordinates[0].y + (i * clusterLevelHeight),
-            width: 63,
+            width: blockWidth,
             height: clusterLevelHeight,
           },
           styles: {
@@ -817,10 +833,10 @@ export function clusterKline(data?: any) {
         result.push({
           type: 'text',
           attrs: {
-            x: coordinates[0].x - 17,
+            x: blockX,
             y: coordinates[0].y + (i * clusterLevelHeight),
             text,
-            width: 63,
+            width: blockWidth,
             height: clusterLevelHeight - 1,
             //baseline: 'hanging',
           },
@@ -843,9 +859,9 @@ export function clusterKline(data?: any) {
           result.push({
             type: 'rect',
             attrs: {
-              x: coordinates[0].x - 17,
+              x: blockX,
               y: coordinates[0].y + (i * clusterLevelHeight) + 1,
-              width: 63,
+              width: blockWidth,
               height: clusterLevelHeight,
             },
             styles: {
@@ -860,10 +876,10 @@ export function clusterKline(data?: any) {
           result.push({
             type: 'text',
             attrs: {
-              x: coordinates[0].x - 17,
+              x: blockX,
               y: coordinates[0].y + (i * clusterLevelHeight) + 1,
               text,
-              width: 63,
+              width: blockWidth,
               height: clusterLevelHeight - 1,
               //baseline: 'hanging',
             },
@@ -902,9 +918,9 @@ export function clusterKline(data?: any) {
       result.push({
         type: 'rect',
         attrs: {
-          x: coordinates[0].x - 17,
+          x: blockX,
           y: coordinates[0].y + ((keyCount + 1) * clusterLevelHeight),
-          width: 63,
+          width: blockWidth,
           height: clusterLevelHeight,
         },
         styles: {
@@ -919,10 +935,10 @@ export function clusterKline(data?: any) {
       result.push({
         type: 'text',
         attrs: {
-          x: coordinates[0].x - 17,
+          x: blockX,
           y: coordinates[0].y + ((keyCount + 1) * clusterLevelHeight),
           text,
-          width: 63,
+          width: blockWidth,
           height: clusterLevelHeight - 1,
           //baseline: 'hanging',
         },
