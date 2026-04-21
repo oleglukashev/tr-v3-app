@@ -1,8 +1,8 @@
 'use client'
 
 import {useCallback, useEffect, useRef, useState} from "react";
-import {clusterKline, getPriceByWebSocket, resizeChart} from "@/src/helpers/klinecharts.helper";
-import {dispose, init, registerOverlay} from "klinecharts";
+import {getPriceByWebSocket, resizeChart} from "@/src/helpers/klinecharts.helper";
+import {dispose, init} from "klinecharts";
 import moment from "moment";
 import {useLazyGetByPairIdAndTfAndTsQuery} from "@/lib/redux/api/clusterApi";
 
@@ -16,6 +16,16 @@ const KLINE_TS_SIZE_BY_TF = {
   1440: 86400000,
 };
 
+const KLINES_API_BASE = 'http://klines.traken-trade.ru/api/v1';
+const BIDASKS_CLUSTERS_TF = 5;
+
+function getBidasksClustersApiBase(): string {
+  if (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_TR_CLUSTERS_DOMAIN) {
+    return String(process.env.NEXT_PUBLIC_TR_CLUSTERS_DOMAIN).replace(/\/$/, '');
+  }
+  return 'http://bidasks.traken-trade.ru/api/v1';
+}
+
 export default function Map({
                               id,
                               children,
@@ -27,6 +37,9 @@ export default function Map({
                               setParentChart,
                               updateWebsocketPriceCallback,
                               setDataLoaderCallback,
+                              onBidasksChunk,
+                              /** When false, skip HTTP clusters fetch (e.g. chart setting «Показывать bidasks» off). */
+                              enableBidasksClusters,
                               clustersAsHashByTs
 }: any) {
   const [chart, setChart] = useState<any>(null);
@@ -43,6 +56,10 @@ export default function Map({
   const hasUserInteractedRef = useRef(false);
   const isInitialSyncRef = useRef(true);
   const subscribeBarCallbackRef = useRef<((data: any) => void) | null>(null);
+  const onBidasksChunkRef = useRef<typeof onBidasksChunk>(onBidasksChunk);
+  onBidasksChunkRef.current = onBidasksChunk;
+  const enableBidasksClustersRef = useRef(enableBidasksClusters !== false);
+  enableBidasksClustersRef.current = enableBidasksClusters !== false;
 
   useEffect(() => {
     const newTs = Number(defaultTs);
@@ -226,16 +243,18 @@ export default function Map({
     //console.log('currentClusterKline', currentClusterKline);
     const res = await trigger({ pairId, tf, ts: kline.timestamp });
     if (res?.data?.data) {
-      setCurrentCuster(res.data.data);
-      registerOverlay(clusterKline(res?.data?.data))
+      const row = res.data.data;
+      setCurrentCuster(row);
+      const priceMap = row?.data && typeof row.data === 'object' ? row.data : row;
       chart.removeOverlay({ name: `clusterKline` });
       chart.createOverlay({
         name: 'clusterKline',
+        extendData: priceMap,
         points: [
-          {timestamp: kline.timestamp, value: parseFloat(kline.high)},
-          {timestamp: kline.timestamp, value: parseFloat(kline.low)}
+          { timestamp: kline.timestamp, value: parseFloat(kline.high) },
+          { timestamp: kline.timestamp, value: parseFloat(kline.low) },
         ],
-      })
+      });
     }
     // console.log(currentClusterKline);
     // console.log('e', e);
@@ -395,8 +414,13 @@ export default function Map({
           return;
         }
 
-        fetch(`http://klines.traken-trade.ru/api/v1/klines?pairId=${pairId}&startTs=${startTs}&endTs=${endTs}&limit=1000&tf=${tf}`)
-          .then(res => res.json())
+        const rangeStart = Math.min(startTs, endTs);
+        const rangeEnd = Math.max(startTs, endTs);
+
+        const klinesUrl = `${KLINES_API_BASE}/klines?pairId=${pairId}&startTs=${startTs}&endTs=${endTs}&limit=1000&tf=${tf}`;
+
+        const klinesPromise = fetch(klinesUrl)
+          .then((res) => res.json())
           .then((responseData: any[]) => {
             const mapped = responseData.map((item: any) => ({
               id: item.id,
@@ -419,16 +443,45 @@ export default function Map({
             const firstTs = Number(chartData?.[0]?.timestamp);
             const lastTs = Number(chartData?.[chartData.length - 1]?.timestamp);
             if (loadType === 'forward' && Number.isFinite(firstTs)) {
-              // Klinecharts "forward" means loading older candles to the left.
               return normalized.filter((item: any) => Number(item.timestamp) < firstTs);
             }
             if ((loadType === 'backward' || loadType === 'update') && Number.isFinite(lastTs)) {
-              // Prevent infinite loops caused by repeatedly returning the edge candle.
               return normalized.filter((item: any) => Number(item.timestamp) > lastTs);
             }
             return normalized;
-          })
-          .then(dataList => {
+          });
+
+        const bidasksUrl = `${getBidasksClustersApiBase()}/clusters?${new URLSearchParams({
+          pairId: String(pairId),
+          tf: String(BIDASKS_CLUSTERS_TF),
+          startTs: String(rangeStart),
+          endTs: String(rangeEnd),
+          limit: '10000',
+          page: '1',
+        })}`;
+
+        const bidasksPromise =
+          enableBidasksClustersRef.current &&
+          typeof onBidasksChunkRef.current === 'function'
+            ? fetch(bidasksUrl)
+                .then((r) => r.json())
+                .catch(() => null)
+            : Promise.resolve(null);
+
+        Promise.all([klinesPromise, bidasksPromise])
+          .then(([dataList, clustersRaw]) => {
+            if (
+              enableBidasksClustersRef.current &&
+              clustersRaw != null &&
+              typeof onBidasksChunkRef.current === 'function'
+            ) {
+              const items = Array.isArray(clustersRaw) ? clustersRaw : clustersRaw?.items ?? [];
+              try {
+                onBidasksChunkRef.current(items);
+              } catch {
+                /* ignore */
+              }
+            }
             const hasMore = dataList.length > 0;
             data.callback(dataList, hasMore);
             if (loadType === 'init' && initialTs && !isDefaultTsCenteredRef.current) {
@@ -449,9 +502,8 @@ export default function Map({
                 isInitialSyncRef.current = false;
               }, 250);
             }
-            //setDataLoaderCallback();
             if (setDataLoaderCallback) {
-             setDataLoaderCallback();
+              setDataLoaderCallback();
             }
           })
       },

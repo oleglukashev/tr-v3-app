@@ -6,7 +6,8 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -22,7 +23,7 @@
     "@mui/styled-engine-sc": "^7.1.0",
     "@mui/x-data-grid-pro": "^8.27.0",
     "@reduxjs/toolkit": "1.9.5",
-    "klinecharts": "^10.0.0-alpha8",
+    "klinecharts": "10.0.0-alpha8",
     "klines-footprint-patterns": "oleglukashev/klines-footprint-patterns#672f65d",
     "lodash": "^4.17.21",
     "moment": "^2.30.1",
@@ -49,6 +50,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "15.2.3",
+    "patch-package": "^8.0.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   },

@@ -1,6 +1,6 @@
 'use client'
 
-import {useCallback, useEffect, useMemo, useState} from "react";
+import {useCallback, useEffect, useState} from "react";
 import {registerFigure, registerOverlay, registerIndicator} from "klinecharts";
 //import {useGetAllQuery as useGetAllKlinesQuery} from "@/lib/redux/api/klineApi";
 import {
@@ -19,7 +19,8 @@ import {StrategiesDhmSettingsDialog} from "@/src/sections/strategies-graph/strat
 import {StrategiesDhmFppFiltersDialog} from "@/src/sections/strategies-graph/strategies.dhm-global-settings-dialog";
 import {StrategiesDhmKlineFppsDialog} from "@/src/sections/strategies-graph/strategies.dhm-kline-fpps-dialog";
 import moment from "moment/moment";
-import {clearFppPatterns, drawFppPatterns, drawHeatmap} from "@/src/utils/klinecharts";
+import {clearFppPatterns, drawClusterKlinesForVisible, drawFppPatterns} from "@/src/utils/klinecharts";
+import { BIDASK_CLUSTER_TF, getBidasksWebSocketUrl } from "@/src/utils/bidasksWebSocket";
 import MapTools from "@/src/components/map-tools/map-tools";
 import {
   confirmedCircle,
@@ -27,7 +28,7 @@ import {
   finishedStartKline,
   godKline, triggeredStartKline,
   waitingStartKline, noneditableRect, clusterKline,
-  upCircleBySize, downCircleBySize, bollingerBands, createdStartKline, dhmUp, dhmDown, heatmapItem,
+  upCircleBySize, downCircleBySize, bollingerBands, createdStartKline, dhmUp, dhmDown,
   londonSession, drawLondonSessionOverlays, mintSession, drawMintSessionOverlays,
   blueSession, drawBlueSessionOverlays,
 } from "@/src/helpers/klinecharts.helper";
@@ -52,7 +53,6 @@ import {useGetAllQuery} from "@/lib/redux/api/tdaPointsApi";
 import {useGetAllQuery as useGetAllOrdersQuery} from "@/lib/redux/api/orderApi";
 import {useGetQuery as useGetPositionQuery} from "@/lib/redux/api/positionApi";
 import {useRouter, useSearchParams} from "next/navigation";
-import { useGetAllQuery as useGetAllOrderbooksQuery } from "@/lib/redux/api/orderbookApi";
 import {
   Button,
   Chip,
@@ -65,6 +65,14 @@ import {
   Typography,
 } from "@mui/material";
 import {useGetSettingsDhmByPairIdAndTfQuery} from "@/lib/redux/api/dhmApi";
+
+function bidaskClusterHasLevels(it: any): boolean {
+  const d = it?.data;
+  if (d == null || typeof d !== 'object') {
+    return false;
+  }
+  return Object.keys(d).length > 0;
+}
 
 const DEFAULT_GLOBAL_SETTINGS = {
   fppFilters: [
@@ -89,7 +97,8 @@ const DEFAULT_GLOBAL_SETTINGS = {
     'finished_by_trend_finish'
   ],
   fppCombine: false,
-  showLiquidity: false,
+  showLiquidity: true,
+  showBidasks: true,
   showSessions: true,
   showVolume: true,
   showDrawingElements: true,
@@ -117,7 +126,18 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [currentDhmKline, setCurrentDhmKline] = useState(null);
   const [currentClusterKline, setCurrentClusterKline] = useState(null);
   const [globalSettings, setGlobalSettings] = useState<any>(DEFAULT_GLOBAL_SETTINGS);
-  const { fppFilters, statusFilters, fppCombine, showLiquidity, showSessions, showVolume, showDrawingElements, dhmVisibleStatuses } = globalSettings;
+  const {
+    fppFilters,
+    statusFilters,
+    fppCombine,
+    showLiquidity,
+    showBidasks: showBidasksSetting,
+    showSessions,
+    showVolume,
+    showDrawingElements,
+    dhmVisibleStatuses,
+  } = globalSettings;
+  const showBidasks = showBidasksSetting ?? showLiquidity ?? true;
   const getLimitOrderPrice = useCallback((order: any, level: any) => {
     const candidates = [
       order?.data?.price,
@@ -134,10 +154,96 @@ export default function DhmIndexView({ tf, pairId }: any) {
     return null;
   }, []);
   //const { data: klines } = useGetAllKlinesQuery({ pairId, page, limit: 5000, tf });
-  const { data: orderbooks } = useGetAllOrderbooksQuery(
-    { pairId, page, limit: 5000, tf: 5 },
-    { skip: !showLiquidity },
-  );
+  const [bidaskClustersByTs, setBidaskClustersByTs] = useState<Record<string, any>>({});
+  const [heatmapTick, setHeatmapTick] = useState(0);
+
+  const onBidasksChunk = useCallback((items: any[]) => {
+    setBidaskClustersByTs((prev) => {
+      const next = { ...prev };
+      for (const it of items) {
+        const key = String(it.ts);
+        const merged = { ...it, ts: key };
+        // Later / overlapping fetches often return [] or empty `data` for the same ts; do not wipe a good cluster.
+        if (!bidaskClusterHasLevels(merged) && bidaskClusterHasLevels(prev[key])) {
+          continue;
+        }
+        next[key] = merged;
+      }
+      return next;
+    });
+    setHeatmapTick((t) => t + 1);
+  }, []);
+
+  useEffect(() => {
+    setBidaskClustersByTs({});
+  }, [pairId, tf]);
+
+  useEffect(() => {
+    if (!showBidasks || pairId == null) {
+      return;
+    }
+    const wsUrl = getBidasksWebSocketUrl();
+    let socket: WebSocket | null = null;
+    let cancelled = false;
+    let reconnectTimer: number | undefined;
+
+    const connect = () => {
+      if (cancelled) {
+        return;
+      }
+      try {
+        socket = new WebSocket(wsUrl);
+      } catch {
+        reconnectTimer = window.setTimeout(connect, 3000);
+        return;
+      }
+      socket.onopen = () => {
+        socket?.send(
+          JSON.stringify({
+            type: 'subscribeBidasksByPairIdAndTf',
+            pairId: Number(pairId),
+            tf: BIDASK_CLUSTER_TF,
+          }),
+        );
+      };
+      socket.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data);
+          if (msg.type !== 'bidasks' || !Array.isArray(msg.data)) {
+            return;
+          }
+          const items = msg.data.filter(
+            (b: any) =>
+              Number(b.pairId) === Number(pairId) && Number(b.tf) === BIDASK_CLUSTER_TF,
+          );
+          if (!items.length) {
+            return;
+          }
+          onBidasksChunk(items);
+        } catch {
+          /* ignore */
+        }
+      };
+      socket.onclose = () => {
+        if (!cancelled) {
+          reconnectTimer = window.setTimeout(connect, 3000);
+        }
+      };
+      socket.onerror = () => {
+        socket?.close();
+      };
+    };
+
+    connect();
+
+    return () => {
+      cancelled = true;
+      if (reconnectTimer !== undefined) {
+        window.clearTimeout(reconnectTimer);
+      }
+      socket?.close();
+    };
+  }, [showBidasks, pairId, onBidasksChunk]);
   const { data: dhmSettings } = useGetSettingsDhmByPairIdAndTfQuery({ tf, pairId });
   const [trigger] = useLazyGetByPairIdAndTfAndTsQuery();
   //const { data: position, refetch: refetchPosition } = useGetQuery(pairId);
@@ -171,6 +277,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
       statusFilters: values.statusFilters,
       fppCombine: !!values.fppCombine,
       showLiquidity: !!values.showLiquidity,
+      showBidasks: !!values.showBidasks,
       showSessions: !!values.showSessions,
       showVolume: values.showVolume !== false,
       showDrawingElements: values.showDrawingElements !== false,
@@ -220,6 +327,8 @@ export default function DhmIndexView({ tf, pairId }: any) {
             ...DEFAULT_GLOBAL_SETTINGS,
             ...parsed,
             fppCombine: !!parsed.fppCombine,
+            showBidasks:
+              parsed.showBidasks ?? parsed.showLiquidity ?? DEFAULT_GLOBAL_SETTINGS.showBidasks,
           };
           setGlobalSettings(nextSettings);
           localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(nextSettings));
@@ -344,6 +453,9 @@ export default function DhmIndexView({ tf, pairId }: any) {
     if (!klinesUpdatedAt) {
       setKlinesUpdatedAt(moment().utc().valueOf());
     }
+    // Redraw bidask cluster columns after klines apply; delayed tick catches restoreSavedZoom (~60ms) in Map.
+    setHeatmapTick((t) => t + 1);
+    window.setTimeout(() => setHeatmapTick((t) => t + 1), 160);
     if (fpp && drawFppPatterns) {
       const klines = chart.getDataList();
       drawFppPatterns(chart, klines, fpp, (tdaPoints || []), fppFilters, fppCombine);
@@ -360,17 +472,25 @@ export default function DhmIndexView({ tf, pairId }: any) {
     drawFppPatterns(chart, klines, fpp, (tdaPoints || []), fppFilters, fppCombine);
   }, [chart, dhm, fpp, tdaPoints, fppFilters, fppCombine, klinesUpdatedAt]);
 
+  useEffect(() => {
+    if (!chart) { return; }
+    const bumpClusterOverlays = () => setHeatmapTick((t) => t + 1);
+    chart.subscribeAction?.('onZoom', bumpClusterOverlays);
+    chart.subscribeAction?.('onScroll', bumpClusterOverlays);
+    return () => {
+      chart.unsubscribeAction?.('onZoom', bumpClusterOverlays);
+      chart.unsubscribeAction?.('onScroll', bumpClusterOverlays);
+    };
+  }, [chart]);
+
   useEffect((): void => {
     if (!chart) { return; }
-    if (!showLiquidity) {
-      chart.removeOverlay({ name: `heatmapItem` });
+    if (!showBidasks) {
+      chart.removeOverlay({ name: 'clusterKline' });
       return;
     }
-    const klines = chart.getDataList();
-    if (!klines?.length) { return }
-    if (!orderbooks?.length) { return; }
-    drawHeatmap(chart, klines, orderbooks);
-  }, [chart, klinesUpdatedAt, orderbooks, showLiquidity]);
+    drawClusterKlinesForVisible(chart, bidaskClustersByTs);
+  }, [chart, klinesUpdatedAt, bidaskClustersByTs, showBidasks, heatmapTick]);
 
   useEffect((): void => {
     if (!chart) { return; }
@@ -413,16 +533,18 @@ export default function DhmIndexView({ tf, pairId }: any) {
     //console.log('currentClusterKline', currentClusterKline);
     const res = await trigger({ pairId, tf, ts: kline.timestamp });
     if (res?.data?.data) {
-      setCurrentCuster(res.data.data);
-      registerOverlay(clusterKline(res?.data?.data))
+      const row = res.data.data;
+      setCurrentCuster(row);
+      const priceMap = row?.data && typeof row.data === 'object' ? row.data : row;
       chart.removeOverlay({ name: `clusterKline` });
       chart.createOverlay({
         name: 'clusterKline',
+        extendData: priceMap,
         points: [
-          {timestamp: kline.timestamp, value: parseFloat(kline.high)},
-          {timestamp: kline.timestamp, value: parseFloat(kline.low)}
+          { timestamp: kline.timestamp, value: parseFloat(kline.high) },
+          { timestamp: kline.timestamp, value: parseFloat(kline.low) },
         ],
-      })
+      });
     }
     // console.log(currentClusterKline);
     // console.log('e', e);
@@ -587,8 +709,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
   registerOverlay(createdStartKline);
   registerOverlay(rect);
   registerOverlay(noneditableRect);
-  registerOverlay(clusterKline);
-  registerOverlay(heatmapItem());
+  registerOverlay(clusterKline());
   registerOverlay(londonSession);
   registerOverlay(mintSession);
   registerOverlay(blueSession);
@@ -636,6 +757,8 @@ export default function DhmIndexView({ tf, pairId }: any) {
           //drawCreatePosition();
         }}
         setDataLoaderCallback={setDataLoaderCallback}
+        onBidasksChunk={onBidasksChunk}
+        enableBidasksClusters={showBidasks}
       />
 
       <IconButton key='settings' sx={{

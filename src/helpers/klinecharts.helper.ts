@@ -734,19 +734,28 @@ export function resizeChart(chart: any) {
   }
 }
 
-export function clusterKline(data: any) {
-  console.log('data', data);
-  const sortedData = sortByPrice(Object.values(data), false);
-  console.log('sortedData', sortedData);
+/**
+ * Cluster column overlay. Pass price-level map via `extendData` on each `createOverlay`,
+ * or use legacy `clusterKline(priceMap)` once to bake data into the template.
+ */
+export function clusterKline(data?: any) {
+  const closureData = data;
   return {
     name: 'clusterKline',
     lock: true,
-    createPointFigures: ({coordinates}) => {
+    createPointFigures: ({ coordinates, overlay }: any) => {
+      const data = overlay?.extendData ?? closureData;
+      if (!data || typeof data !== 'object') {
+        return [];
+      }
+      const keyCount = Object.keys(data).length;
+      if (!keyCount) {
+        return [];
+      }
+      const sortedData = sortByPrice(Object.values(data), false);
       const result = [];
-      // let levels = [];
-      // let texts = [];
       const height = coordinates[1].y - coordinates[0].y;
-      const clusterLevelHeight = height / Object.keys(data).length;
+      const clusterLevelHeight = height / keyCount;
       //const maxVolume = 0;
       let i = 0;
       const poc = pocFromCluster(data);
@@ -894,7 +903,7 @@ export function clusterKline(data: any) {
         type: 'rect',
         attrs: {
           x: coordinates[0].x - 17,
-          y: coordinates[0].y + ((Object.keys(data).length + 1) * clusterLevelHeight),
+          y: coordinates[0].y + ((keyCount + 1) * clusterLevelHeight),
           width: 63,
           height: clusterLevelHeight,
         },
@@ -911,7 +920,7 @@ export function clusterKline(data: any) {
         type: 'text',
         attrs: {
           x: coordinates[0].x - 17,
-          y: coordinates[0].y + ((Object.keys(data).length + 1) * clusterLevelHeight),
+          y: coordinates[0].y + ((keyCount + 1) * clusterLevelHeight),
           text,
           width: 63,
           height: clusterLevelHeight - 1,
@@ -936,19 +945,40 @@ export function clusterKline(data: any) {
   }
 }
 
+/** Bidasks DB stores per-price cells as `{ p, v, bv, sv }`; legacy may use raw numbers. */
+function clusterPriceLevelVolume(raw: unknown): number {
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return raw;
+  }
+  if (raw && typeof raw === 'object' && 'v' in (raw as object)) {
+    const n = Number((raw as { v: unknown }).v);
+    return Number.isFinite(n) ? n : 0;
+  }
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
 export function heatmapItem() {
   return {
     name: 'heatmapItem',
     lock: true,
     createPointFigures: ({ chart, overlay, coordinates }) => {
       const data = overlay?.extendData;
+      if (!data || typeof data !== 'object') {
+        return [];
+      }
+      const keys = Object.keys(data);
+      if (!keys.length) {
+        return [];
+      }
       const height = coordinates[1].y - coordinates[0].y;
-      const clusterLevelHeight = height / Object.keys(data).length;
+      const clusterLevelHeight = height / keys.length;
 
       let maxValue = 0;
-      for (const item of Object.keys(data)) {
-        if (data[item] > maxValue) {
-          maxValue = data[item];
+      for (const item of keys) {
+        const vol = clusterPriceLevelVolume(data[item]);
+        if (vol > maxValue) {
+          maxValue = vol;
         }
       }
 
@@ -961,8 +991,8 @@ export function heatmapItem() {
 
       //const a = chart.convertFromPixel(point)
 
-      for (const [index, item] of Object.keys(data).sort().entries()) {
-        const v = data[item.toString()];
+      for (const [index, item] of keys.sort().entries()) {
+        const v = clusterPriceLevelVolume(data[item.toString()]);
 
         const bgColorIndex = getColorIndex(0, maxValue, v);
 

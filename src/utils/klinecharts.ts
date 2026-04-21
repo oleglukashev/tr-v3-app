@@ -3,22 +3,80 @@ import {useCallback} from "react";
 export function drawHeatmap(chart: any, klines: any[], orderbooks: any[]) {
   chart.removeOverlay({ name: `heatmapItem` });
   for (const orderbook of orderbooks) {
-    if (parseInt(orderbook.ts) < 1769956974000) {
+    const raw = orderbook?.data;
+    if (!raw || typeof raw !== 'object') {
+      continue;
+    }
+    const prices = Object.keys(raw)
+      .map((item) => parseFloat(item))
+      .filter((n) => Number.isFinite(n))
+      .sort((a, b) => a - b);
+    if (prices.length < 1) {
       continue;
     }
 
-    const prices = Object.keys(orderbook.data)
-      .map(item => parseFloat(item))
-      .sort()
-
     const points =
-      [prices[0], prices[prices.length - 1]]
-      .map(item => { return { timestamp: parseInt(orderbook.ts), value: item }})
+      [prices[0], prices[prices.length - 1]].map((item) => ({
+        timestamp: parseInt(String(orderbook.ts), 10),
+        value: item,
+      }));
 
     chart.createOverlay({
       name: `heatmapItem`,
-      extendData: orderbook.data,
+      extendData: raw,
       points,
+    });
+  }
+}
+
+/** Same bar threshold as Map cluster click / zoom cleanup. */
+const MIN_BAR_FOR_CLUSTER_KLINE_AUTO = 25;
+
+/**
+ * Draw `clusterKline` for every visible candle that has bidask cluster data (via `extendData`).
+ */
+export function drawClusterKlinesForVisible(
+  chart: any,
+  bidaskClustersByTs: Record<string, any>,
+  options?: { minBarWidth?: number },
+): void {
+  if (!chart) {
+    return;
+  }
+  chart.removeOverlay({ name: 'clusterKline' });
+  const minBar = options?.minBarWidth ?? MIN_BAR_FOR_CLUSTER_KLINE_AUTO;
+  const bar = chart.getBarSpace?.()?.bar;
+  if (!Number.isFinite(bar) || bar < minBar) {
+    return;
+  }
+  const dataList = chart.getDataList?.();
+  const visibleRange = chart.getVisibleRange?.();
+  if (!dataList?.length || !visibleRange) {
+    return;
+  }
+  const visibleFrom = Number.isFinite(visibleRange.realFrom)
+    ? visibleRange.realFrom
+    : visibleRange.from;
+  const visibleToExclusive = Number.isFinite(visibleRange.realTo)
+    ? visibleRange.realTo
+    : visibleRange.to;
+  for (let i = 0; i < dataList.length; i += 1) {
+    if (i < visibleFrom || i >= visibleToExclusive) {
+      continue;
+    }
+    const kline = dataList[i];
+    const cluster = bidaskClustersByTs[String(kline.timestamp)];
+    const raw = cluster?.data;
+    if (!raw || typeof raw !== 'object' || !Object.keys(raw).length) {
+      continue;
+    }
+    chart.createOverlay({
+      name: 'clusterKline',
+      extendData: raw,
+      points: [
+        { timestamp: kline.timestamp, value: parseFloat(kline.high) },
+        { timestamp: kline.timestamp, value: parseFloat(kline.low) },
+      ],
     });
   }
 }
