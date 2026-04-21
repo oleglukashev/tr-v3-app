@@ -31,6 +31,8 @@ export function drawHeatmap(chart: any, klines: any[], orderbooks: any[]) {
 
 /** Same bar threshold as Map cluster click / zoom cleanup. */
 const MIN_BAR_FOR_CLUSTER_KLINE_AUTO = 25;
+/** Bidasks clusters are loaded with tf=5 minutes. */
+const BIDASK_CLUSTER_STEP_MS = 5 * 60 * 1000;
 
 /**
  * Draw `clusterKline` for every visible candle that has bidask cluster data (via `extendData`).
@@ -65,7 +67,10 @@ export function drawClusterKlinesForVisible(
       continue;
     }
     const kline = dataList[i];
-    const cluster = bidaskClustersByTs[String(kline.timestamp)];
+    const exactKey = String(kline.timestamp);
+    const bucketTs = Math.floor(Number(kline.timestamp) / BIDASK_CLUSTER_STEP_MS) * BIDASK_CLUSTER_STEP_MS;
+    const bucketKey = String(bucketTs);
+    const cluster = bidaskClustersByTs[exactKey] ?? bidaskClustersByTs[bucketKey];
     const raw = cluster?.data;
     if (!raw || typeof raw !== 'object' || !Object.keys(raw).length) {
       continue;
