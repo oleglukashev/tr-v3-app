@@ -1,7 +1,7 @@
 'use client'
 
 import { registerOverlay } from "klinecharts";
-import { IconButton, Tooltip } from "@mui/material";
+import { IconButton } from "@mui/material";
 import { useEffect, useRef, useCallback, useState, type MutableRefObject } from "react";
 import fibonacciLine2 from "@/src/components/klinecharts-fibo/klinecharts-fibo";
 import longPosition from "@/src/components/klinecharts-long/klinecharts-long";
@@ -696,8 +696,8 @@ export default function MapTools({
     >
       {/* Tool buttons — appear above the toggle when open */}
       {TOOLBAR_ITEMS.map((item, index) => (
-        <Tooltip key={item.name} title={item.name} placement="right">
-          <IconButton
+        <IconButton
+            key={item.name}
             sx={{
               ...TOOLBAR_ICON_SX,
               position: "absolute",
@@ -723,7 +723,6 @@ export default function MapTools({
           >
             <item.icon />
           </IconButton>
-        </Tooltip>
       ))}
 
       {/* Показать/скрыть фигуры — последняя снизу в веере, над кистью */}
@@ -739,11 +738,7 @@ export default function MapTools({
           pointerEvents: isOpen ? "auto" : "none",
         }}
       >
-        <Tooltip
-          title={drawingsVisible ? "Скрыть фигуры рисования на графике" : "Показать фигуры рисования на графике"}
-          placement="right"
-        >
-          <IconButton
+        <IconButton
             sx={{
               ...TOOLBAR_ICON_SX,
               background: theme.palette.grey[200],
@@ -766,7 +761,6 @@ export default function MapTools({
           >
             <EyeIcon />
           </IconButton>
-        </Tooltip>
       </Box>
 
       {/* Магнит — в том же выпадающем веере, что и инструменты; вправо — слабый/сильный */}
@@ -784,16 +778,6 @@ export default function MapTools({
         }}
       >
         <Box sx={{ position: "relative", display: "flex", alignItems: "center" }}>
-          <Tooltip
-            title={
-              strongMagnetOn
-                ? "Сильный магнит (открыть выбор)"
-                : weakMagnetOn
-                  ? "Слабый магнит (открыть выбор)"
-                  : "Магнит выкл. — открыть выбор"
-            }
-            placement="right"
-          >
             <IconButton
               aria-expanded={magnetSubmenuOpen}
               aria-haspopup="listbox"
@@ -817,7 +801,6 @@ export default function MapTools({
             >
               {strongMagnetOn ? <StrongMagnetIcon /> : <WeakMagnetIcon />}
             </IconButton>
-          </Tooltip>
           <Box
             role="listbox"
             aria-label="Режим магнита"
@@ -844,7 +827,6 @@ export default function MapTools({
               zIndex: 20,
             }}
           >
-            <Tooltip title="Слабый магнит" placement="top">
               <IconButton
                 role="option"
                 aria-selected={weakMagnetOn}
@@ -867,8 +849,6 @@ export default function MapTools({
               >
                 <WeakMagnetIcon />
               </IconButton>
-            </Tooltip>
-            <Tooltip title="Сильный магнит" placement="top">
               <IconButton
                 role="option"
                 aria-selected={strongMagnetOn}
@@ -891,7 +871,6 @@ export default function MapTools({
               >
                 <StrongMagnetIcon />
               </IconButton>
-            </Tooltip>
           </Box>
         </Box>
       </Box>
@@ -911,10 +890,6 @@ export default function MapTools({
         }}
       >
         <Box sx={{ position: "relative", display: "flex", alignItems: "center" }}>
-          <Tooltip
-            title="Лонг / шорт (открыть выбор)"
-            placement="right"
-          >
             <IconButton
               aria-expanded={longShortSubmenuOpen}
               aria-haspopup="listbox"
@@ -937,7 +912,6 @@ export default function MapTools({
             >
               {lastLongOrShort === "long" ? <LongIcon /> : <ShortIcon />}
             </IconButton>
-          </Tooltip>
           <Box
             role="listbox"
             aria-label="Лонг или шорт"
@@ -964,7 +938,6 @@ export default function MapTools({
               zIndex: 20,
             }}
           >
-            <Tooltip title="longPosition" placement="top">
               <IconButton
                 role="option"
                 aria-label="longPosition"
@@ -984,8 +957,6 @@ export default function MapTools({
               >
                 <LongIcon />
               </IconButton>
-            </Tooltip>
-            <Tooltip title="shortPosition" placement="top">
               <IconButton
                 role="option"
                 aria-label="shortPosition"
@@ -1005,7 +976,6 @@ export default function MapTools({
               >
                 <ShortIcon />
               </IconButton>
-            </Tooltip>
           </Box>
         </Box>
       </Box>
@@ -1025,10 +995,6 @@ export default function MapTools({
         }}
       >
         <Box sx={{ position: "relative", display: "flex", alignItems: "center" }}>
-          <Tooltip
-            title="Параллель / канал (открыть выбор)"
-            placement="right"
-          >
             <IconButton
               aria-expanded={parChannelSubmenuOpen}
               aria-haspopup="listbox"
@@ -1051,7 +1017,6 @@ export default function MapTools({
             >
               <ParChannelMainIcon />
             </IconButton>
-          </Tooltip>
           <Box
             role="listbox"
             aria-label="Параллель или ценовой канал"
@@ -1078,7 +1043,6 @@ export default function MapTools({
               zIndex: 20,
             }}
           >
-            <Tooltip title="parallelStraightLine" placement="top">
               <IconButton
                 role="option"
                 aria-label="parallelStraightLine"
@@ -1098,8 +1062,6 @@ export default function MapTools({
               >
                 <ParLineIcon />
               </IconButton>
-            </Tooltip>
-            <Tooltip title="priceChannelLine" placement="top">
               <IconButton
                 role="option"
                 aria-label="priceChannelLine"
@@ -1119,7 +1081,6 @@ export default function MapTools({
               >
                 <ParChannelIcon />
               </IconButton>
-            </Tooltip>
           </Box>
         </Box>
       </Box>
@@ -1139,7 +1100,6 @@ export default function MapTools({
         }}
       >
         <Box sx={{ position: "relative", display: "flex", alignItems: "flex-start" }}>
-          <Tooltip title="Линии и сегмент (открыть выбор)" placement="right">
             <IconButton
               aria-expanded={linesSubmenuOpen}
               aria-haspopup="listbox"
@@ -1162,7 +1122,6 @@ export default function MapTools({
             >
               <LineSegmentMainIcon />
             </IconButton>
-          </Tooltip>
           <Box
             role="listbox"
             aria-label="Линии и сегмент"
@@ -1189,8 +1148,8 @@ export default function MapTools({
             }}
           >
             {LINE_AND_SEGMENT_ITEMS.map((item) => (
-              <Tooltip key={item.name} title={item.name} placement="top">
-                <IconButton
+              <IconButton
+                  key={item.name}
                   role="option"
                   aria-label={item.name}
                   onClick={() => {
@@ -1209,7 +1168,6 @@ export default function MapTools({
                 >
                   <item.icon />
                 </IconButton>
-              </Tooltip>
             ))}
           </Box>
         </Box>
@@ -1228,8 +1186,7 @@ export default function MapTools({
           pointerEvents: isOpen ? "auto" : "none",
         }}
       >
-        <Tooltip title="fibonacciLine2" placement="right">
-          <IconButton
+        <IconButton
             aria-label="fibonacciLine2"
             onClick={() => {
               setMagnetSubmenuOpen(false);
@@ -1250,7 +1207,6 @@ export default function MapTools({
           >
             <FiboIcon />
           </IconButton>
-        </Tooltip>
       </Box>
 
       {/* Кнопка-кисть */}
