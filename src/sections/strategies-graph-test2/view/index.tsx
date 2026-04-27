@@ -1,6 +1,6 @@
 'use client'
 
-import {useCallback, useEffect, useMemo, useRef, useState} from "react";
+import {useCallback, useEffect, useMemo, useState} from "react";
 import {registerFigure, registerOverlay, registerIndicator} from "klinecharts";
 //import {useGetAllQuery as useGetAllKlinesQuery} from "@/lib/redux/api/klineApi";
 import {
@@ -22,6 +22,7 @@ import {StrategiesDhmKlineFppsDialog} from "@/src/sections/strategies-graph-test
 import moment from "moment/moment";
 import {clearFppPatterns, drawFppPatterns} from "@/src/utils/klinecharts";
 import MapTools from "@/src/components/map-tools/map-tools";
+import { useMapDrawingOverlayRef } from "@/src/components/map-tools/use-map-drawing-overlay-ref";
 import {
   confirmedCircle,
   ema, finishedByLoseStartKline,
@@ -60,7 +61,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [currentDhm, setCurrentDhm] = useState(null);
   const [currentDhmKline, setCurrentDhmKline] = useState(null);
   const [currentClusterKline, setCurrentClusterKline] = useState(null);
-  const mapDrawingOverlayActiveRef = useRef(false);
+  const { mapDrawingOverlayActiveRef, onDrawingInteractionChange } = useMapDrawingOverlayRef();
   const [fppFilters, setFppFilters] = useState<any[]>([
     'interception',
     'reverse',
@@ -400,9 +401,8 @@ export default function DhmIndexView({ tf, pairId }: any) {
         chart={chart}
         pairId={pairId}
         tf={tf}
-        onDrawingInteractionChange={(active) => {
-          mapDrawingOverlayActiveRef.current = active;
-        }}
+        showDrawingElements
+        onDrawingInteractionChange={onDrawingInteractionChange}
       />
 
       <CustomDialog

@@ -12,6 +12,7 @@ import {StrategiesDhmKlineFppsDialog} from "@/src/sections/strategies-graph/stra
 import { useGetAllQuery as useGetAllClustersQuery } from "@/lib/redux/api/clusterApi";
 import {clusterPocRow, klineDirection} from "klines-footprint-patterns";
 import MapTools from "@/src/components/map-tools/map-tools";
+import { useMapDrawingOverlayRef } from "@/src/components/map-tools/use-map-drawing-overlay-ref";
 import Map from "@/src/components/map/map";
 import {downCircleBySize, ema, getPriceByWebSocket, upCircleBySize} from "@/src/helpers/klinecharts.helper";
 import {useTheme} from "@mui/material/styles";
@@ -19,6 +20,7 @@ import {direction} from "@/src/utils/klinecharts";
 
 export default function ExperimentsIndexView({ tf, pairId }: any) {
   const theme = useTheme();
+  const mapDrawingOverlay = useMapDrawingOverlayRef();
   const FPP_FILTERS_STORAGE_KEY = `fppFilter${pairId}`;
   const [chart, setChart] = useState<any>(null);
   const [page, setPage] = useState<number>(1);
@@ -289,7 +291,13 @@ export default function ExperimentsIndexView({ tf, pairId }: any) {
         <SettingsIcon/>
       </IconButton>
 
-      <MapTools chart={chart} pairId={pairId} tf={tf} />
+      <MapTools
+        chart={chart}
+        pairId={pairId}
+        tf={tf}
+        showDrawingElements
+        onDrawingInteractionChange={mapDrawingOverlay.onDrawingInteractionChange}
+      />
 
       <CustomDialog
         open={openFppFilters}

@@ -1,5 +1,5 @@
 const LongIcon = () => (
-  <svg className="icon-overlay" width={28} height={28} viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
+  <svg className="icon-overlay" width={22} height={22} viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
       <path d="
         M13.1889,6C12.98303,6.5826,12.42741,7,11.7743,7
         C11.12119,7,10.56557,6.5826,10.35965,6L3.5,6

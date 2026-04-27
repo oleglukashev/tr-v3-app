@@ -1,6 +1,6 @@
 'use client'
 
-import {useCallback, useEffect, useMemo, useRef, useState} from "react";
+import {useCallback, useEffect, useMemo, useState} from "react";
 import {registerFigure, registerOverlay, registerIndicator} from "klinecharts";
 //import {useGetAllQuery as useGetAllKlinesQuery} from "@/lib/redux/api/klineApi";
 import {
@@ -20,6 +20,7 @@ import {StrategiesDhmKlineFppsDialog} from "@/src/sections/strategies-graph2/str
 import moment from "moment/moment";
 import {clearFppPatterns, drawFppPatterns, drawHeatmap} from "@/src/utils/klinecharts";
 import MapTools from "@/src/components/map-tools/map-tools";
+import { useMapDrawingOverlayRef } from "@/src/components/map-tools/use-map-drawing-overlay-ref";
 import {
   confirmedCircle,
   ema, finishedByLoseStartKline,
@@ -92,7 +93,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [currentDhm, setCurrentDhm] = useState(null);
   const [currentDhmKline, setCurrentDhmKline] = useState(null);
   const [currentClusterKline, setCurrentClusterKline] = useState(null);
-  const mapDrawingOverlayActiveRef = useRef(false);
+  const { mapDrawingOverlayActiveRef, onDrawingInteractionChange } = useMapDrawingOverlayRef();
   const [globalSettings, setGlobalSettings] = useState<any>(DEFAULT_GLOBAL_SETTINGS);
   const { fppFilters, statusFilters, fppCombine, showLiquidity } = globalSettings;
   //const { data: klines } = useGetAllKlinesQuery({ pairId, page, limit: 5000, tf });
@@ -551,9 +552,8 @@ export default function DhmIndexView({ tf, pairId }: any) {
         chart={chart}
         pairId={pairId}
         tf={tf}
-        onDrawingInteractionChange={(active) => {
-          mapDrawingOverlayActiveRef.current = active;
-        }}
+        showDrawingElements
+        onDrawingInteractionChange={onDrawingInteractionChange}
       />
 
       <CustomDialog

@@ -1,6 +1,6 @@
 'use client'
 
-import {useCallback, useEffect, useRef, useState} from "react";
+import {useCallback, useEffect, useState} from "react";
 import {registerFigure, registerOverlay, registerIndicator} from "klinecharts";
 //import {useGetAllQuery as useGetAllKlinesQuery} from "@/lib/redux/api/klineApi";
 import {
@@ -22,6 +22,7 @@ import moment from "moment/moment";
 import {clearFppPatterns, drawClusterKlinesForVisible, drawFppPatterns} from "@/src/utils/klinecharts";
 import { BIDASK_CLUSTER_TF, getBidasksWebSocketUrl } from "@/src/utils/bidasksWebSocket";
 import MapTools from "@/src/components/map-tools/map-tools";
+import { useMapDrawingOverlayRef } from "@/src/components/map-tools/use-map-drawing-overlay-ref";
 import {
   confirmedCircle,
   ema, finishedByLoseStartKline,
@@ -124,7 +125,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [currentDhm, setCurrentDhm] = useState(null);
   const [currentDhmKline, setCurrentDhmKline] = useState(null);
   const [currentClusterKline, setCurrentClusterKline] = useState(null);
-  const mapDrawingOverlayActiveRef = useRef(false);
+  const { mapDrawingOverlayActiveRef, onDrawingInteractionChange } = useMapDrawingOverlayRef();
   const [globalSettings, setGlobalSettings] = useState<any>(DEFAULT_GLOBAL_SETTINGS);
   const {
     fppFilters,
@@ -759,9 +760,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
         pairId={pairId}
         tf={tf}
         showDrawingElements={showDrawingElements}
-        onDrawingInteractionChange={(active) => {
-          mapDrawingOverlayActiveRef.current = active;
-        }}
+        onDrawingInteractionChange={onDrawingInteractionChange}
       />
 
       {!isDhmSidebarOpen && (
