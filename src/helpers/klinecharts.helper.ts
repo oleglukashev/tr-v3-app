@@ -762,8 +762,8 @@ export function clusterKline(data?: any) {
       const halfBar = Number.isFinite(Number(barSpace?.halfBar))
         ? Number(barSpace.halfBar)
         : (Number.isFinite(barWidth) ? barWidth / 2 : 0);
-      // Keep 15% left inset and 10% right inset relative to candle width.
-      const leftInset = Number.isFinite(barWidth) ? barWidth * 0.15 : 0;
+      // Keep 20% left inset and 10% right inset relative to candle width.
+      const leftInset = Number.isFinite(barWidth) ? barWidth * 0.20 : 0;
       const rightInset = Number.isFinite(barWidth) ? barWidth * 0.10 : 0;
       const blockWidth = Number.isFinite(barWidth)
         ? Math.max(1, barWidth - leftInset - rightInset)

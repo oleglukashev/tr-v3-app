@@ -13,6 +13,7 @@ import fiboIcon from "@/src/components/icons/fibo"
 import priceLineIcon from "@/src/components/icons/price-line"
 import horLineIcon from "@/src/components/icons/hor-line"
 import rectIcon from "@/src/components/icons/rect"
+import segmentIcon from "@/src/components/icons/segment"
 import Box from "@mui/material/Box";
 import { useTheme } from "@mui/material/styles";
 import RayIcon from "@/src/components/icons/ray";
@@ -24,18 +25,47 @@ import {
   useRemoveMutation,
 } from "@/lib/redux/api/drawingElementsApi";
 
-const SAVED_DRAWING_TYPES = ['priceLine', 'horizontalStraightLine', 'rayLine', 'rect', 'priceChannelLine'];
+const SAVED_DRAWING_TYPES = [
+  'priceLine',
+  'horizontalStraightLine',
+  'rayLine',
+  'segment',
+  'rect',
+  'priceChannelLine',
+  'longPosition',
+  'shortPosition',
+];
 
 const TOOLBAR_ITEMS = [
   { name: 'longPosition', icon: LongIcon },
   { name: 'shortPosition', icon: ShortIcon },
   { name: 'rect', icon: rectIcon },
+  { name: 'segment', icon: segmentIcon },
   { name: 'priceChannelLine', icon: ParChannelIcon },
   { name: 'fibonacciLine2', icon: fiboIcon },
   { name: 'priceLine', icon: priceLineIcon },
   { name: 'horizontalStraightLine', icon: horLineIcon },
   { name: 'rayLine', icon: RayIcon },
 ];
+
+function normalizeDrawingPoints(points: any): Array<{ timestamp: number | null; value: number }> {
+  if (!Array.isArray(points)) {
+    return [];
+  }
+  const normalized: Array<{ timestamp: number | null; value: number }> = [];
+  for (const p of points) {
+    const value = Number(p?.value);
+    if (!Number.isFinite(value)) {
+      continue;
+    }
+    const ts = Number(p?.timestamp);
+    normalized.push({
+      timestamp: Number.isFinite(ts) ? ts : null,
+      value,
+    });
+  }
+  return normalized;
+}
 
 const DrawToolsIcon = () => (
   <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -46,9 +76,20 @@ const DrawToolsIcon = () => (
   </svg>
 );
 
-export default function MapTools({ chart, pairId, tf, showDrawingElements = true }: any) {
+export default function MapTools({
+  chart,
+  pairId,
+  tf,
+  showDrawingElements = true,
+  /** When user is placing or editing a map drawing overlay, parent can ignore candle clicks (e.g. Kline dialog). */
+  onDrawingInteractionChange,
+}: any) {
   const theme = useTheme();
   const [isOpen, setIsOpen] = useState(false);
+  const onDrawingInteractionChangeRef = useRef(onDrawingInteractionChange);
+  useEffect(() => {
+    onDrawingInteractionChangeRef.current = onDrawingInteractionChange;
+  }, [onDrawingInteractionChange]);
 
   const [createMutation] = useCreateMutation();
   const [updateMutation] = useUpdateMutation();
@@ -139,6 +180,7 @@ export default function MapTools({ chart, pairId, tf, showDrawingElements = true
 
   const handleDrawingClick = useCallback((name: string) => {
     if (!chart) return;
+    onDrawingInteractionChangeRef.current?.(true);
 
     if (!SAVED_DRAWING_TYPES.includes(name)) {
       chart.createOverlay({
@@ -151,6 +193,14 @@ export default function MapTools({ chart, pairId, tf, showDrawingElements = true
           if (selectedOverlayRef.current?.id === event.overlay.id) {
             selectedOverlayRef.current = null;
           }
+          return false;
+        },
+        onDrawEnd: () => {
+          onDrawingInteractionChangeRef.current?.(false);
+          return false;
+        },
+        onRemoved: () => {
+          onDrawingInteractionChangeRef.current?.(false);
           return false;
         },
       });
@@ -171,12 +221,17 @@ export default function MapTools({ chart, pairId, tf, showDrawingElements = true
         return false;
       },
       onDrawEnd: (event: any) => {
+        onDrawingInteractionChangeRef.current?.(false);
         const { overlay } = event;
+        const points = normalizeDrawingPoints(overlay.points);
+        if (!points.length) {
+          return false;
+        }
         createMutationRef.current({
           type: overlay.name,
           pairId: Number(pairId),
           tf: Number(tf),
-          data: { points: overlay.points },
+          data: { points },
         }).then((result: any) => {
           if (result?.data?.id) {
             loadedIdsRef.current.add(result.data.id);
@@ -191,14 +246,19 @@ export default function MapTools({ chart, pairId, tf, showDrawingElements = true
       onPressedMoveEnd: (event: any) => {
         const dbId = event.overlay.extendData?.dbId;
         if (dbId) {
+          const points = normalizeDrawingPoints(event.overlay.points);
+          if (!points.length) {
+            return false;
+          }
           updateMutationRef.current({
             id: dbId,
-            values: { data: { points: event.overlay.points } },
+            values: { data: { points } },
           });
         }
         return false;
       },
       onRemoved: (event: any) => {
+        onDrawingInteractionChangeRef.current?.(false);
         const dbId = event.overlay.extendData?.dbId;
         if (dbId) {
           loadedIdsRef.current.delete(dbId);

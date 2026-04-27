@@ -1,6 +1,6 @@
 'use client'
 
-import {useCallback, useEffect, useMemo, useState} from "react";
+import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {registerFigure, registerOverlay, registerIndicator} from "klinecharts";
 //import {useGetAllQuery as useGetAllKlinesQuery} from "@/lib/redux/api/klineApi";
 import {
@@ -60,6 +60,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [currentDhm, setCurrentDhm] = useState(null);
   const [currentDhmKline, setCurrentDhmKline] = useState(null);
   const [currentClusterKline, setCurrentClusterKline] = useState(null);
+  const mapDrawingOverlayActiveRef = useRef(false);
   const [fppFilters, setFppFilters] = useState<any[]>([
     'interception',
     'reverse',
@@ -278,6 +279,9 @@ export default function DhmIndexView({ tf, pairId }: any) {
         console.log(data.current);
         await onClickClusterHandle(event, data.current);
       } else {
+        if (mapDrawingOverlayActiveRef.current) {
+          return;
+        }
         setCurrentDhmKline(data.current);
         console.log(event);
         const currentDhm = testDhm.find(item => item.data.kline1.id === data.current.id);
@@ -392,7 +396,14 @@ export default function DhmIndexView({ tf, pairId }: any) {
         <SpeedIcon />
       </IconButton>
 
-      <MapTools chart={chart} pairId={pairId} tf={tf} />
+      <MapTools
+        chart={chart}
+        pairId={pairId}
+        tf={tf}
+        onDrawingInteractionChange={(active) => {
+          mapDrawingOverlayActiveRef.current = active;
+        }}
+      />
 
       <CustomDialog
         open={currentDhmKline}

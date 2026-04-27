@@ -4,7 +4,6 @@ import {useCallback, useEffect, useRef, useState} from "react";
 import {getPriceByWebSocket, resizeChart} from "@/src/helpers/klinecharts.helper";
 import {dispose, init} from "klinecharts";
 import moment from "moment";
-import {useLazyGetByPairIdAndTfAndTsQuery} from "@/lib/redux/api/clusterApi";
 
 const KLINE_TS_SIZE_BY_TF = {
   1: 60000,
@@ -45,7 +44,6 @@ export default function Map({
   const [chart, setChart] = useState<any>(null);
   const [currentCluster, setCurrentCuster] = useState(null);
   const [currentClusterKline, setCurrentClusterKline] = useState(null);
-  const [trigger] = useLazyGetByPairIdAndTfAndTsQuery();
   const [barsLoaded, setBarsLoaded] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const isDefaultTsCenteredRef = useRef(false);
@@ -238,28 +236,6 @@ export default function Map({
     isDefaultTsCenteredRef.current = true;
   }, [chart]);
 
-  const onClickClusterHandle = useCallback(async (e: any, kline: any) => {
-    console.log('e', e);
-    //console.log('currentClusterKline', currentClusterKline);
-    const res = await trigger({ pairId, tf, ts: kline.timestamp });
-    if (res?.data?.data) {
-      const row = res.data.data;
-      setCurrentCuster(row);
-      const priceMap = row?.data && typeof row.data === 'object' ? row.data : row;
-      chart.removeOverlay({ name: `clusterKline` });
-      chart.createOverlay({
-        name: 'clusterKline',
-        extendData: priceMap,
-        points: [
-          { timestamp: kline.timestamp, value: parseFloat(kline.high) },
-          { timestamp: kline.timestamp, value: parseFloat(kline.low) },
-        ],
-      });
-    }
-    // console.log(currentClusterKline);
-    // console.log('e', e);
-  }, [chart, trigger, pairId, tf])
-
   // new map data loader
   useEffect(() => {
     const chart: any = init(id || 'chart', {
@@ -358,7 +334,7 @@ export default function Map({
   }, [id, pairId, tf, setParentChart, restoreSavedZoom, saveZoomNow])
 
   useEffect(() => {
-    if (!chart || !setDataLoaderCallback || !setParentChart || !tf || !pairId || !setCurrentClusterKline || !onClickClusterHandle || barsLoaded) {return}
+    if (!chart || !setDataLoaderCallback || !setParentChart || !tf || !pairId || !setCurrentClusterKline || barsLoaded) {return}
     setBarsLoaded(true);
     hasUserInteractedRef.current = false;
     isInitialSyncRef.current = true;
@@ -518,10 +494,8 @@ export default function Map({
       const bar = chart.getBarSpace();
       const { data, x, y } = event
       if (bar.bar >= 25) {
-        setCurrentClusterKline(data.current);
-        console.log('barWidth', bar);
-        console.log(data.current);
-        await onClickClusterHandle(event, data.current);
+        // Click no longer triggers bidasks fetch or manual cluster overlay draw.
+        return;
       } else {
 
       }
@@ -543,7 +517,7 @@ export default function Map({
     })
     // setChart(chart);
     // setParentChart(chart);
-  }, [chart, setDataLoaderCallback, setParentChart, tf, pairId, setCurrentClusterKline, onClickClusterHandle, centerChartByDefaultTs, updateTsQueryByVisibleCenter, getInitialTs, scheduleTsQueryUpdate, scheduleZoomSave, saveZoomNow, restoreSavedZoom, reloadKey]);
+  }, [chart, setDataLoaderCallback, setParentChart, tf, pairId, setCurrentClusterKline, centerChartByDefaultTs, updateTsQueryByVisibleCenter, getInitialTs, scheduleTsQueryUpdate, scheduleZoomSave, saveZoomNow, restoreSavedZoom, reloadKey]);
 
   // get last price by websocket
   useEffect(() => {

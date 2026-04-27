@@ -1,6 +1,6 @@
 'use client'
 
-import {useCallback, useEffect, useState} from "react";
+import {useCallback, useEffect, useRef, useState} from "react";
 import {registerFigure, registerOverlay, registerIndicator} from "klinecharts";
 //import {useGetAllQuery as useGetAllKlinesQuery} from "@/lib/redux/api/klineApi";
 import {
@@ -41,7 +41,6 @@ import takePosition from "@/src/components/klinecharts-take-position/klinecharts
 import enterPosition from "@/src/components/klinecharts-enter-position/klinecharts-enter-position";
 import limitOrder from "@/src/components/klinecharts-limit-order/klinecharts-limit-order";
 import klinechartPosition from "@/src/components/klinecharts-position/klinecharts-position";
-import {useLazyGetByPairIdAndTfAndTsQuery} from "@/lib/redux/api/clusterApi";
 import Label from "@/src/components/label";
 import {
   //useGetQuery,
@@ -125,6 +124,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [currentDhm, setCurrentDhm] = useState(null);
   const [currentDhmKline, setCurrentDhmKline] = useState(null);
   const [currentClusterKline, setCurrentClusterKline] = useState(null);
+  const mapDrawingOverlayActiveRef = useRef(false);
   const [globalSettings, setGlobalSettings] = useState<any>(DEFAULT_GLOBAL_SETTINGS);
   const {
     fppFilters,
@@ -245,7 +245,6 @@ export default function DhmIndexView({ tf, pairId }: any) {
     };
   }, [showBidasks, pairId, onBidasksChunk]);
   const { data: dhmSettings } = useGetSettingsDhmByPairIdAndTfQuery({ tf, pairId });
-  const [trigger] = useLazyGetByPairIdAndTfAndTsQuery();
   //const { data: position, refetch: refetchPosition } = useGetQuery(pairId);
   const { data: fpp } = useGetAllFppQuery({ pairId, page, limit: 5000, tf });
   const { data: dhm } = useGetAllDhmQuery(
@@ -528,28 +527,6 @@ export default function DhmIndexView({ tf, pairId }: any) {
     }, 'vol_pane');
   }, [chart, klinesUpdatedAt, showVolume]);
 
-  const onClickClusterHandle = useCallback(async (e: any, kline: any) => {
-    console.log('e', e);
-    //console.log('currentClusterKline', currentClusterKline);
-    const res = await trigger({ pairId, tf, ts: kline.timestamp });
-    if (res?.data?.data) {
-      const row = res.data.data;
-      setCurrentCuster(row);
-      const priceMap = row?.data && typeof row.data === 'object' ? row.data : row;
-      chart.removeOverlay({ name: `clusterKline` });
-      chart.createOverlay({
-        name: 'clusterKline',
-        extendData: priceMap,
-        points: [
-          { timestamp: kline.timestamp, value: parseFloat(kline.high) },
-          { timestamp: kline.timestamp, value: parseFloat(kline.low) },
-        ],
-      });
-    }
-    // console.log(currentClusterKline);
-    // console.log('e', e);
-  }, [chart, trigger, pairId, tf])
-
   useEffect(() => {
     if (!chart) {return}
     if (!dhm) {return}
@@ -637,11 +614,12 @@ export default function DhmIndexView({ tf, pairId }: any) {
       const bar = chart.getBarSpace();
       const { data, x, y } = event
       if (bar.bar >= 25) {
-        setCurrentClusterKline(data.current);
-        console.log('barWidth', bar);
-        console.log(data.current);
-        await onClickClusterHandle(event, data.current);
+        // Click no longer triggers bidasks fetch or manual cluster overlay draw.
+        return;
       } else {
+        if (mapDrawingOverlayActiveRef.current) {
+          return;
+        }
         setCurrentDhmKline(data.current);
         console.log(event);
         const currentDhm = dhm.find(item => Number(item.kline1.ts) === Number(data.current.timestamp));
@@ -657,7 +635,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
         setCurrentCuster(null);
       }
     })
-  }, [chart, fpp, dhm, dhmVisibleStatuses, onClickClusterHandle, getLimitOrderPrice]);
+  }, [chart, fpp, dhm, dhmVisibleStatuses, getLimitOrderPrice]);
 
   // useEffect(() => {
   //   if (!chart) {return}
@@ -776,7 +754,15 @@ export default function DhmIndexView({ tf, pairId }: any) {
         <SettingsIcon />
       </IconButton>
 
-      <MapTools chart={chart} pairId={pairId} tf={tf} showDrawingElements={showDrawingElements} />
+      <MapTools
+        chart={chart}
+        pairId={pairId}
+        tf={tf}
+        showDrawingElements={showDrawingElements}
+        onDrawingInteractionChange={(active) => {
+          mapDrawingOverlayActiveRef.current = active;
+        }}
+      />
 
       {!isDhmSidebarOpen && (
         <Button
