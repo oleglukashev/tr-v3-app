@@ -293,6 +293,11 @@ function normalizeDrawingPoints(points: any): Array<{ timestamp: number | null; 
   return normalized;
 }
 
+/** Точки из API часто read-only (Immer); библиотека мутирует их при перетаскивании. */
+function clonePointsForChart(points: any) {
+  return normalizeDrawingPoints(points);
+}
+
 const DrawToolsIcon = () => (
   <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
     <path d="M12 19l7-7 3 3-7 7-3-3z" />
@@ -548,7 +553,7 @@ export default function MapTools({
       chart.createOverlay({
         id: elementId,
         name: element.type,
-        points: element.data?.points || [],
+        points: clonePointsForChart(element.data?.points),
         mode: overlayMode,
         visible: drawingsVisibleRef.current,
         styles: { line: { size: 2 } },
