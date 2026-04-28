@@ -131,6 +131,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [isTestPanelOpen, setIsTestPanelOpen] = useState(false);
   const [panelHeight, setPanelHeight] = useState(320);
   const [testSessionsTab, setTestSessionsTab] = useState('all');
+  const [testSessionsPage, setTestSessionsPage] = useState(0);
   const dragStartY = useRef<number | null>(null);
   const dragStartHeight = useRef<number>(320);
   const [currentDhm, setCurrentDhm] = useState(null);
@@ -1086,6 +1087,9 @@ export default function DhmIndexView({ tf, pairId }: any) {
             );
             const uniqueStatuses = Array.from(new Set(sessions.map((s: any) => s.status))) as string[];
             const filteredSessions = testSessionsTab === 'all' ? sessions : sessions.filter((s: any) => s.status === testSessionsTab);
+            const PAGE_SIZE = 50;
+            const pageCount = Math.ceil(filteredSessions.length / PAGE_SIZE);
+            const pageSessions = filteredSessions.slice(testSessionsPage * PAGE_SIZE, (testSessionsPage + 1) * PAGE_SIZE);
             return (
               <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 {/* Stats */}
@@ -1115,7 +1119,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
                 {/* Tabs */}
                 <Tabs
                   value={testSessionsTab}
-                  onChange={(_, v) => setTestSessionsTab(v)}
+                  onChange={(_, v) => { setTestSessionsTab(v); setTestSessionsPage(0); }}
                   variant="scrollable"
                   scrollButtons="auto"
                   sx={{ borderBottom: `1px solid ${theme.palette.divider}`, minHeight: 36, flexShrink: 0 }}
@@ -1139,7 +1143,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
                 </Tabs>
                 {/* Sessions list */}
                 <Box sx={{ overflowY: 'auto', flex: 1 }}>
-                  {filteredSessions.map((item: any) => (
+                  {pageSessions.map((item: any) => (
                     <Box
                       key={item.id}
                       sx={{
@@ -1172,6 +1176,14 @@ export default function DhmIndexView({ tf, pairId }: any) {
                     </Box>
                   )}
                 </Box>
+                {/* Pagination */}
+                {pageCount > 1 && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, py: 0.75, borderTop: `1px solid ${theme.palette.divider}`, flexShrink: 0 }}>
+                    <Button size="small" disabled={testSessionsPage === 0} onClick={() => setTestSessionsPage(p => p - 1)}>Prev</Button>
+                    <Typography variant="caption">{testSessionsPage + 1} / {pageCount}</Typography>
+                    <Button size="small" disabled={testSessionsPage >= pageCount - 1} onClick={() => setTestSessionsPage(p => p + 1)}>Next</Button>
+                  </Box>
+                )}
               </Box>
             );
           })()}
