@@ -577,6 +577,46 @@ export const dhmDown: any = {
   }
 }
 
+export const testDhmUp: any = {
+  name: 'testDhmUp',
+  totalStep: 2,
+  styles: { line: { style: 'dashed' } },
+  createPointFigures: ({ overlay, coordinates }) => {
+    const text = `${overlay?.extendData?.ts ?? ''} (${overlay?.extendData?.tf ?? ''})`;
+    const status = overlay?.extendData?.status ?? '';
+    const startX = coordinates[0].x;
+    const startY = coordinates[0].y + 5;
+    const lineEndY = startY + 10;
+    const arrowEndY = lineEndY + 30;
+    const color = `rgba(2,136,209,0.85)`;
+    return [
+      { type: 'line', attrs: { coordinates: [{ x: startX, y: startY }, { x: startX, y: lineEndY }] }, ignoreEvent: true, styles: { color, style: 'dashed' } },
+      { type: 'polygon', attrs: { coordinates: [{ x: startX, y: lineEndY }, { x: startX - 5, y: arrowEndY - 20 }, { x: startX + 5, y: arrowEndY - 20 }] }, ignoreEvent: true, styles: { color, style: 'fill' } },
+      { type: 'text', attrs: { x: startX, y: arrowEndY, text, align: 'center', baseline: 'bottom' }, ignoreEvent: true, styles: { backgroundColor: color, style: 'fill' } },
+    ];
+  },
+};
+
+export const testDhmDown: any = {
+  name: 'testDhmDown',
+  totalStep: 2,
+  styles: { line: { style: 'dashed' } },
+  createPointFigures: ({ overlay, coordinates }) => {
+    const text = `${overlay?.extendData?.ts ?? ''} (${overlay?.extendData?.tf ?? ''})`;
+    const status = overlay?.extendData?.status ?? '';
+    const startX = coordinates[0].x;
+    const startY = coordinates[0].y - 5;
+    const lineEndY = startY - 10;
+    const arrowEndY = lineEndY - 30;
+    const color = `rgba(245,124,0,0.85)`;
+    return [
+      { type: 'line', attrs: { coordinates: [{ x: startX, y: startY }, { x: startX, y: lineEndY }] }, ignoreEvent: true, styles: { color, style: 'dashed' } },
+      { type: 'polygon', attrs: { coordinates: [{ x: startX, y: lineEndY }, { x: startX - 5, y: arrowEndY + 20 }, { x: startX + 5, y: arrowEndY + 20 }] }, ignoreEvent: true, styles: { color, style: 'fill' } },
+      { type: 'text', attrs: { x: startX, y: arrowEndY, text, align: 'center', baseline: 'top' }, ignoreEvent: true, styles: { backgroundColor: color, style: 'fill' } },
+    ];
+  },
+};
+
 export const dhmLevel: any = {
   name: 'dhmLevel',
   totalStep: 2,

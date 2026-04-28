@@ -32,6 +32,7 @@ import {
   godKline, triggeredStartKline,
   waitingStartKline, noneditableRect, clusterKline,
   upCircleBySize, downCircleBySize, bollingerBands, createdStartKline, dhmUp, dhmDown,
+  testDhmUp, testDhmDown,
   londonSession, drawLondonSessionOverlays, mintSession, drawMintSessionOverlays,
   blueSession, drawBlueSessionOverlays,
 } from "@/src/helpers/klinecharts.helper";
@@ -259,7 +260,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
     { pairId, tf: 60, statusFilters },
   );
   const { data: dhmSidebarItems } = useGetAllActiveDhmQuery({ });
-  const { data: testSessions, refetch: refetchTestSessions } = useGetAllTestDhmQuery({ pairId, tf });
+  const { data: testSessions, refetch: refetchTestSessions } = useGetAllTestDhmQuery({ pairId, tf }, { pollingInterval: isTestPanelOpen ? 5000 : 0 });
   const [deleteAllTestSessions, { isLoading: isDeletingTest }] = useDeleteAllTestDhmMutation();
   const [runTest, { isLoading: isRunningTest }] = useRunTestDhmMutation();
   const { data: tdaPoints } = useGetAllQuery({ pairId });
@@ -674,6 +675,26 @@ export default function DhmIndexView({ tf, pairId }: any) {
     })
   }, [chart, fpp, dhm, dhmVisibleStatuses, getLimitOrderPrice]);
 
+  useEffect((): void => {
+    if (!chart) { return; }
+    chart.removeOverlay({ name: 'testDhmUp' });
+    chart.removeOverlay({ name: 'testDhmDown' });
+    if (!isTestPanelOpen || !testSessions?.length) { return; }
+    for (const item of testSessions) {
+      const kline1 = item.data?.kline1;
+      if (!kline1) { continue; }
+      chart.createOverlay({
+        name: item.direction === 'up' ? 'testDhmUp' : 'testDhmDown',
+        extendData: {
+          ts: item.direction === 'up' ? kline1.low : kline1.high,
+          tf: item.tf,
+          status: item.status,
+        },
+        points: [{ timestamp: parseInt(kline1.ts), value: parseFloat(item.direction === 'up' ? kline1.low : kline1.high) }],
+      });
+    }
+  }, [chart, isTestPanelOpen, testSessions]);
+
   // useEffect(() => {
   //   if (!chart) {return}
   //   // if (orders?.length) {
@@ -758,6 +779,8 @@ export default function DhmIndexView({ tf, pairId }: any) {
   registerFigure(godKline);
   registerOverlay(dhmUp);
   registerOverlay(dhmDown);
+  registerOverlay(testDhmUp);
+  registerOverlay(testDhmDown);
   //registerIndicator(cumDelta);
 
   return (
