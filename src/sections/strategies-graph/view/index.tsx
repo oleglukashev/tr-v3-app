@@ -1086,8 +1086,6 @@ export default function DhmIndexView({ tf, pairId }: any) {
                           }}
                         />
                         {moment(Number(item.startTs)).format('DD.MM.YYYY HH:mm')}
-                        {' — '}
-                        {item.direction === 'up' ? '↑ up' : '↓ down'}
                       </span>
                     )}
                   />
