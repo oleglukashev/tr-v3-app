@@ -1,11 +1,12 @@
 'use client'
 
-import {useCallback, useEffect, useState} from "react";
+import {useCallback, useEffect, useRef, useState} from "react";
 import {registerFigure, registerOverlay, registerIndicator} from "klinecharts";
 //import {useGetAllQuery as useGetAllKlinesQuery} from "@/lib/redux/api/klineApi";
 import {
   useCreateDhmMutation,
   useGetAllDhmQuery, useRemoveDhmMutation, useUpdateDhmMutation, useGetAllActiveDhmQuery,
+  useGetAllTestDhmQuery, useDeleteAllTestDhmMutation, useRunTestDhmMutation,
 } from "@/lib/redux/api/dhmApi";
 import { useGetAllQuery as useGetAllFppQuery } from "@/lib/redux/api/fppApi";
 import {camelCase, delay} from 'lodash';
@@ -18,6 +19,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import {StrategiesDhmSettingsDialog} from "@/src/sections/strategies-graph/strategies.dhm-settings-dialog";
 import {StrategiesDhmFppFiltersDialog} from "@/src/sections/strategies-graph/strategies.dhm-global-settings-dialog";
 import {StrategiesDhmKlineFppsDialog} from "@/src/sections/strategies-graph/strategies.dhm-kline-fpps-dialog";
+import {StrategiesBacktestForm} from "@/src/sections/strategies-graph-test/strategies.backtest-form";
 import moment from "moment/moment";
 import {clearFppPatterns, drawClusterKlinesForVisible, drawFppPatterns} from "@/src/utils/klinecharts";
 import { BIDASK_CLUSTER_TF, getBidasksWebSocketUrl } from "@/src/utils/bidasksWebSocket";
@@ -54,6 +56,7 @@ import {useGetAllQuery as useGetAllOrdersQuery} from "@/lib/redux/api/orderApi";
 import {useGetQuery as useGetPositionQuery} from "@/lib/redux/api/positionApi";
 import {useRouter, useSearchParams} from "next/navigation";
 import {
+  Box,
   Button,
   Chip,
   Divider,
@@ -122,6 +125,10 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [openChartSettings, setOpenChartSettings] = useState(false);
   const [openKlineFpp, setOpenKlineFpp] = useState(false);
   const [isDhmSidebarOpen, setIsDhmSidebarOpen] = useState(false);
+  const [isTestPanelOpen, setIsTestPanelOpen] = useState(false);
+  const [panelHeight, setPanelHeight] = useState(320);
+  const dragStartY = useRef<number | null>(null);
+  const dragStartHeight = useRef<number>(320);
   const [currentDhm, setCurrentDhm] = useState(null);
   const [currentDhmKline, setCurrentDhmKline] = useState(null);
   const [currentClusterKline, setCurrentClusterKline] = useState(null);
@@ -252,6 +259,9 @@ export default function DhmIndexView({ tf, pairId }: any) {
     { pairId, tf: 60, statusFilters },
   );
   const { data: dhmSidebarItems } = useGetAllActiveDhmQuery({ });
+  const { data: testSessions, refetch: refetchTestSessions } = useGetAllTestDhmQuery({ pairId, tf });
+  const [deleteAllTestSessions, { isLoading: isDeletingTest }] = useDeleteAllTestDhmMutation();
+  const [runTest, { isLoading: isRunningTest }] = useRunTestDhmMutation();
   const { data: tdaPoints } = useGetAllQuery({ pairId });
   //const [createPositionRtk, { isLoading: isCreatePositionLoading }] = useCreatePositionMutation();
   //const [cancelPositionRtk, { isLoading: isCancelPositionLoading }] = useCancelPositionMutation();
@@ -380,6 +390,32 @@ export default function DhmIndexView({ tf, pairId }: any) {
     if (!targetPairId || !targetTs) { return; }
     router.push(`/dhm-graph/${targetPairId}/60?ts=${targetTs}`);
   }, [router]);
+
+  const onClearTestResults = useCallback(async () => {
+    await deleteAllTestSessions({});
+    refetchTestSessions();
+  }, [deleteAllTestSessions, refetchTestSessions]);
+
+  const onRunTestSubmit = useCallback(async (values: any) => {
+    return onSubmitWrapper(() => runTest({ pairId, tf, ...values }), () => refetchTestSessions(), 'Запущено');
+  }, [runTest, pairId, tf, refetchTestSessions]);
+
+  const onDragHandleMouseDown = useCallback((e: React.MouseEvent) => {
+    dragStartY.current = e.clientY;
+    dragStartHeight.current = panelHeight;
+    const onMouseMove = (ev: MouseEvent) => {
+      if (dragStartY.current === null) return;
+      const delta = dragStartY.current - ev.clientY;
+      setPanelHeight(Math.max(120, Math.min(window.innerHeight * 0.85, dragStartHeight.current + delta)));
+    };
+    const onMouseUp = () => {
+      dragStartY.current = null;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, [panelHeight]);
 
   // const drawPosition = useCallback((enterPrice, stopPrice, takePrice) => {
   //   if (!chart) { return }
@@ -899,6 +935,163 @@ export default function DhmIndexView({ tf, pairId }: any) {
           <StrategiesDhmKlineFppsDialog fpp={currentKlineFpp} />
         )}
       />
+
+      {!isTestPanelOpen && (
+        <Button
+          variant="contained"
+          size="small"
+          onClick={() => setIsTestPanelOpen(true)}
+          sx={{
+            position: 'fixed',
+            zIndex: 2,
+            bottom: 0,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            borderBottomLeftRadius: 0,
+            borderBottomRightRadius: 0,
+            minWidth: 80,
+            px: 2,
+          }}
+        >
+          Test
+        </Button>
+      )}
+
+      <Drawer
+        variant="persistent"
+        anchor="bottom"
+        open={isTestPanelOpen}
+        sx={{
+          '& .MuiDrawer-paper': {
+            height: panelHeight,
+            left: 0,
+            right: 0,
+            marginLeft: 'auto',
+            marginRight: 'auto',
+            maxWidth: 'lg',
+            p: 2,
+            pt: 0,
+            borderTop: `1px solid ${theme.palette.divider}`,
+            borderLeft: `1px solid ${theme.palette.divider}`,
+            borderRight: `1px solid ${theme.palette.divider}`,
+            borderTopLeftRadius: 8,
+            borderTopRightRadius: 8,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          },
+        }}
+      >
+        <Box
+          onMouseDown={onDragHandleMouseDown}
+          sx={{
+            height: 20,
+            cursor: 'ns-resize',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            mb: 0.5,
+            userSelect: 'none',
+          }}
+        >
+          <Box sx={{ width: 40, height: 4, borderRadius: 2, backgroundColor: theme.palette.divider }} />
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5, flexShrink: 0 }}>
+          <Button variant="outlined" size="small" onClick={() => setIsTestPanelOpen(false)}>
+            Hide
+          </Button>
+          <Typography variant="h6" sx={{ flex: 1 }}>
+            Test sessions
+          </Typography>
+          <Button
+            variant="contained"
+            size="small"
+            color="error"
+            disabled={isDeletingTest}
+            onClick={onClearTestResults}
+          >
+            Clear results
+          </Button>
+        </Box>
+
+        <Box sx={{ display: 'flex', gap: 2, flex: 1, overflow: 'hidden' }}>
+          <Box sx={{ width: 340, flexShrink: 0, overflowY: 'auto' }}>
+            <StrategiesBacktestForm
+              defaultValues={{
+                pairId,
+                tf,
+                enterLevel1: '0.5',
+                enterLevel2: '0.618',
+                enterLevel3: '0.768',
+                takeProfitLevel1: '0.382',
+                takeProfitLevel2: '0.5',
+                takeProfitLevel3: '0.618',
+                triggerLevel: '0.5',
+                stopLossLevel: '1.1',
+                finishLevel: '0.382',
+                maxSessionLength: 60,
+                minPriceSize: 5,
+                startTs: 1735675200000,
+                finishTs: null,
+                direction: 'up',
+              }}
+              isLoading={isRunningTest}
+              onSubmit={onRunTestSubmit}
+            />
+          </Box>
+
+          <Divider orientation="vertical" flexItem />
+
+          <List dense sx={{ flex: 1, overflowY: 'auto' }}>
+            {(testSessions || []).map((item: any) => (
+              <ListItem key={item.id} disablePadding>
+                <ListItemButton>
+                  <ListItemText
+                    primary={(
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                        <span
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: '50%',
+                            backgroundColor: item.direction === 'down'
+                              ? theme.palette.error.main
+                              : theme.palette.success.main,
+                            display: 'inline-block',
+                            flexShrink: 0,
+                          }}
+                        />
+                        {moment(Number(item.startTs)).format('DD.MM.YYYY HH:mm')}
+                        {' — '}
+                        {item.direction === 'up' ? '↑ up' : '↓ down'}
+                      </span>
+                    )}
+                  />
+                  <Label
+                    color={
+                      item.status === 'finished' ? 'success'
+                      : item.status === 'finished_by_size' ? 'info'
+                      : item.status === 'finished_by_lose' ? 'error'
+                      : item.status === 'finished_by_length' ? 'warning'
+                      : item.status === 'triggered' ? 'info'
+                      : item.status === 'waiting' ? 'warning'
+                      : 'default'
+                    }
+                  >
+                    {item.status}
+                  </Label>
+                </ListItemButton>
+              </ListItem>
+            ))}
+            {!testSessions?.length && (
+              <ListItem>
+                <ListItemText primary="No test sessions" />
+              </ListItem>
+            )}
+          </List>
+        </Box>
+      </Drawer>
     </main>
   )
 }

@@ -136,7 +136,7 @@ export const dhmApi = (new BaseApi({
       runTestDhm: builder.mutation<any, any>({
         query(data: any) {
           return {
-            url: `${collectionPath}/test/run_dhm`,
+            url: `${collectionPath}/run_test`,
             method: 'POST',
             body: data,
           };
@@ -146,7 +146,7 @@ export const dhmApi = (new BaseApi({
       runTestDhm2: builder.mutation<any, any>({
         query(data: any) {
           return {
-            url: `${collectionPath}/test/run_dhm2`,
+            url: `${collectionPath}2/run_test`,
             method: 'POST',
             body: data,
           };
