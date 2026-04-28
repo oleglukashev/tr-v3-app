@@ -62,10 +62,8 @@ import {
   Chip,
   Divider,
   Drawer,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemText,
+  Tab,
+  Tabs,
   Typography,
 } from "@mui/material";
 import {useGetSettingsDhmByPairIdAndTfQuery} from "@/lib/redux/api/dhmApi";
@@ -128,6 +126,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [isDhmSidebarOpen, setIsDhmSidebarOpen] = useState(false);
   const [isTestPanelOpen, setIsTestPanelOpen] = useState(false);
   const [panelHeight, setPanelHeight] = useState(320);
+  const [testSessionsTab, setTestSessionsTab] = useState('all');
   const dragStartY = useRef<number | null>(null);
   const dragStartHeight = useRef<number>(320);
   const [currentDhm, setCurrentDhm] = useState(null);
@@ -1066,93 +1065,112 @@ export default function DhmIndexView({ tf, pairId }: any) {
 
           <Divider orientation="vertical" flexItem />
 
-          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            {/* Stats */}
-            {!!testSessions?.length && (() => {
-              const stats = (testSessions as any[]).reduce(
-                (acc: any, s: any) => {
-                  const side = s.direction === 'up' ? 'long' : 'short';
-                  acc[side][s.status] = (acc[side][s.status] || 0) + 1;
-                  return acc;
-                },
-                { long: {} as Record<string, number>, short: {} as Record<string, number> },
-              );
-              const getStatusColor = (status: string) =>
-                status === 'finished' || status === 'finished_by_size' ? 'success'
-                : status === 'finished_by_lose' || status === 'finished_by_length' ? 'error'
-                : 'warning';
-              return (
-                <Box sx={{ px: 1, pt: 1, pb: 0.5, borderBottom: `1px solid ${theme.palette.divider}`, flexShrink: 0 }}>
-                  <Typography variant="caption" sx={{ fontWeight: 'bold', display: 'block', mb: 0.5 }}>
-                    Sessions ({testSessions.length})
+          {(() => {
+            const sessions = (testSessions as any[]) || [];
+            const getStatusColor = (status: string): 'success' | 'error' | 'warning' | 'default' =>
+              status === 'finished' || status === 'finished_by_size' ? 'success'
+              : status === 'finished_by_lose' || status === 'finished_by_length' ? 'error'
+              : status === 'created' || status === 'waiting' || status === 'triggered' ? 'warning'
+              : 'default';
+            const stats = sessions.reduce(
+              (acc: any, s: any) => {
+                const side = s.direction === 'up' ? 'long' : 'short';
+                acc[side][s.status] = (acc[side][s.status] || 0) + 1;
+                return acc;
+              },
+              { long: {} as Record<string, number>, short: {} as Record<string, number> },
+            );
+            const uniqueStatuses = Array.from(new Set(sessions.map((s: any) => s.status))) as string[];
+            const filteredSessions = testSessionsTab === 'all' ? sessions : sessions.filter((s: any) => s.status === testSessionsTab);
+            return (
+              <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                {/* Stats */}
+                <Box sx={{ px: 2, py: 1.5, borderBottom: `1px solid ${theme.palette.divider}`, flexShrink: 0 }}>
+                  <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
+                    Test Sessions ({sessions.length})
                   </Typography>
                   {Object.keys(stats.long).length > 0 && (
-                    <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.5, mb: 0.5 }}>
-                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#4caf50', flexShrink: 0 }} />
-                      <Typography variant="caption" sx={{ fontWeight: 'bold', color: '#4caf50', mr: 0.25 }}>Long</Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.75, mb: 0.75 }}>
+                      <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: '#4caf50', flexShrink: 0 }} />
+                      <Typography variant="caption" sx={{ fontWeight: 'bold', color: '#4caf50', mr: 0.5 }}>Long</Typography>
                       {Object.entries(stats.long).map(([status, count]) => (
-                        <Chip key={status} label={`${status}: ${count}`} size="small" color={getStatusColor(status) as any} variant="outlined" sx={{ fontSize: 10, height: 18 }} />
+                        <Chip key={status} label={`${status}: ${count}`} size="small" color={getStatusColor(status) as any} variant="outlined" sx={{ fontSize: 11 }} />
                       ))}
                     </Box>
                   )}
                   {Object.keys(stats.short).length > 0 && (
-                    <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.5 }}>
-                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#f44336', flexShrink: 0 }} />
-                      <Typography variant="caption" sx={{ fontWeight: 'bold', color: '#f44336', mr: 0.25 }}>Short</Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.75 }}>
+                      <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: '#f44336', flexShrink: 0 }} />
+                      <Typography variant="caption" sx={{ fontWeight: 'bold', color: '#f44336', mr: 0.5 }}>Short</Typography>
                       {Object.entries(stats.short).map(([status, count]) => (
-                        <Chip key={status} label={`${status}: ${count}`} size="small" color={getStatusColor(status) as any} variant="outlined" sx={{ fontSize: 10, height: 18 }} />
+                        <Chip key={status} label={`${status}: ${count}`} size="small" color={getStatusColor(status) as any} variant="outlined" sx={{ fontSize: 11 }} />
                       ))}
                     </Box>
                   )}
                 </Box>
-              );
-            })()}
-          <List dense sx={{ flex: 1, overflowY: 'auto' }}>
-            {(testSessions || []).map((item: any) => (
-              <ListItem key={item.id} disablePadding>
-                <ListItemButton>
-                  <ListItemText
-                    primary={(
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                        <span
-                          style={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: '50%',
-                            backgroundColor: item.direction === 'down'
-                              ? theme.palette.error.main
-                              : theme.palette.success.main,
-                            display: 'inline-block',
-                            flexShrink: 0,
-                          }}
-                        />
-                        {moment(Number(item.startTs)).format('DD.MM.YYYY HH:mm')}
-                      </span>
-                    )}
-                  />
-                  <Label
-                    color={
-                      item.status === 'finished' ? 'success'
-                      : item.status === 'finished_by_size' ? 'info'
-                      : item.status === 'finished_by_lose' ? 'error'
-                      : item.status === 'finished_by_length' ? 'warning'
-                      : item.status === 'triggered' ? 'info'
-                      : item.status === 'waiting' ? 'warning'
-                      : 'default'
-                    }
-                  >
-                    {item.status}
-                  </Label>
-                </ListItemButton>
-              </ListItem>
-            ))}
-            {!testSessions?.length && (
-              <ListItem>
-                <ListItemText primary="No test sessions" />
-              </ListItem>
-            )}
-          </List>
-          </Box>
+                {/* Tabs */}
+                <Tabs
+                  value={testSessionsTab}
+                  onChange={(_, v) => setTestSessionsTab(v)}
+                  variant="scrollable"
+                  scrollButtons="auto"
+                  sx={{ borderBottom: `1px solid ${theme.palette.divider}`, minHeight: 36, flexShrink: 0 }}
+                  TabIndicatorProps={{ style: { height: 2 } }}
+                >
+                  <Tab label={`All (${sessions.length})`} value="all" sx={{ minHeight: 36, fontSize: 12, py: 0 }} />
+                  {uniqueStatuses.map((status) => {
+                    const count = sessions.filter((s: any) => s.status === status).length;
+                    return (
+                      <Tab key={status} value={status} sx={{ minHeight: 36, fontSize: 12, py: 0 }}
+                        label={
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <span>{status}</span>
+                            <Chip label={count} size="small" color={getStatusColor(status) as any}
+                              sx={{ height: 16, fontSize: 10, '.MuiChip-label': { px: 0.75 } }} />
+                          </Box>
+                        }
+                      />
+                    );
+                  })}
+                </Tabs>
+                {/* Sessions list */}
+                <Box sx={{ overflowY: 'auto', flex: 1 }}>
+                  {filteredSessions.map((item: any) => (
+                    <Box
+                      key={item.id}
+                      sx={{
+                        px: 2, py: 1,
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        borderBottom: `1px solid ${theme.palette.divider}`,
+                        '&:last-child': { borderBottom: 0 },
+                        '&:hover': { bgcolor: theme.palette.action.hover },
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, bgcolor: item.direction === 'up' ? '#4caf50' : '#f44336' }} />
+                        <Typography variant="caption" sx={{ color: theme.palette.text.disabled, minWidth: 28 }}>
+                          #{item.id}
+                        </Typography>
+                        <Label color={getStatusColor(item.status)} sx={{ fontSize: 11 }}>
+                          {item.status}
+                        </Label>
+                      </Box>
+                      <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
+                        {moment(Number(item.startTs)).format('MM-DD HH:mm')}
+                      </Typography>
+                    </Box>
+                  ))}
+                  {!filteredSessions.length && (
+                    <Box sx={{ px: 2, py: 3, textAlign: 'center' }}>
+                      <Typography variant="body2" sx={{ color: theme.palette.text.disabled }}>
+                        No sessions
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
+              </Box>
+            );
+          })()}
         </Box>
       </Drawer>
     </main>
