@@ -1146,11 +1146,17 @@ export default function DhmIndexView({ tf, pairId }: any) {
                   {pageSessions.map((item: any) => (
                     <Box
                       key={item.id}
+                      onClick={() => {
+                        const targetTs = item?.data?.kline1?.ts ?? item?.startTs;
+                        if (!pairId || !targetTs) { return; }
+                        router.push(`/dhm-graph/${pairId}/${tf}?ts=${targetTs}`);
+                      }}
                       sx={{
                         px: 2, py: 1,
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                         borderBottom: `1px solid ${theme.palette.divider}`,
                         '&:last-child': { borderBottom: 0 },
+                        cursor: 'pointer',
                         '&:hover': { bgcolor: theme.palette.action.hover },
                       }}
                     >
