@@ -1066,6 +1066,47 @@ export default function DhmIndexView({ tf, pairId }: any) {
 
           <Divider orientation="vertical" flexItem />
 
+          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            {/* Stats */}
+            {!!testSessions?.length && (() => {
+              const stats = (testSessions as any[]).reduce(
+                (acc: any, s: any) => {
+                  const side = s.direction === 'up' ? 'long' : 'short';
+                  acc[side][s.status] = (acc[side][s.status] || 0) + 1;
+                  return acc;
+                },
+                { long: {} as Record<string, number>, short: {} as Record<string, number> },
+              );
+              const getStatusColor = (status: string) =>
+                status === 'finished' || status === 'finished_by_size' ? 'success'
+                : status === 'finished_by_lose' || status === 'finished_by_length' ? 'error'
+                : 'warning';
+              return (
+                <Box sx={{ px: 1, pt: 1, pb: 0.5, borderBottom: `1px solid ${theme.palette.divider}`, flexShrink: 0 }}>
+                  <Typography variant="caption" sx={{ fontWeight: 'bold', display: 'block', mb: 0.5 }}>
+                    Sessions ({testSessions.length})
+                  </Typography>
+                  {Object.keys(stats.long).length > 0 && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.5, mb: 0.5 }}>
+                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#4caf50', flexShrink: 0 }} />
+                      <Typography variant="caption" sx={{ fontWeight: 'bold', color: '#4caf50', mr: 0.25 }}>Long</Typography>
+                      {Object.entries(stats.long).map(([status, count]) => (
+                        <Chip key={status} label={`${status}: ${count}`} size="small" color={getStatusColor(status) as any} variant="outlined" sx={{ fontSize: 10, height: 18 }} />
+                      ))}
+                    </Box>
+                  )}
+                  {Object.keys(stats.short).length > 0 && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.5 }}>
+                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#f44336', flexShrink: 0 }} />
+                      <Typography variant="caption" sx={{ fontWeight: 'bold', color: '#f44336', mr: 0.25 }}>Short</Typography>
+                      {Object.entries(stats.short).map(([status, count]) => (
+                        <Chip key={status} label={`${status}: ${count}`} size="small" color={getStatusColor(status) as any} variant="outlined" sx={{ fontSize: 10, height: 18 }} />
+                      ))}
+                    </Box>
+                  )}
+                </Box>
+              );
+            })()}
           <List dense sx={{ flex: 1, overflowY: 'auto' }}>
             {(testSessions || []).map((item: any) => (
               <ListItem key={item.id} disablePadding>
@@ -1111,6 +1152,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
               </ListItem>
             )}
           </List>
+          </Box>
         </Box>
       </Drawer>
     </main>
