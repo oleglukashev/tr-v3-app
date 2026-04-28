@@ -62,6 +62,10 @@ import {
   Chip,
   Divider,
   Drawer,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
   Tab,
   Tabs,
   Typography,
@@ -259,7 +263,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
     { pairId, tf: 60, statusFilters },
   );
   const { data: dhmSidebarItems } = useGetAllActiveDhmQuery({ });
-  const { data: testSessions, refetch: refetchTestSessions } = useGetAllTestDhmQuery({ pairId, tf }, { skip: !isTestPanelOpen, pollingInterval: isTestPanelOpen ? 5000 : 0 });
+  const { data: testSessions, refetch: refetchTestSessions } = useGetAllTestDhmQuery({ pairId, tf }, { skip: !isTestPanelOpen });
   const [deleteAllTestSessions, { isLoading: isDeletingTest }] = useDeleteAllTestDhmMutation();
   const [runTest, { isLoading: isRunningTest }] = useRunTestDhmMutation();
   const { data: tdaPoints } = useGetAllQuery({ pairId });
