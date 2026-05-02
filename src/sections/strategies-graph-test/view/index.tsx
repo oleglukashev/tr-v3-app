@@ -2,20 +2,16 @@
 
 import {useCallback, useEffect, useMemo, useState} from "react";
 import {registerFigure, registerOverlay, registerIndicator} from "klinecharts";
-//import {useGetAllQuery as useGetAllKlinesQuery} from "@/lib/redux/api/klineApi";
 import {
-  useGetAllTestDhmQuery, useRemoveDhmMutation, useUpdateDhmMutation,
+  useGetAllTestDhmQuery,
 } from "@/lib/redux/api/dhmApi";
 import { useGetAllQuery as useGetAllFppQuery } from "@/lib/redux/api/fppApi";
-import {camelCase, delay} from 'lodash';
 import CustomDialog from 'src/components/custom-dialog/custom-dialog';
-import {onSubmitWrapper} from "@/src/utils/submit";
 import {StrategiesDhmDialog} from "@/src/sections/strategies-graph-test/strategies.dhm-dialog";
 import {IconButton} from "@mui/material";
 import SpeedIcon from '@mui/icons-material/Speed';
 import SettingsIcon from '@mui/icons-material/Settings';
 import {StrategiesDhmBacktestDialog} from "@/src/sections/strategies-graph-test/strategies.dhm-backtest-dialog";
-//import {StrategiesDhmSettingsDialog} from "@/src/sections/strategies-graph-test/strategies.dhm-settings-dialog";
 import {StrategiesDhmFppFiltersDialog} from "@/src/sections/strategies-graph-test/strategies.dhm-fpp-filters-dialog";
 import {StrategiesDhmKlineFppsDialog} from "@/src/sections/strategies-graph-test/strategies.dhm-kline-fpps-dialog";
 import moment from "moment/moment";
@@ -33,16 +29,21 @@ import {
 import Map from "@/src/components/map/map";
 import {useTheme} from "@mui/material/styles";
 import rect from "@/src/components/klinecharts-rect/klinecharts-rect";
-import createPosition from "@/src/components/klinecharts-create-position/klinecharts-create-position";
-import stopPosition from "@/src/components/klinecharts-stop-position/klinecharts-stop-position";
-import takePosition from "@/src/components/klinecharts-take-position/klinecharts-take-position";
-import enterPosition from "@/src/components/klinecharts-enter-position/klinecharts-enter-position";
 import {useLazyGetByPairIdAndTfAndTsQuery} from "@/lib/redux/api/clusterApi";
-import {
-  useGetQuery,
-} from "@/lib/redux/api/positionApi";
 import {useSearchParams} from "next/navigation";
-//import {useGetAllQuery} from "@/lib/redux/api/tdaPointsApi";
+
+registerOverlay(confirmedCircle);
+registerOverlay(finishedStartKline);
+registerOverlay(triggeredStartKline);
+registerOverlay(finishedByLoseStartKline);
+registerOverlay(createdStartKline);
+registerOverlay(waitingStartKline);
+registerOverlay(rect);
+registerOverlay(noneditableRect);
+registerOverlay(clusterKline);
+registerIndicator(ema);
+registerIndicator(bollingerBands);
+registerFigure(godKline);
 
 export default function DhmIndexView({ tf, pairId }: any) {
   const theme = useTheme();
@@ -51,8 +52,6 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [chart, setChart] = useState<any>(null);
   const [page, setPage] = useState<number>(1);
   const [klinesUpdatedAt, setKlinesUpdatedAt] = useState<number | null>(null);
-  const [currentPrice, setCurrentPrice] = useState(null);
-  const [currentCluster, setCurrentCuster] = useState(null);
   const [currentKlineFpp, setCurrentKlineFpp] = useState<any[]>(null);
   const [openBacktest, setOpenBacktest] = useState(false);
   const [openFppFilters, setOpenFppFilters] = useState(false);
@@ -74,26 +73,10 @@ export default function DhmIndexView({ tf, pairId }: any) {
     //'tda'
   ]);
   const [fppCombine, setFppCombine] = useState<boolean>(false);
-  //const { data: klines } = useGetAllKlinesQuery({ pairId, page, limit: 5000, tf });
-  //const { data: orderbooks } = useGetAllClustersQuery({ pairId, page, limit: 5000, tf });
   const [trigger] = useLazyGetByPairIdAndTfAndTsQuery();
   const { data: position, refetch: refetchPosition } = useGetQuery(pairId);
   const { data: fpp } = useGetAllFppQuery({ pairId, page, limit: 5000, tf });
-  // const { data: dhm } = useGetAllDhmQuery({ pairId, tf: 60 });
-  //const { data: tdaPoints } = useGetAllQuery({ pairId });
   const { data: testDhm } = useGetAllTestDhmQuery({ pairId, tf: 60 });
-  //const [create, { isLoading: isCreateLoading }] = useCreateMutation();
-  //const [update, { isLoading: isUpdateLoading }] = useUpdateMutation();
-  //const [remove, { isLoading }] = useRemoveMutation();
-
-  // const clustersAsHashByTs = useMemo(() => {
-  //   if (!orderbooks) { return }
-  //   const result: any = {};
-  //   for (const item of orderbooks) {
-  //     result[item.ts] = item;
-  //   }
-  //   return result;
-  // }, [orderbooks]);
 
   const onSaveFppFiltersSubmit = useCallback(async (values: any) => {
     setFppFilters(values.fppFilters);
@@ -142,14 +125,6 @@ export default function DhmIndexView({ tf, pairId }: any) {
   useEffect(() => {
     if (!testDhm) {return}
     if (!chart) {return}
-    // chart.applyNewData(klines.map((item: any) => {
-    //   // Создаем графическую метку
-    //   return {
-    //     ...item,
-    //     timestamp: parseInt(item.ts),
-    //     volume: parseInt(item.volume),
-    //   }
-    // }))
 
     for (const item of testDhm) {
       if (['created', 'waiting', 'triggered', 'finished', 'finished_by_lose', 'finished_by_length'].includes(item.status)) {
@@ -159,34 +134,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
         })
       }
     }
-    chart.subscribeAction('onCandleBarClick', (event) => {
-      const { data, x, y } = event
-      const currentDhm = testDhm.find(item => item.data.kline1.id === data.current.id);
-      console.log(currentDhm);
-    })
   }, [chart, testDhm]);
-
-  // const onCreateSubmit = useCallback(async (values: any) => {
-  //   return onSubmitWrapper(() => create(values), (data) => {
-  //     if (data.data) {
-  //       setCurrentDhm(data.data);
-  //     }
-  //   }, 'Успешно создано');
-  // }, []);
-
-  // const onUpdateSubmit = useCallback(async (values: any) => {
-  //   return onSubmitWrapper(() => update({ id: currentDhm.id, values }), null, 'Успешно создано');
-  // }, [currentDhm?.id, update]);
-
-  // const onRemoveSubmit = useCallback(async () => {
-  //   return onSubmitWrapper(() => remove(currentDhm?.id), (data: any) => {
-  //     if (!data?.data) {
-  //       setCurrentDhm(null);
-  //       setCurrentDhmKline(null);
-  //       setCurrentClusterKline(null);
-  //     }
-  //   }, 'Успешно удалено');
-  // }, [currentDhm?.id, remove]);
 
   const drawPosition = useCallback((enterPrice, stopPrice, takePrice) => {
     if (!chart) { return }
@@ -216,7 +164,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
       name: `createPosition`,
       points: [{timestamp: null, value: parseFloat(klines[klines.length - 1].close)}],
     })
-  }, [chart, chart?.getDataList()]);
+  }, [chart]);
 
   const setDataLoaderCallback = useCallback(() => {
     if (!klinesUpdatedAt) {
@@ -239,11 +187,8 @@ export default function DhmIndexView({ tf, pairId }: any) {
   }, [chart, fpp, fppFilters, fppCombine, klinesUpdatedAt]);
 
   const onClickClusterHandle = useCallback(async (e: any, kline: any) => {
-    console.log('e', e);
-    //console.log('currentClusterKline', currentClusterKline);
     const res = await trigger({ pairId, tf, ts: kline.timestamp });
     if (res?.data?.data) {
-      setCurrentCuster(res.data.data);
       registerOverlay(clusterKline(res?.data?.data))
       chart.removeOverlay({ name: `clusterKline` });
       chart.createOverlay({
@@ -254,103 +199,63 @@ export default function DhmIndexView({ tf, pairId }: any) {
         ],
       })
     }
-    // console.log(currentClusterKline);
-    // console.log('e', e);
   }, [chart, trigger, pairId, tf])
 
   useEffect(() => {
     if (!testDhm) {return}
     if (!chart) {return}
     if (!fpp) {return}
-    //if (!clustersAsHashByTs) {return}
 
-    // add EMA200 trand indicator
     chart.createIndicator('EMA', false, { id: 'candle_pane' });
-    //chart.createIndicator('RSI');
-    //chart.createIndicator('BOLL', false, { id: 'candle_pane' });
-    // chart.createIndicator('CUM_DELTA', true);
-    //chart.createOverlay({ name: 'custom_rect_overlay' })
-    chart.subscribeAction('onCandleBarClick', async (event) => {
+
+    const onCandleBarClick = async (event: any) => {
       const bar = chart.getBarSpace();
-      const { data, x, y } = event
+      const { data } = event;
       if (bar.bar >= 25) {
         setCurrentClusterKline(data.current);
-        console.log('barWidth', bar);
-        console.log(data.current);
         await onClickClusterHandle(event, data.current);
       } else {
         if (mapDrawingOverlayActiveRef.current) {
           return;
         }
         setCurrentDhmKline(data.current);
-        console.log(event);
-        const currentDhm = testDhm.find(item => item.data.kline1.id === data.current.id);
-        console.log(currentDhm);
+        const currentDhm = testDhm.find((item: any) => item.data.kline1.id === data.current.id);
         setCurrentDhm(currentDhm);
       }
-    })
-    chart.subscribeAction('onZoom', (e) => {
+    };
+    const onZoom = (e: any) => {
       const bar = chart.getBarSpace();
       if (bar.bar < 25) {
         chart.removeOverlay({ name: 'clusterKline' });
         setCurrentClusterKline(null);
-        setCurrentCuster(null);
       }
-    })
-  }, [chart, fpp, testDhm, onClickClusterHandle]);
+    };
+    chart.subscribeAction('onCandleBarClick', onCandleBarClick);
+    chart.subscribeAction('onZoom', onZoom);
+    return () => {
+      chart.unsubscribeAction?.('onCandleBarClick', onCandleBarClick);
+      chart.unsubscribeAction?.('onZoom', onZoom);
+    };
+  }, [chart, fpp, testDhm, onClickClusterHandle, mapDrawingOverlayActiveRef]);
 
-  for (const item of [1,2,3,4,5,6,7]) {
-    registerOverlay(
-      upCircleBySize(item, (e) => {
-        setCurrentKlineFpp((fpp || []).filter(item => parseInt(item.ts) === e.overlay.points[0].timestamp));
-        setOpenKlineFpp(true);
-        return true
-      }),
-    );
-
-    registerOverlay(
-      downCircleBySize(item, (e) => {
-        setCurrentKlineFpp((fpp || []).filter(item => parseInt(item.ts) === e.overlay.points[0].timestamp));
-        setOpenKlineFpp(true);
-        return true
-      }),
-    );
-  }
-
-  registerOverlay(confirmedCircle);
-  registerOverlay(finishedStartKline);
-  registerOverlay(triggeredStartKline);
-  registerOverlay(finishedByLoseStartKline);
-  registerOverlay(createdStartKline);
-  registerOverlay(waitingStartKline);
-  registerOverlay(rect);
-  registerOverlay(noneditableRect);
-  registerOverlay(clusterKline);
-  // registerOverlay(enterPosition(async (e: any) => {
-  //   await cancelPositionRtk(pairId);
-  //   await refetchPosition();
-  // }));
-  // registerOverlay(stopPosition(async (e) => {
-  //   updatePositionRtk({ pairId, type: 'stopLoss', price})
-  // }));
-  // registerOverlay(takePosition((price: any) => {
-  //   updatePositionRtk({ pairId, type: 'takeProfit', price})
-  // }));
-  // registerOverlay(
-  //   createPosition(async (e: any) => {
-  //     const sign = e.figure.attrs[0].text;
-  //     if (sign === '⬆') {
-  //       await createPositionRtk({ pairId, side: 'buy' })
-  //     } else if (sign === '⬇') {
-  //       await createPositionRtk({ pairId, side: 'sell' })
-  //     }
-  //     await refetchPosition();
-  //   }
-  // ));
-  registerIndicator(ema);
-  registerIndicator(bollingerBands);
-  registerFigure(godKline);
-  //registerIndicator(cumDelta);
+  useEffect(() => {
+    for (const item of [1,2,3,4,5,6,7]) {
+      registerOverlay(
+        upCircleBySize(item, (e) => {
+          setCurrentKlineFpp((fpp || []).filter(item => parseInt(item.ts) === e.overlay.points[0].timestamp));
+          setOpenKlineFpp(true);
+          return true;
+        }),
+      );
+      registerOverlay(
+        downCircleBySize(item, (e) => {
+          setCurrentKlineFpp((fpp || []).filter(item => parseInt(item.ts) === e.overlay.points[0].timestamp));
+          setOpenKlineFpp(true);
+          return true;
+        }),
+      );
+    }
+  }, [fpp]);
 
   return (
     <main>
@@ -417,7 +322,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
             //onRemoveSubmit={onRemoveSubmit}
             tf={tf}
             pairId={pairId}
-            currentPrice={currentPrice}
+            currentPrice={null}
           />
         )}
       />
