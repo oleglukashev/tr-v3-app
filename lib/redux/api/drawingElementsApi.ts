@@ -1,11 +1,11 @@
 import { BaseApi } from "./baseApi";
-import { customTrFetchBase } from "../../customFetchBase";
+import { customTrApiFetchBase } from "../../customFetchBase";
 
 const collectionPath = 'drawing_elements';
 
 export const drawingElementsApi = (new BaseApi({
   reducerPath: collectionPath,
-  baseQuery: customTrFetchBase,
+  baseQuery: customTrApiFetchBase,
   collectionPath,
   extraEndpoints: (builder) => ({
     // @ts-ignore

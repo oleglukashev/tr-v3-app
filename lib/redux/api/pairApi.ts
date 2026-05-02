@@ -1,10 +1,10 @@
 import { BaseApi } from "./baseApi";
-import {customTrFetchBase} from "../../customFetchBase";
+import {customTrApiFetchBase} from "../../customFetchBase";
 
 const collectionPath = 'pairs';
 export const pairApi = (new BaseApi({
   reducerPath: collectionPath,
-  baseQuery: customTrFetchBase,
+  baseQuery: customTrApiFetchBase,
   collectionPath,
 })).create();
 

@@ -1,10 +1,10 @@
 import { BaseApi } from "./baseApi";
-import {customTrFetchBase} from "../../customFetchBase";
+import {customTrApiFetchBase} from "../../customFetchBase";
 
 const collectionPath = 'position';
 export const positionApi = (new BaseApi({
   reducerPath: collectionPath,
-  baseQuery: customTrFetchBase,
+  baseQuery: customTrApiFetchBase,
   collectionPath,
   extraEndpoints: (builder) => {
     return {

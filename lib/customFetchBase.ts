@@ -14,10 +14,10 @@ const baseTrQuery = fetchBaseQuery({
   },
 });
 
-// const baseTrApiQuery = fetchBaseQuery({
-//   baseUrl: process.env.NEXT_PUBLIC_TR_API_DOMAIN,
-//   //credentials: "include",
-// });
+const baseTrApiQuery = fetchBaseQuery({
+  baseUrl: process.env.NEXT_PUBLIC_TR_API_DOMAIN,
+  //credentials: "include",
+});
 
 const baseTrKlinesQuery = fetchBaseQuery({
   baseUrl: process.env.NEXT_PUBLIC_TR_KLINES_DOMAIN,
@@ -38,13 +38,13 @@ const fetchBase = async (baseQuery, args: FetchArgs, api, extraOptions) => {
   return baseQuery(args, api, extraOptions);
 }
 
-// export const customTrApiFetchBase: BaseQueryFn<
-//   FetchArgs,
-//   unknown,
-//   FetchBaseQueryError
-// > = async (args: FetchArgs, api, extraOptions) => {
-//   return fetchBase(baseTrApiQuery, args, api, extraOptions);
-// };
+export const customTrApiFetchBase: BaseQueryFn<
+  FetchArgs,
+  unknown,
+  FetchBaseQueryError
+> = async (args: FetchArgs, api, extraOptions) => {
+  return fetchBase(baseTrApiQuery, args, api, extraOptions);
+};
 
 export const customTrFetchBase: BaseQueryFn<
   FetchArgs,
