@@ -816,35 +816,23 @@ export default function DhmIndexView({ tf, pairId }: any) {
         title={`Test session #${currentTestSession?.id}`}
         content={(
           currentTestSession && (
-            <Box sx={{ p: 2, minWidth: 320 }}>
-              <Box sx={{ display: 'flex', gap: 1, mb: 1, flexWrap: 'wrap' }}>
-                <Label color={
-                  currentTestSession.status === 'finished' || currentTestSession.status === 'finished_by_size' ? 'success'
-                  : currentTestSession.status === 'finished_by_lose' || currentTestSession.status === 'finished_by_length' ? 'error'
-                  : 'warning'
-                }>{currentTestSession.status}</Label>
-                <Label color={currentTestSession.direction === 'up' ? 'success' : 'error'}>
-                  {currentTestSession.direction}
-                </Label>
-              </Box>
-              <Typography variant="body2" sx={{ mb: 0.5 }}>
-                <b>High:</b> {currentTestSession.data?.high}
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 0.5 }}>
-                <b>Low:</b> {currentTestSession.data?.low}
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 0.5 }}>
-                <b>Kline1:</b> {moment(Number(currentTestSession.data?.kline1?.ts)).utc().format('DD.MM.YYYY HH:mm')}
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 0.5 }}>
-                <b>Kline2:</b> {moment(Number(currentTestSession.data?.kline2?.ts)).utc().format('DD.MM.YYYY HH:mm')}
-              </Typography>
-              {currentTestSession.finishTs && (
-                <Typography variant="body2" sx={{ mb: 0.5 }}>
-                  <b>Finish:</b> {moment(Number(currentTestSession.finishTs)).utc().format('DD.MM.YYYY HH:mm')}
-                </Typography>
-              )}
-            </Box>
+            <StrategiesDhmDialog
+              currentDhm={{
+                ...currentTestSession,
+                high: currentTestSession.data?.high,
+                low: currentTestSession.data?.low,
+                kline1: currentTestSession.data?.kline1,
+                kline2: currentTestSession.data?.kline2,
+              }}
+              currentKline={null}
+              onCreateSubmit={null}
+              onUpdateSubmit={() => {}}
+              onRemoveSubmit={() => {}}
+              tf={tf}
+              pairId={pairId}
+              currentPrice={null}
+              dhmSettings={dhmSettings}
+            />
           )
         )}
       />
