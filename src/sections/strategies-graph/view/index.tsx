@@ -513,11 +513,12 @@ export default function DhmIndexView({ tf, pairId }: any) {
   useEffect(() => {
     if (!chart) {return}
     if (!dhm) {return}
-    const klines = chart.getDataList();
 
     chart.removeOverlay({ name: `dhmUp` })
     chart.removeOverlay({ name: `dhmDown` })
     chart.removeOverlay({ name: `limitOrder` })
+
+    if (isTestPanelOpen) { return; }
 
     for (const item of dhm) {
       if (!(dhmVisibleStatuses || []).includes(item.status)) { continue; }
@@ -581,7 +582,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
       chart.unsubscribeAction?.('onCandleBarClick', onCandleBarClick);
       chart.unsubscribeAction?.('onZoom', onZoom);
     };
-  }, [chart, fpp, dhm, dhmVisibleStatuses, getLimitOrderPrice, mapDrawingOverlayActiveRef]);
+  }, [chart, fpp, dhm, dhmVisibleStatuses, getLimitOrderPrice, mapDrawingOverlayActiveRef, isTestPanelOpen]);
 
   useEffect((): void => {
     if (!chart) { return; }
