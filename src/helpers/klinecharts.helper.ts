@@ -588,7 +588,7 @@ export const testDhmUp: any = {
     const startY = coordinates[0].y + 5;
     const lineEndY = startY + 10;
     const arrowEndY = lineEndY + 30;
-    const color = `rgba(2,136,209,0.85)`;
+    const color = `rgba(0,89,30,0.85)`;
     return [
       { type: 'line', attrs: { coordinates: [{ x: startX, y: startY }, { x: startX, y: lineEndY }] }, ignoreEvent: true, styles: { color, style: 'dashed' } },
       { type: 'polygon', attrs: { coordinates: [{ x: startX, y: lineEndY }, { x: startX - 5, y: arrowEndY - 20 }, { x: startX + 5, y: arrowEndY - 20 }] }, ignoreEvent: true, styles: { color, style: 'fill' } },
@@ -608,7 +608,7 @@ export const testDhmDown: any = {
     const startY = coordinates[0].y - 5;
     const lineEndY = startY - 10;
     const arrowEndY = lineEndY - 30;
-    const color = `rgba(245,124,0,0.85)`;
+    const color = `rgba(244,67,54,0.85)`;
     return [
       { type: 'line', attrs: { coordinates: [{ x: startX, y: startY }, { x: startX, y: lineEndY }] }, ignoreEvent: true, styles: { color, style: 'dashed' } },
       { type: 'polygon', attrs: { coordinates: [{ x: startX, y: lineEndY }, { x: startX - 5, y: arrowEndY + 20 }, { x: startX + 5, y: arrowEndY + 20 }] }, ignoreEvent: true, styles: { color, style: 'fill' } },
