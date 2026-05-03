@@ -45,6 +45,14 @@ const successColor = 'rgba(0,89,30)';
 const transErrorColor = 'rgba(244,67,54,0.95)';
 const errorColor = 'rgba(244,67,54)';
 
+function dhmStatusColor(status: string, opacity: number): string {
+  if (status === 'finished') return `rgba(0,89,30,${opacity})`;
+  if (status === 'finished_by_lose') return `rgba(244,67,54,${opacity})`;
+  if (status === 'finished_by_size' || status === 'finished_by_length') return `rgba(237,108,2,${opacity})`;
+  // created, waiting, triggered — blue (info)
+  return `rgba(2,136,209,${opacity})`;
+}
+
 
 // export const limitOrder = {
 //   name: 'limitOrder',
@@ -449,60 +457,34 @@ export const dhmUp: any = {
     text = (overlay?.extendData?.ts ?? '') as string;
     text = `${text} (${overlay?.extendData?.tf})`;
     const status = overlay?.extendData?.status ?? '';
-    const text2 = '•';
-    const confirmed = overlay?.extendData?.confirmed ?? false
+    const confirmed = overlay?.extendData?.confirmed ?? false;
     const opacity = confirmed ? 0.95 : 0.3;
+    const color = dhmStatusColor(status, opacity);
     const startX = coordinates[0].x
     const startY = coordinates[0].y + 5
     const lineEndY = startY + 10;
     const arrowEndY = lineEndY + 30;
 
-    const result = [
+    return [
       {
         type: 'line',
         attrs: { coordinates: [{ x: startX, y: startY }, { x: startX, y: lineEndY }] },
         ignoreEvent: true,
-        styles: {
-          color: `rgba(0,89,30,${opacity})`,
-          style: 'dashed',
-        }
+        styles: { color, style: 'dashed' }
       },
       {
         type: 'polygon',
         attrs: { coordinates: [{ x: startX, y: lineEndY }, { x: startX - 5, y: arrowEndY - 20 }, { x: startX + 5, y: arrowEndY - 20 }] },
         ignoreEvent: true,
-        styles: {
-          color: `rgba(0,89,30,${opacity})`,
-          style: 'fill',
-        }
+        styles: { color, style: 'fill' }
       },
       {
         type: 'text',
         attrs: { x: startX, y: arrowEndY, text, align: 'center', baseline: 'bottom' },
         ignoreEvent: true,
-        styles: {
-          backgroundColor: `rgba(0,89,30,${opacity})`,
-          //color: 'rgba(0,89,30, 0.55)',
-          style: 'fill',
-        }
+        styles: { backgroundColor: color, style: 'fill' }
       }
     ];
-
-    if (overlay?.extendData?.confirmed) {
-      result.push({
-        type: 'text',
-        attrs: { x: startX, y: arrowEndY + 40, text: text2, align: 'center', baseline: 'bottom' },
-        ignoreEvent: true,
-        styles: {
-          backgroundColor: `rgba(0,89,30,0)`,
-          color: status === 'finished' ? successColor : status === 'finished_by_lose' ? errorColor : 'transparent',
-          size: 50,
-          style: 'fill',
-        }
-      });
-    }
-
-    return result;
   }
 }
 
@@ -517,63 +499,34 @@ export const dhmDown: any = {
     text = (overlay?.extendData?.ts ?? '') as string;
     text = `${text} (${overlay?.extendData?.tf})`;
     const status = overlay?.extendData?.status ?? '';
-    const text2 = '•';
-    const confirmed = overlay?.extendData?.confirmed ?? false
-    const opacity = confirmed ? 0.9 : 0.3;
+    const confirmed = overlay?.extendData?.confirmed ?? false;
+    const opacity = confirmed ? 0.95 : 0.3;
+    const color = dhmStatusColor(status, opacity);
     const startX = coordinates[0].x
-    // Draw above kline: shift everything upward from candle
     const startY = coordinates[0].y - 5
     const lineEndY = startY - 10;
     const arrowEndY = lineEndY - 30;
 
-    const result = [
+    return [
       {
         type: 'line',
         attrs: { coordinates: [{ x: startX, y: startY }, { x: startX, y: lineEndY }] },
         ignoreEvent: true,
-        styles: {
-          color: `rgba(244,67,54,${opacity})`,
-          style: 'dashed',
-        }
+        styles: { color, style: 'dashed' }
       },
       {
         type: 'polygon',
-        // Triangle pointing down from the line toward the text
         attrs: { coordinates: [{ x: startX, y: lineEndY }, { x: startX - 5, y: arrowEndY + 20 }, { x: startX + 5, y: arrowEndY + 20 }] },
         ignoreEvent: true,
-        styles: {
-          color: `rgba(244,67,54,${opacity})`,
-          style: 'fill',
-        }
+        styles: { color, style: 'fill' }
       },
       {
         type: 'text',
-        // Place text above kline (higher on chart)
         attrs: { x: startX, y: arrowEndY, text, align: 'center', baseline: 'top' },
         ignoreEvent: true,
-        styles: {
-          backgroundColor: `rgba(244,67,54,${opacity})`,
-          //color: 'rgba(0,89,30, 0.55)',
-          style: 'fill',
-        }
+        styles: { backgroundColor: color, style: 'fill' }
       }
     ];
-
-    if (overlay?.extendData?.confirmed) {
-      result.push({
-        type: 'text',
-        attrs: { x: startX, y: arrowEndY + 20, text: text2, align: 'center', baseline: 'bottom' },
-        ignoreEvent: true,
-        styles: {
-          backgroundColor: `rgba(0,89,30,0)`,
-          color: status === 'finished' ? successColor : status === 'finished_by_lose' ? errorColor : 'transparent',
-          size: 50,
-          style: 'fill',
-        }
-      });
-    }
-
-    return result;
   }
 }
 
@@ -584,11 +537,11 @@ export const testDhmUp: any = {
   createPointFigures: ({ overlay, coordinates }) => {
     const text = `${overlay?.extendData?.ts ?? ''} (${overlay?.extendData?.tf ?? ''})`;
     const status = overlay?.extendData?.status ?? '';
+    const color = dhmStatusColor(status, 0.85);
     const startX = coordinates[0].x;
     const startY = coordinates[0].y + 5;
     const lineEndY = startY + 10;
     const arrowEndY = lineEndY + 30;
-    const color = `rgba(0,89,30,0.85)`;
     return [
       { type: 'line', attrs: { coordinates: [{ x: startX, y: startY }, { x: startX, y: lineEndY }] }, ignoreEvent: true, styles: { color, style: 'dashed' } },
       { type: 'polygon', attrs: { coordinates: [{ x: startX, y: lineEndY }, { x: startX - 5, y: arrowEndY - 20 }, { x: startX + 5, y: arrowEndY - 20 }] }, ignoreEvent: true, styles: { color, style: 'fill' } },
@@ -604,11 +557,11 @@ export const testDhmDown: any = {
   createPointFigures: ({ overlay, coordinates }) => {
     const text = `${overlay?.extendData?.ts ?? ''} (${overlay?.extendData?.tf ?? ''})`;
     const status = overlay?.extendData?.status ?? '';
+    const color = dhmStatusColor(status, 0.85);
     const startX = coordinates[0].x;
     const startY = coordinates[0].y - 5;
     const lineEndY = startY - 10;
     const arrowEndY = lineEndY - 30;
-    const color = `rgba(244,67,54,0.85)`;
     return [
       { type: 'line', attrs: { coordinates: [{ x: startX, y: startY }, { x: startX, y: lineEndY }] }, ignoreEvent: true, styles: { color, style: 'dashed' } },
       { type: 'polygon', attrs: { coordinates: [{ x: startX, y: lineEndY }, { x: startX - 5, y: arrowEndY + 20 }, { x: startX + 5, y: arrowEndY + 20 }] }, ignoreEvent: true, styles: { color, style: 'fill' } },
