@@ -1,9 +1,37 @@
-import {CheckboxElement, FormContainer, TextFieldElement} from "react-hook-form-mui";
-import {FormGroup, Grid} from "@mui/material";
+import {FormContainer, TextFieldElement} from "react-hook-form-mui";
+import {Grid, TextField} from "@mui/material";
 import CustomFormButton from "@/src/components/custom-form-button/custom-form-button";
 import {object} from "zod";
 import {zodNumberSchema, zodStringSchema} from "@/src/helpers/form-validation.helper";
 import {zodResolver} from "@hookform/resolvers/zod";
+import {Controller, useFormContext} from "react-hook-form";
+import moment from "moment";
+
+function DateTsField({ name, label }: { name: string; label: string }) {
+  const { control } = useFormContext();
+  return (
+    <Controller
+      name={name}
+      control={control}
+      render={({ field, fieldState }) => (
+        <TextField
+          label={label}
+          type="datetime-local"
+          size="small"
+          fullWidth
+          InputLabelProps={{ shrink: true }}
+          error={!!fieldState.error}
+          helperText={fieldState.error?.message}
+          value={field.value ? moment.utc(Number(field.value)).format('YYYY-MM-DDTHH:mm') : ''}
+          onChange={(e) => {
+            const ts = e.target.value ? moment.utc(e.target.value).valueOf() : null;
+            field.onChange(ts);
+          }}
+        />
+      )}
+    />
+  );
+}
 
 export function StrategiesBacktestForm({ defaultValues, isLoading, onSubmit }: any) {
   return (
@@ -139,22 +167,10 @@ export function StrategiesBacktestForm({ defaultValues, isLoading, onSubmit }: a
           />
         </Grid>
         <Grid item size={12}>
-          <TextFieldElement
-            name='startTs'
-            label='Start ts'
-            type='number'
-            size='small'
-            fullWidth
-          />
+          <DateTsField name='startTs' label='Start date' />
         </Grid>
         <Grid item size={12}>
-          <TextFieldElement
-            name='finishTs'
-            label='Finish ts'
-            type='number'
-            size='small'
-            fullWidth
-          />
+          <DateTsField name='finishTs' label='Finish date' />
         </Grid>
       </Grid>
       <CustomFormButton isLoading={isLoading} value='Run' />
