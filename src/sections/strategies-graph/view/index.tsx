@@ -896,7 +896,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
                 finishLevel: '0.382',
                 maxSessionLength: 60,
                 minPriceSize: 5,
-                startTs: 1735675200000,
+                startTs: 1767211200000,
                 finishTs: null,
                 direction: 'up',
               }}
