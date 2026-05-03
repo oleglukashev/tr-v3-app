@@ -519,39 +519,39 @@ export default function DhmIndexView({ tf, pairId }: any) {
     chart.removeOverlay({ name: `dhmDown` })
     chart.removeOverlay({ name: `limitOrder` })
 
-    if (isTestPanelOpen) { return; }
+    if (!isTestPanelOpen) {
+      for (const item of dhm) {
+        if (!(dhmVisibleStatuses || []).includes(item.status)) { continue; }
+        chart.createOverlay({
+          name: item.direction === 'up' ? 'dhmUp' : 'dhmDown',
+          extendData: {
+            ts: item.direction === 'up' ? item.kline1.low : item.kline1.high,
+            confirmed: item.confirmed,
+            tf: item.tf,
+            status: item.status,
+          },
+          points: [{timestamp: parseInt(item.kline1.ts), value: parseFloat(item.direction === 'up' ? item.kline1.low : item.kline1.high)}],
+        })
 
-    for (const item of dhm) {
-      if (!(dhmVisibleStatuses || []).includes(item.status)) { continue; }
-      chart.createOverlay({
-        name: item.direction === 'up' ? 'dhmUp' : 'dhmDown',
-        extendData: {
-          ts: item.direction === 'up' ? item.kline1.low : item.kline1.high,
-          confirmed: item.confirmed,
-          tf: item.tf,
-          status: item.status,
-        },
-        points: [{timestamp: parseInt(item.kline1.ts), value: parseFloat(item.direction === 'up' ? item.kline1.low : item.kline1.high)}],
-      })
-
-      if (
-        ['up', 'down'].includes(item?.direction)
-        && ['triggered', 'waiting'].includes(item?.status)
-        && item?.orders
-        && typeof item.orders === 'object'
-      ) {
-        for (const side of Object.keys(item.orders)) {
-          const sideOrders = item.orders[side];
-          if (!sideOrders || typeof sideOrders !== 'object') { continue; }
-          for (const level of Object.keys(sideOrders)) {
-            const order = sideOrders[level];
-            if (!order?.id || order?.status !== 'success') { continue; }
-            const limitOrderPrice = getLimitOrderPrice(order, level);
-            if (!limitOrderPrice) { continue; }
-            chart.createOverlay({
-              name: `limitOrder`,
-              points: [{ timestamp: null, value: limitOrderPrice }],
-            });
+        if (
+          ['up', 'down'].includes(item?.direction)
+          && ['triggered', 'waiting'].includes(item?.status)
+          && item?.orders
+          && typeof item.orders === 'object'
+        ) {
+          for (const side of Object.keys(item.orders)) {
+            const sideOrders = item.orders[side];
+            if (!sideOrders || typeof sideOrders !== 'object') { continue; }
+            for (const level of Object.keys(sideOrders)) {
+              const order = sideOrders[level];
+              if (!order?.id || order?.status !== 'success') { continue; }
+              const limitOrderPrice = getLimitOrderPrice(order, level);
+              if (!limitOrderPrice) { continue; }
+              chart.createOverlay({
+                name: `limitOrder`,
+                points: [{ timestamp: null, value: limitOrderPrice }],
+              });
+            }
           }
         }
       }
