@@ -511,78 +511,89 @@ export default function DhmIndexView({ tf, pairId }: any) {
     }, 'vol_pane');
   }, [chart, klinesUpdatedAt, showVolume]);
 
+  // Refs so click handler always reads latest values without being a dep of the overlay effect
+  const isTestPanelOpenRef = useRef(isTestPanelOpen);
+  const testSessionsRef = useRef(testSessions);
+  const testSessionsTabRef = useRef(testSessionsTab);
+  const dhmRef = useRef(dhm);
+  useEffect(() => { isTestPanelOpenRef.current = isTestPanelOpen; }, [isTestPanelOpen]);
+  useEffect(() => { testSessionsRef.current = testSessions; }, [testSessions]);
+  useEffect(() => { testSessionsTabRef.current = testSessionsTab; }, [testSessionsTab]);
+  useEffect(() => { dhmRef.current = dhm; }, [dhm]);
+
+  // DHM overlays
   useEffect(() => {
-    if (!chart) {return}
-    if (!dhm) {return}
+    if (!chart) { return; }
+    if (!dhm) { return; }
 
-    chart.removeOverlay({ name: `dhmUp` })
-    chart.removeOverlay({ name: `dhmDown` })
-    chart.removeOverlay({ name: `limitOrder` })
+    chart.removeOverlay({ name: `dhmUp` });
+    chart.removeOverlay({ name: `dhmDown` });
+    chart.removeOverlay({ name: `limitOrder` });
 
-    if (!isTestPanelOpen) {
-      for (const item of dhm) {
-        if (!(dhmVisibleStatuses || []).includes(item.status)) { continue; }
-        chart.createOverlay({
-          name: item.direction === 'up' ? 'dhmUp' : 'dhmDown',
-          extendData: {
-            ts: item.direction === 'up' ? item.kline1.low : item.kline1.high,
-            confirmed: item.confirmed,
-            tf: item.tf,
-            status: item.status,
-          },
-          points: [{timestamp: parseInt(item.kline1.ts), value: parseFloat(item.direction === 'up' ? item.kline1.low : item.kline1.high)}],
-        })
+    if (isTestPanelOpen) { return; }
 
-        if (
-          ['up', 'down'].includes(item?.direction)
-          && ['triggered', 'waiting'].includes(item?.status)
-          && item?.orders
-          && typeof item.orders === 'object'
-        ) {
-          for (const side of Object.keys(item.orders)) {
-            const sideOrders = item.orders[side];
-            if (!sideOrders || typeof sideOrders !== 'object') { continue; }
-            for (const level of Object.keys(sideOrders)) {
-              const order = sideOrders[level];
-              if (!order?.id || order?.status !== 'success') { continue; }
-              const limitOrderPrice = getLimitOrderPrice(order, level);
-              if (!limitOrderPrice) { continue; }
-              chart.createOverlay({
-                name: `limitOrder`,
-                points: [{ timestamp: null, value: limitOrderPrice }],
-              });
-            }
+    for (const item of dhm) {
+      if (!(dhmVisibleStatuses || []).includes(item.status)) { continue; }
+      chart.createOverlay({
+        name: item.direction === 'up' ? 'dhmUp' : 'dhmDown',
+        extendData: {
+          ts: item.direction === 'up' ? item.kline1.low : item.kline1.high,
+          confirmed: item.confirmed,
+          tf: item.tf,
+          status: item.status,
+        },
+        points: [{ timestamp: parseInt(item.kline1.ts), value: parseFloat(item.direction === 'up' ? item.kline1.low : item.kline1.high) }],
+      });
+
+      if (
+        ['up', 'down'].includes(item?.direction)
+        && ['triggered', 'waiting'].includes(item?.status)
+        && item?.orders
+        && typeof item.orders === 'object'
+      ) {
+        for (const side of Object.keys(item.orders)) {
+          const sideOrders = item.orders[side];
+          if (!sideOrders || typeof sideOrders !== 'object') { continue; }
+          for (const level of Object.keys(sideOrders)) {
+            const order = sideOrders[level];
+            if (!order?.id || order?.status !== 'success') { continue; }
+            const limitOrderPrice = getLimitOrderPrice(order, level);
+            if (!limitOrderPrice) { continue; }
+            const kline1Ts = item.kline1?.ts ? parseInt(item.kline1.ts) : null;
+            if (!kline1Ts) { continue; }
+            chart.createOverlay({
+              name: `limitOrder`,
+              points: [{ timestamp: kline1Ts, value: limitOrderPrice }],
+            });
           }
         }
       }
     }
+  }, [chart, dhm, dhmVisibleStatuses, getLimitOrderPrice, isTestPanelOpen]);
 
+  // Candle click + zoom handlers — use refs to avoid retrigering overlay effects
+  useEffect(() => {
+    if (!chart) { return; }
     const onCandleBarClick = async (event: any) => {
       const bar = chart.getBarSpace();
       const { data } = event;
-      if (bar.bar >= 25) {
-        return;
-      }
-      if (mapDrawingOverlayActiveRef.current) {
-        return;
-      }
-      if (isTestPanelOpen) {
-        const visibleSessions = testSessionsTab === 'all'
-          ? (testSessions || [])
-          : (testSessions || []).filter((item: any) => item.status === testSessionsTab);
+      if (bar.bar >= 25) { return; }
+      if (mapDrawingOverlayActiveRef.current) { return; }
+      if (isTestPanelOpenRef.current) {
+        const sessions = testSessionsRef.current || [];
+        const tab = testSessionsTabRef.current;
+        const visibleSessions = tab === 'all' ? sessions : sessions.filter((item: any) => item.status === tab);
         const testSession = visibleSessions.find(
           (item: any) => Number(item.data?.kline1?.ts) === Number(data.current.timestamp),
         );
-        if (testSession) {
-          setCurrentTestSession(testSession);
-        }
+        if (testSession) { setCurrentTestSession(testSession); }
         return;
       }
       setCurrentDhmKline(data.current);
-      const currentDhm = dhm.find((item: any) => Number(item.kline1.ts) === Number(data.current.timestamp));
+      const currentDhm = (dhmRef.current || []).find((item: any) => Number(item.kline1.ts) === Number(data.current.timestamp));
       setCurrentDhm(currentDhm);
     };
-    const onZoom = (e: any) => {
+    const onZoom = () => {
       const bar = chart.getBarSpace();
       if (bar.bar < 25) {
         chart.removeOverlay({ name: 'clusterKline' });
@@ -595,7 +606,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
       chart.unsubscribeAction?.('onCandleBarClick', onCandleBarClick);
       chart.unsubscribeAction?.('onZoom', onZoom);
     };
-  }, [chart, fpp, dhm, dhmVisibleStatuses, getLimitOrderPrice, mapDrawingOverlayActiveRef, isTestPanelOpen, testSessions, testSessionsTab]);
+  }, [chart, mapDrawingOverlayActiveRef]);
 
   useEffect((): void => {
     if (!chart) { return; }
