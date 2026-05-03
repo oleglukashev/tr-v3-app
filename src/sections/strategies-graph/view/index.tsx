@@ -567,7 +567,10 @@ export default function DhmIndexView({ tf, pairId }: any) {
         return;
       }
       if (isTestPanelOpen) {
-        const testSession = (testSessions || []).find(
+        const visibleSessions = testSessionsTab === 'all'
+          ? (testSessions || [])
+          : (testSessions || []).filter((item: any) => item.status === testSessionsTab);
+        const testSession = visibleSessions.find(
           (item: any) => Number(item.data?.kline1?.ts) === Number(data.current.timestamp),
         );
         if (testSession) {
@@ -592,14 +595,17 @@ export default function DhmIndexView({ tf, pairId }: any) {
       chart.unsubscribeAction?.('onCandleBarClick', onCandleBarClick);
       chart.unsubscribeAction?.('onZoom', onZoom);
     };
-  }, [chart, fpp, dhm, dhmVisibleStatuses, getLimitOrderPrice, mapDrawingOverlayActiveRef, isTestPanelOpen, testSessions]);
+  }, [chart, fpp, dhm, dhmVisibleStatuses, getLimitOrderPrice, mapDrawingOverlayActiveRef, isTestPanelOpen, testSessions, testSessionsTab]);
 
   useEffect((): void => {
     if (!chart) { return; }
     chart.removeOverlay({ name: 'testDhmUp' });
     chart.removeOverlay({ name: 'testDhmDown' });
     if (!isTestPanelOpen || !testSessions?.length) { return; }
-    for (const item of testSessions) {
+    const visibleSessions = testSessionsTab === 'all'
+      ? testSessions
+      : testSessions.filter((item: any) => item.status === testSessionsTab);
+    for (const item of visibleSessions) {
       const kline1 = item.data?.kline1;
       if (!kline1) { continue; }
       chart.createOverlay({
@@ -612,7 +618,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
         points: [{ timestamp: parseInt(kline1.ts), value: parseFloat(item.direction === 'up' ? kline1.low : kline1.high) }],
       });
     }
-  }, [chart, isTestPanelOpen, testSessions]);
+  }, [chart, isTestPanelOpen, testSessions, testSessionsTab]);
 
 
   useEffect(() => {
