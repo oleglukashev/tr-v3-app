@@ -963,10 +963,11 @@ export default function DhmIndexView({ tf, pairId }: any) {
 
           {(() => {
             const sessions = (testSessions as any[]) || [];
-            const getStatusColor = (status: string): 'success' | 'error' | 'warning' | 'default' =>
-              status === 'finished' || status === 'finished_by_size' ? 'success'
-              : status === 'finished_by_lose' || status === 'finished_by_length' ? 'error'
-              : status === 'created' || status === 'waiting' || status === 'triggered' ? 'warning'
+            const getStatusColor = (status: string): 'success' | 'error' | 'warning' | 'info' | 'default' =>
+              status === 'finished' ? 'success'
+              : status === 'finished_by_lose' ? 'error'
+              : status === 'finished_by_size' || status === 'finished_by_length' ? 'warning'
+              : status === 'created' || status === 'waiting' || status === 'triggered' ? 'info'
               : 'default';
             const stats = sessions.reduce(
               (acc: any, s: any) => {
