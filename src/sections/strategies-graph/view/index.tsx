@@ -6,6 +6,7 @@ import {
   useCreateDhmMutation,
   useGetAllDhmQuery, useRemoveDhmMutation, useUpdateDhmMutation, useGetAllActiveDhmQuery,
   useGetAllTestDhmQuery, useDeleteAllTestDhmMutation, useRunTestDhmMutation,
+  useGetBacktestSettingsQuery, useSaveBacktestSettingsMutation,
 } from "@/lib/redux/api/dhmApi";
 import { useGetAllQuery as useGetAllFppQuery } from "@/lib/redux/api/fppApi";
 import CustomDialog from 'src/components/custom-dialog/custom-dialog';
@@ -131,6 +132,23 @@ registerOverlay(testDhmDown);
 registerIndicator(ema);
 registerIndicator(bollingerBands);
 registerFigure(godKline);
+
+const DEFAULT_BACKTEST_VALUES = {
+  enterLevel1: '0.5',
+  enterLevel2: '0.618',
+  enterLevel3: '0.768',
+  takeProfitLevel1: '0.382',
+  takeProfitLevel2: '0.5',
+  takeProfitLevel3: '0.618',
+  triggerLevel: '0.5',
+  stopLossLevel: '1.1',
+  finishLevel: '0.382',
+  maxSessionLength: 60,
+  minPriceSize: 5,
+  startTs: 1767211200000,
+  finishTs: null,
+  direction: 'up',
+};
 
 export default function DhmIndexView({ tf, pairId }: any) {
   const theme = useTheme();
@@ -289,6 +307,8 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const { data: testSessions, refetch: refetchTestSessions } = useGetAllTestDhmQuery({ pairId, tf }, { skip: !isTestPanelOpen });
   const [deleteAllTestSessions, { isLoading: isDeletingTest }] = useDeleteAllTestDhmMutation();
   const [runTest, { isLoading: isRunningTest }] = useRunTestDhmMutation();
+  const { data: backtestSettings } = useGetBacktestSettingsQuery({ pairId, tf }, { skip: !isTestPanelOpen });
+  const [saveBacktestSettings] = useSaveBacktestSettingsMutation();
   const { data: tdaPoints } = useGetAllQuery({ pairId });
   //const [createPositionRtk, { isLoading: isCreatePositionLoading }] = useCreatePositionMutation();
   //const [cancelPositionRtk, { isLoading: isCancelPositionLoading }] = useCancelPositionMutation();
@@ -415,8 +435,10 @@ export default function DhmIndexView({ tf, pairId }: any) {
   }, [deleteAllTestSessions, refetchTestSessions]);
 
   const onRunTestSubmit = useCallback(async (values: any) => {
+    const { pairId: _p, tf: _t, ...settingsToSave } = values;
+    saveBacktestSettings({ pairId, tf, data: settingsToSave });
     return onSubmitWrapper(() => runTest({ pairId, tf, ...values }), () => refetchTestSessions(), 'Запущено');
-  }, [runTest, pairId, tf, refetchTestSessions]);
+  }, [runTest, pairId, tf, refetchTestSessions, saveBacktestSettings]);
 
   const onDragHandleMouseDown = useCallback((e: React.MouseEvent) => {
     dragStartY.current = e.clientY;
@@ -938,28 +960,21 @@ export default function DhmIndexView({ tf, pairId }: any) {
 
         <Box sx={{ display: 'flex', gap: 2, flex: 1, overflow: 'hidden' }}>
           <Box sx={{ width: 340, flexShrink: 0, overflowY: 'auto' }}>
-            <StrategiesBacktestForm
-              defaultValues={{
-                pairId,
-                tf,
-                enterLevel1: '0.5',
-                enterLevel2: '0.618',
-                enterLevel3: '0.768',
-                takeProfitLevel1: '0.382',
-                takeProfitLevel2: '0.5',
-                takeProfitLevel3: '0.618',
-                triggerLevel: '0.5',
-                stopLossLevel: '1.1',
-                finishLevel: '0.382',
-                maxSessionLength: 60,
-                minPriceSize: 5,
-                startTs: 1767211200000,
-                finishTs: null,
-                direction: 'up',
-              }}
-              isLoading={isRunningTest}
-              onSubmit={onRunTestSubmit}
-            />
+            {(() => {
+              const savedData = backtestSettings?.data ?? {};
+              const formKey = JSON.stringify(backtestSettings ?? 'default');
+              const mergedDefaults = { pairId, tf, ...DEFAULT_BACKTEST_VALUES, ...savedData };
+              return (
+                <StrategiesBacktestForm
+                  key={formKey}
+                  defaultValues={mergedDefaults}
+                  isLoading={isRunningTest}
+                  onSubmit={onRunTestSubmit}
+                  onReset={() => {}}
+                  resetValues={{ pairId, tf, ...DEFAULT_BACKTEST_VALUES }}
+                />
+              );
+            })()}
           </Box>
 
           <Divider orientation="vertical" flexItem />

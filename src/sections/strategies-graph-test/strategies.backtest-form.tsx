@@ -1,5 +1,5 @@
 import {FormContainer, TextFieldElement} from "react-hook-form-mui";
-import {Grid, TextField} from "@mui/material";
+import {Button, Grid, TextField} from "@mui/material";
 import CustomFormButton from "@/src/components/custom-form-button/custom-form-button";
 import {object} from "zod";
 import {zodNumberSchema, zodStringSchema} from "@/src/helpers/form-validation.helper";
@@ -33,7 +33,23 @@ function DateTsField({ name, label }: { name: string; label: string }) {
   );
 }
 
-export function StrategiesBacktestForm({ defaultValues, isLoading, onSubmit }: any) {
+function ResetButton({ resetValues }: { resetValues: any }) {
+  const { reset } = useFormContext();
+  return (
+    <Button
+      type="button"
+      variant="outlined"
+      size="small"
+      fullWidth
+      sx={{ mt: 1 }}
+      onClick={() => reset(resetValues)}
+    >
+      Сбросить
+    </Button>
+  );
+}
+
+export function StrategiesBacktestForm({ defaultValues, isLoading, onSubmit, resetValues }: any) {
   return (
     <FormContainer
       defaultValues={defaultValues}
@@ -174,6 +190,7 @@ export function StrategiesBacktestForm({ defaultValues, isLoading, onSubmit }: a
         </Grid>
       </Grid>
       <CustomFormButton isLoading={isLoading} value='Run' />
+      {resetValues && <ResetButton resetValues={resetValues} />}
     </FormContainer>
   )
 }

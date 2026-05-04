@@ -228,6 +228,22 @@ export const dhmApi = (new BaseApi({
           };
         },
       }),
+      // @ts-ignore
+      getBacktestSettings: builder.query<any, { pairId: number; tf: number }>({
+        query({ pairId, tf }) {
+          return { url: `${collectionPath}/backtest-settings/${pairId}/${tf}` };
+        },
+      }),
+      // @ts-ignore
+      saveBacktestSettings: builder.mutation<any, { pairId: number; tf: number; data: any }>({
+        query({ pairId, tf, data }) {
+          return {
+            url: `${collectionPath}/backtest-settings/${pairId}/${tf}`,
+            method: 'POST',
+            body: data,
+          };
+        },
+      }),
     }
   }
 })).create();
@@ -255,4 +271,6 @@ export const {
   useRunTestDhm2Mutation,
   useDeleteAllTestDhmMutation,
   useDeleteAllTestDhm2Mutation,
+  useGetBacktestSettingsQuery,
+  useSaveBacktestSettingsMutation,
 } = dhmApi;
