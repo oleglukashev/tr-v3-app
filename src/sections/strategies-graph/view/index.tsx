@@ -19,7 +19,7 @@ import {StrategiesDhmFppFiltersDialog} from "@/src/sections/strategies-graph/str
 import {StrategiesDhmKlineFppsDialog} from "@/src/sections/strategies-graph/strategies.dhm-kline-fpps-dialog";
 import {StrategiesBacktestForm} from "@/src/sections/strategies-graph-test/strategies.backtest-form";
 import moment from "moment/moment";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
 import {clearFppPatterns, drawClusterKlinesForVisible, drawFppPatterns} from "@/src/utils/klinecharts";
 import { BIDASK_CLUSTER_TF, getBidasksWebSocketUrl } from "@/src/utils/bidasksWebSocket";
 import MapTools from "@/src/components/map-tools/map-tools";
@@ -1137,16 +1137,16 @@ export default function DhmIndexView({ tf, pairId }: any) {
                       </Box>
                     ) : (
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={analyticsData} margin={{ top: 4, right: 8, left: -20, bottom: 40 }}>
+                        <LineChart data={analyticsData} margin={{ top: 4, right: 8, left: -20, bottom: 40 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
                           <XAxis dataKey="period" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" interval={0} />
                           <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
                           <Tooltip contentStyle={{ fontSize: 12 }} />
                           <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
                           {uniqueStatuses.map((status) => (
-                            <Bar key={status} dataKey={status} stackId="a" fill={STATUS_COLORS[status] ?? '#999'} name={status} />
+                            <Line key={status} type="monotone" dataKey={status} stroke={STATUS_COLORS[status] ?? '#999'} dot={false} name={status} />
                           ))}
-                        </BarChart>
+                        </LineChart>
                       </ResponsiveContainer>
                     )}
                   </Box>
