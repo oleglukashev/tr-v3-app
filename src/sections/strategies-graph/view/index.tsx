@@ -19,6 +19,7 @@ import {StrategiesDhmFppFiltersDialog} from "@/src/sections/strategies-graph/str
 import {StrategiesDhmKlineFppsDialog} from "@/src/sections/strategies-graph/strategies.dhm-kline-fpps-dialog";
 import {StrategiesBacktestForm} from "@/src/sections/strategies-graph-test/strategies.backtest-form";
 import moment from "moment/moment";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
 import {clearFppPatterns, drawClusterKlinesForVisible, drawFppPatterns} from "@/src/utils/klinecharts";
 import { BIDASK_CLUSTER_TF, getBidasksWebSocketUrl } from "@/src/utils/bidasksWebSocket";
 import MapTools from "@/src/components/map-tools/map-tools";
@@ -150,6 +151,8 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [panelHeight, setPanelHeight] = useState(320);
   const [testSessionsTab, setTestSessionsTab] = useState('all');
   const [testSessionsPage, setTestSessionsPage] = useState(0);
+  const [testResultsTab, setTestResultsTab] = useState<'general' | 'analytics'>('general');
+  const [analyticsGroupBy, setAnalyticsGroupBy] = useState<'month' | 'week'>('month');
   const dragStartY = useRef<number | null>(null);
   const dragStartHeight = useRef<number>(320);
   const [currentDhm, setCurrentDhm] = useState(null);
@@ -969,6 +972,15 @@ export default function DhmIndexView({ tf, pairId }: any) {
               : status === 'finished_by_size' || status === 'finished_by_length' ? 'warning'
               : status === 'created' || status === 'waiting' || status === 'triggered' ? 'info'
               : 'default';
+            const STATUS_COLORS: Record<string, string> = {
+              finished: '#005a1e',
+              finished_by_lose: '#f44336',
+              finished_by_size: '#ed6c02',
+              finished_by_length: '#ed6c02',
+              created: '#0288d1',
+              waiting: '#0288d1',
+              triggered: '#0288d1',
+            };
             const stats = sessions.reduce(
               (acc: any, s: any) => {
                 const side = s.direction === 'up' ? 'long' : 'short';
@@ -982,6 +994,23 @@ export default function DhmIndexView({ tf, pairId }: any) {
             const PAGE_SIZE = 50;
             const pageCount = Math.ceil(filteredSessions.length / PAGE_SIZE);
             const pageSessions = filteredSessions.slice(testSessionsPage * PAGE_SIZE, (testSessionsPage + 1) * PAGE_SIZE);
+
+            // Analytics data
+            const analyticsData = (() => {
+              const buckets: Record<string, Record<string, number>> = {};
+              for (const s of sessions) {
+                const ts = Number(s.startTs);
+                const key = analyticsGroupBy === 'month'
+                  ? moment(ts).format('YYYY-MM')
+                  : moment(ts).startOf('isoWeek').format('YYYY-MM-DD');
+                if (!buckets[key]) buckets[key] = {};
+                buckets[key][s.status] = (buckets[key][s.status] || 0) + 1;
+              }
+              return Object.entries(buckets)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([period, counts]) => ({ period, ...counts }));
+            })();
+
             return (
               <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 {/* Stats */}
@@ -1008,78 +1037,118 @@ export default function DhmIndexView({ tf, pairId }: any) {
                     </Box>
                   )}
                 </Box>
-                {/* Tabs */}
+                {/* General / Analytics tabs */}
                 <Tabs
-                  value={testSessionsTab}
-                  onChange={(_, v) => { setTestSessionsTab(v); setTestSessionsPage(0); }}
-                  variant="scrollable"
-                  scrollButtons="auto"
+                  value={testResultsTab}
+                  onChange={(_, v) => setTestResultsTab(v)}
                   sx={{ borderBottom: `1px solid ${theme.palette.divider}`, minHeight: 36, flexShrink: 0 }}
                   TabIndicatorProps={{ style: { height: 2 } }}
                 >
-                  <Tab label={`All (${sessions.length})`} value="all" sx={{ minHeight: 36, fontSize: 12, py: 0 }} />
-                  {uniqueStatuses.map((status) => {
-                    const count = sessions.filter((s: any) => s.status === status).length;
-                    return (
-                      <Tab key={status} value={status} sx={{ minHeight: 36, fontSize: 12, py: 0 }}
-                        label={
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <span>{status}</span>
-                            <Chip label={count} size="small" color={getStatusColor(status) as any}
-                              sx={{ height: 16, fontSize: 10, '.MuiChip-label': { px: 0.75 } }} />
-                          </Box>
-                        }
-                      />
-                    );
-                  })}
+                  <Tab label="General" value="general" sx={{ minHeight: 36, fontSize: 12, py: 0 }} />
+                  <Tab label="Analytics" value="analytics" sx={{ minHeight: 36, fontSize: 12, py: 0 }} />
                 </Tabs>
-                {/* Sessions list */}
-                <Box sx={{ overflowY: 'auto', flex: 1 }}>
-                  {pageSessions.map((item: any) => (
-                    <Box
-                      key={item.id}
-                      onClick={() => {
-                        const targetTs = item?.data?.kline1?.ts ?? item?.startTs;
-                        if (!pairId || !targetTs) { return; }
-                        router.push(`/dhm-graph/${pairId}/${tf}?ts=${targetTs}`);
-                      }}
-                      sx={{
-                        px: 2, py: 1,
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        borderBottom: `1px solid ${theme.palette.divider}`,
-                        '&:last-child': { borderBottom: 0 },
-                        cursor: 'pointer',
-                        '&:hover': { bgcolor: theme.palette.action.hover },
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, bgcolor: item.direction === 'up' ? '#4caf50' : '#f44336' }} />
-                        <Typography variant="caption" sx={{ color: theme.palette.text.disabled, minWidth: 28 }}>
-                          #{item.id}
+
+                {testResultsTab === 'general' && (<>
+                  {/* Status filter tabs */}
+                  <Tabs
+                    value={testSessionsTab}
+                    onChange={(_, v) => { setTestSessionsTab(v); setTestSessionsPage(0); }}
+                    variant="scrollable"
+                    scrollButtons="auto"
+                    sx={{ borderBottom: `1px solid ${theme.palette.divider}`, minHeight: 36, flexShrink: 0 }}
+                    TabIndicatorProps={{ style: { height: 2 } }}
+                  >
+                    <Tab label={`All (${sessions.length})`} value="all" sx={{ minHeight: 36, fontSize: 12, py: 0 }} />
+                    {uniqueStatuses.map((status) => {
+                      const count = sessions.filter((s: any) => s.status === status).length;
+                      return (
+                        <Tab key={status} value={status} sx={{ minHeight: 36, fontSize: 12, py: 0 }}
+                          label={
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              <span>{status}</span>
+                              <Chip label={count} size="small" color={getStatusColor(status) as any}
+                                sx={{ height: 16, fontSize: 10, '.MuiChip-label': { px: 0.75 } }} />
+                            </Box>
+                          }
+                        />
+                      );
+                    })}
+                  </Tabs>
+                  {/* Sessions list */}
+                  <Box sx={{ overflowY: 'auto', flex: 1 }}>
+                    {pageSessions.map((item: any) => (
+                      <Box
+                        key={item.id}
+                        onClick={() => {
+                          const targetTs = item?.data?.kline1?.ts ?? item?.startTs;
+                          if (!pairId || !targetTs) { return; }
+                          router.push(`/dhm-graph/${pairId}/${tf}?ts=${targetTs}`);
+                        }}
+                        sx={{
+                          px: 2, py: 1,
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          borderBottom: `1px solid ${theme.palette.divider}`,
+                          '&:last-child': { borderBottom: 0 },
+                          cursor: 'pointer',
+                          '&:hover': { bgcolor: theme.palette.action.hover },
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Box sx={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, bgcolor: item.direction === 'up' ? '#4caf50' : '#f44336' }} />
+                          <Typography variant="caption" sx={{ color: theme.palette.text.disabled, minWidth: 28 }}>
+                            #{item.id}
+                          </Typography>
+                          <Label color={getStatusColor(item.status)} sx={{ fontSize: 11 }}>
+                            {item.status}
+                          </Label>
+                        </Box>
+                        <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
+                          {moment(Number(item.startTs)).format('MM-DD HH:mm')}
                         </Typography>
-                        <Label color={getStatusColor(item.status)} sx={{ fontSize: 11 }}>
-                          {item.status}
-                        </Label>
                       </Box>
-                      <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
-                        {moment(Number(item.startTs)).format('MM-DD HH:mm')}
-                      </Typography>
-                    </Box>
-                  ))}
-                  {!filteredSessions.length && (
-                    <Box sx={{ px: 2, py: 3, textAlign: 'center' }}>
-                      <Typography variant="body2" sx={{ color: theme.palette.text.disabled }}>
-                        No sessions
-                      </Typography>
+                    ))}
+                    {!filteredSessions.length && (
+                      <Box sx={{ px: 2, py: 3, textAlign: 'center' }}>
+                        <Typography variant="body2" sx={{ color: theme.palette.text.disabled }}>
+                          No sessions
+                        </Typography>
+                      </Box>
+                    )}
+                  </Box>
+                  {/* Pagination */}
+                  {pageCount > 1 && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, py: 0.75, borderTop: `1px solid ${theme.palette.divider}`, flexShrink: 0 }}>
+                      <Button size="small" disabled={testSessionsPage === 0} onClick={() => setTestSessionsPage(p => p - 1)}>Prev</Button>
+                      <Typography variant="caption">{testSessionsPage + 1} / {pageCount}</Typography>
+                      <Button size="small" disabled={testSessionsPage >= pageCount - 1} onClick={() => setTestSessionsPage(p => p + 1)}>Next</Button>
                     </Box>
                   )}
-                </Box>
-                {/* Pagination */}
-                {pageCount > 1 && (
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, py: 0.75, borderTop: `1px solid ${theme.palette.divider}`, flexShrink: 0 }}>
-                    <Button size="small" disabled={testSessionsPage === 0} onClick={() => setTestSessionsPage(p => p - 1)}>Prev</Button>
-                    <Typography variant="caption">{testSessionsPage + 1} / {pageCount}</Typography>
-                    <Button size="small" disabled={testSessionsPage >= pageCount - 1} onClick={() => setTestSessionsPage(p => p + 1)}>Next</Button>
+                </>)}
+
+                {testResultsTab === 'analytics' && (
+                  <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', p: 2 }}>
+                    <Box sx={{ display: 'flex', gap: 1, mb: 2, flexShrink: 0 }}>
+                      <Button size="small" variant={analyticsGroupBy === 'month' ? 'contained' : 'outlined'} onClick={() => setAnalyticsGroupBy('month')}>Month</Button>
+                      <Button size="small" variant={analyticsGroupBy === 'week' ? 'contained' : 'outlined'} onClick={() => setAnalyticsGroupBy('week')}>Week</Button>
+                    </Box>
+                    {analyticsData.length === 0 ? (
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
+                        <Typography variant="body2" sx={{ color: theme.palette.text.disabled }}>No data</Typography>
+                      </Box>
+                    ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={analyticsData} margin={{ top: 4, right: 8, left: -20, bottom: 40 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
+                          <XAxis dataKey="period" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" interval={0} />
+                          <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                          <Tooltip contentStyle={{ fontSize: 12 }} />
+                          <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+                          {uniqueStatuses.map((status) => (
+                            <Bar key={status} dataKey={status} stackId="a" fill={STATUS_COLORS[status] ?? '#999'} name={status} />
+                          ))}
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )}
                   </Box>
                 )}
               </Box>
