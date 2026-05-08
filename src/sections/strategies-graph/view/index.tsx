@@ -5,9 +5,9 @@ import {registerFigure, registerOverlay, registerIndicator} from "klinecharts";
 import {
   useCreateDhmMutation,
   useGetAllDhmQuery, useRemoveDhmMutation, useUpdateDhmMutation, useGetAllActiveDhmQuery,
-  useGetAllTestDhmQuery, useDeleteAllTestDhmMutation, useRunTestDhmMutation,
   useGetBacktestSettingsQuery, useSaveBacktestSettingsMutation,
 } from "@/lib/redux/api/dhmApi";
+import { runDhmBacktestForUI } from "@/src/utils/dhm-backtest";
 import { useGetAllQuery as useGetAllFppQuery } from "@/lib/redux/api/fppApi";
 import CustomDialog from 'src/components/custom-dialog/custom-dialog';
 import {onSubmitWrapper} from "@/src/utils/submit";
@@ -52,6 +52,7 @@ import {
 } from "@/lib/redux/api/positionApi";
 import {useGetAllQuery} from "@/lib/redux/api/tdaPointsApi";
 import {useGetAllQuery as useGetAllOrdersQuery} from "@/lib/redux/api/orderApi";
+import {useGetAllQuery as useGetAllPairsQuery} from "@/lib/redux/api/pairApi";
 import {useGetQuery as useGetPositionQuery} from "@/lib/redux/api/positionApi";
 import {useRouter, useSearchParams} from "next/navigation";
 import {
@@ -177,6 +178,12 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [currentDhmKline, setCurrentDhmKline] = useState(null);
   const [currentClusterKline, setCurrentClusterKline] = useState(null);
   const [currentTestSession, setCurrentTestSession] = useState(null);
+  const [testSessions, setTestSessions] = useState<any[]>([]);
+  const [isRunningTest, setIsRunningTest] = useState(false);
+  const isDeletingTest = false;
+  const [loadedFavorite, setLoadedFavorite] = useState<any>(null);
+  const [favoriteLoadVersion, setFavoriteLoadVersion] = useState(0);
+  const [showFavoritesList, setShowFavoritesList] = useState(false);
   const { mapDrawingOverlayActiveRef, onDrawingInteractionChange } = useMapDrawingOverlayRef();
   const [globalSettings, setGlobalSettings] = useState<any>(DEFAULT_GLOBAL_SETTINGS);
   const {
@@ -229,6 +236,27 @@ export default function DhmIndexView({ tf, pairId }: any) {
 
   useEffect(() => {
     setBidaskClustersByTs({});
+    setTestSessions([]);
+    setLoadedFavorite(null);
+    setShowFavoritesList(false);
+  }, [pairId, tf]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') { return; }
+    let raw: string | null = null;
+    try { raw = window.sessionStorage.getItem('pendingDhmFavorite'); } catch {}
+    if (!raw) { return; }
+    try {
+      const fav = JSON.parse(raw);
+      if (Number(fav?.pairId) === Number(pairId) && Number(fav?.tf) === Number(tf)) {
+        window.sessionStorage.removeItem('pendingDhmFavorite');
+        setLoadedFavorite(fav);
+        setFavoriteLoadVersion((v) => v + 1);
+        setIsTestPanelOpen(true);
+      }
+    } catch {
+      try { window.sessionStorage.removeItem('pendingDhmFavorite'); } catch {}
+    }
   }, [pairId, tf]);
 
   useEffect(() => {
@@ -304,12 +332,95 @@ export default function DhmIndexView({ tf, pairId }: any) {
     { pairId, tf: 60, statusFilters },
   );
   const { data: dhmSidebarItems } = useGetAllActiveDhmQuery({ });
-  const { data: testSessions, refetch: refetchTestSessions } = useGetAllTestDhmQuery({ pairId, tf }, { skip: !isTestPanelOpen });
-  const [deleteAllTestSessions, { isLoading: isDeletingTest }] = useDeleteAllTestDhmMutation();
-  const [runTest, { isLoading: isRunningTest }] = useRunTestDhmMutation();
   const { data: backtestSettings } = useGetBacktestSettingsQuery({ pairId, tf }, { skip: !isTestPanelOpen });
   const [saveBacktestSettings] = useSaveBacktestSettingsMutation();
+  // Global favorites are stored under a sentinel pairId/tf so the same list
+  // is available from every pair page.
+  const GLOBAL_FAV_PAIR = 0;
+  const GLOBAL_FAV_TF = 0;
+  const { data: globalFavRecord, refetch: refetchGlobalFav } = useGetBacktestSettingsQuery(
+    { pairId: GLOBAL_FAV_PAIR, tf: GLOBAL_FAV_TF },
+    { skip: !isTestPanelOpen },
+  );
+  const allFavorites: any[] = (() => {
+    const raw = (globalFavRecord as any)?.data?.__favorites;
+    return Array.isArray(raw) ? raw : [];
+  })();
+  const currentPairFavorites = allFavorites.filter(
+    (f: any) => Number(f.pairId) === Number(pairId) && Number(f.tf) === Number(tf),
+  );
+  const persistAllFavorites = useCallback((next: any[]) => {
+    return saveBacktestSettings({
+      pairId: GLOBAL_FAV_PAIR,
+      tf: GLOBAL_FAV_TF,
+      data: { __favorites: next },
+    });
+  }, [saveBacktestSettings]);
+  const FAVORITE_MATCH_KEYS = [
+    'enterLevel1', 'enterLevel2', 'enterLevel3',
+    'takeProfitLevel1', 'takeProfitLevel2', 'takeProfitLevel3',
+    'triggerLevel', 'stopLossLevel', 'finishLevel',
+    'minPriceSize', 'direction', 'maxSessionLength',
+    'startTs', 'finishTs',
+  ];
+  const onToggleFavorite = useCallback(async (values: any) => {
+    const equal = (a: any, b: any) =>
+      FAVORITE_MATCH_KEYS.every((k) => String(a?.[k] ?? '') === String(b?.[k] ?? ''));
+    const idx = allFavorites.findIndex(
+      (f: any) =>
+        Number(f.pairId) === Number(pairId) &&
+        Number(f.tf) === Number(tf) &&
+        equal(f.data, values),
+    );
+    let next: any[];
+    if (idx >= 0) {
+      next = allFavorites.filter((_: any, i: number) => i !== idx);
+    } else {
+      const data: any = {};
+      for (const k of FAVORITE_MATCH_KEYS) data[k] = values?.[k] ?? null;
+      next = [
+        ...allFavorites,
+        {
+          id: Date.now(),
+          pairId: Number(pairId),
+          tf: Number(tf),
+          data,
+          createdAt: Date.now(),
+        },
+      ];
+    }
+    await persistAllFavorites(next);
+    refetchGlobalFav();
+  }, [allFavorites, persistAllFavorites, refetchGlobalFav, pairId, tf]);
+  const onLoadFavorite = useCallback((fav: any) => {
+    if (Number(fav?.pairId) === Number(pairId) && Number(fav?.tf) === Number(tf)) {
+      setLoadedFavorite(fav);
+      setFavoriteLoadVersion((v) => v + 1);
+      setShowFavoritesList(false);
+      return;
+    }
+    if (typeof window !== 'undefined') {
+      try {
+        window.sessionStorage.setItem('pendingDhmFavorite', JSON.stringify(fav));
+      } catch {}
+    }
+    router.push(`/dhm-graph/${fav.pairId}/${fav.tf}`);
+  }, [router, pairId, tf]);
+  const onRemoveFavorite = useCallback(async (id: any) => {
+    const next = allFavorites.filter((f: any) => f.id !== id);
+    await persistAllFavorites(next);
+    setLoadedFavorite((cur: any) => (cur?.id === id ? null : cur));
+    refetchGlobalFav();
+  }, [allFavorites, persistAllFavorites, refetchGlobalFav]);
   const { data: tdaPoints } = useGetAllQuery({ pairId });
+  const { data: pairsList } = useGetAllPairsQuery({});
+  const pairNameById = (() => {
+    const map: Record<string, string> = {};
+    for (const p of (pairsList as any[]) || []) {
+      map[String((p as any).id)] = (p as any).name ?? (p as any).symbol ?? `#${(p as any).id}`;
+    }
+    return map;
+  })();
   //const [createPositionRtk, { isLoading: isCreatePositionLoading }] = useCreatePositionMutation();
   //const [cancelPositionRtk, { isLoading: isCancelPositionLoading }] = useCancelPositionMutation();
   //const [updatePositionRtk, { isLoading: isUpdatePositionLoading }] = useUpdatePositionMutation();
@@ -429,16 +540,43 @@ export default function DhmIndexView({ tf, pairId }: any) {
     router.push(`/dhm-graph/${targetPairId}/60?ts=${targetTs}`);
   }, [router]);
 
-  const onClearTestResults = useCallback(async () => {
-    await deleteAllTestSessions({});
-    refetchTestSessions();
-  }, [deleteAllTestSessions, refetchTestSessions]);
+  const onClearTestResults = useCallback(() => {
+    setTestSessions([]);
+  }, []);
 
   const onRunTestSubmit = useCallback(async (values: any) => {
     const { pairId: _p, tf: _t, ...settingsToSave } = values;
     saveBacktestSettings({ pairId, tf, data: settingsToSave });
-    return onSubmitWrapper(() => runTest({ pairId, tf, ...values }), () => refetchTestSessions(), 'Запущено');
-  }, [runTest, pairId, tf, refetchTestSessions, saveBacktestSettings]);
+    setIsRunningTest(true);
+    try {
+      const sessions = await runDhmBacktestForUI({
+        pairId: Number(pairId),
+        tf: Number(tf),
+        startTs: Number(values.startTs),
+        finishTs: values.finishTs ? Number(values.finishTs) : null,
+        settings: {
+          direction: values.direction || null,
+          minPriceSize: values.minPriceSize,
+          maxSessionLength: Number(values.maxSessionLength),
+          enterLevel1: values.enterLevel1,
+          enterLevel2: values.enterLevel2,
+          enterLevel3: values.enterLevel3,
+          takeProfitLevel1: values.takeProfitLevel1,
+          takeProfitLevel2: values.takeProfitLevel2,
+          takeProfitLevel3: values.takeProfitLevel3,
+          triggerLevel: values.triggerLevel,
+          stopLossLevel: values.stopLossLevel,
+          finishLevel: values.finishLevel,
+        },
+        klinesApiBase: process.env.NEXT_PUBLIC_TR_KLINES_DOMAIN as string,
+      });
+      setTestSessions(sessions);
+    } catch (e) {
+      console.error('Client backtest failed:', e);
+    } finally {
+      setIsRunningTest(false);
+    }
+  }, [pairId, tf, saveBacktestSettings]);
 
   const onDragHandleMouseDown = useCallback((e: React.MouseEvent) => {
     dragStartY.current = e.clientY;
@@ -948,6 +1086,14 @@ export default function DhmIndexView({ tf, pairId }: any) {
             Test sessions
           </Typography>
           <Button
+            variant={showFavoritesList ? 'contained' : 'outlined'}
+            size="small"
+            color="secondary"
+            onClick={() => setShowFavoritesList((v) => !v)}
+          >
+            {showFavoritesList ? `Form` : `Favorites (${allFavorites.length})`}
+          </Button>
+          <Button
             variant="contained"
             size="small"
             color="error"
@@ -960,9 +1106,81 @@ export default function DhmIndexView({ tf, pairId }: any) {
 
         <Box sx={{ display: 'flex', gap: 2, flex: 1, overflow: 'hidden' }}>
           <Box sx={{ width: 340, flexShrink: 0, overflowY: 'auto' }}>
-            {(() => {
-              const savedData = backtestSettings?.data ?? {};
-              const formKey = JSON.stringify(backtestSettings ?? 'default');
+            {showFavoritesList ? (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                {!allFavorites.length && (
+                  <Box sx={{ px: 1, py: 2, textAlign: 'center' }}>
+                    <Typography variant="body2" sx={{ color: theme.palette.text.disabled }}>
+                      Нет избранного
+                    </Typography>
+                  </Box>
+                )}
+                {allFavorites.map((f: any) => {
+                  const d = f.data || {};
+                  const sameLoc =
+                    Number(f.pairId) === Number(pairId) && Number(f.tf) === Number(tf);
+                  const pairName = pairNameById[String(f.pairId)] ?? `#${f.pairId}`;
+                  return (
+                    <Box
+                      key={f.id}
+                      onClick={() => onLoadFavorite(f)}
+                      sx={{
+                        px: 1,
+                        py: 0.75,
+                        borderRadius: 1,
+                        border: `1px solid ${theme.palette.divider}`,
+                        cursor: 'pointer',
+                        '&:hover': { backgroundColor: theme.palette.action.hover },
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: 1,
+                      }}
+                    >
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+                          <Chip
+                            label={pairName}
+                            size="small"
+                            color={sameLoc ? 'primary' : 'default'}
+                            sx={{ height: 18, fontSize: 11 }}
+                          />
+                          <Chip
+                            label={`${f.tf}m`}
+                            size="small"
+                            variant="outlined"
+                            sx={{ height: 18, fontSize: 11 }}
+                          />
+                          <Chip
+                            label={d.direction || 'any'}
+                            size="small"
+                            color={d.direction === 'up' ? 'success' : d.direction === 'down' ? 'error' : 'default'}
+                            sx={{ height: 18, fontSize: 11 }}
+                          />
+                        </Box>
+                        <Typography variant="caption" sx={{ display: 'block', color: theme.palette.text.secondary, mt: 0.25 }}>
+                          enter {d.enterLevel1 ?? '—'}/{d.enterLevel2 ?? '—'}/{d.enterLevel3 ?? '—'}
+                          {' · tp '}{d.takeProfitLevel1 ?? '—'}/{d.takeProfitLevel2 ?? '—'}/{d.takeProfitLevel3 ?? '—'}
+                        </Typography>
+                        <Typography variant="caption" sx={{ display: 'block', color: theme.palette.text.disabled }}>
+                          sl {d.stopLossLevel ?? '—'} · min% {d.minPriceSize ?? '—'} · len {d.maxSessionLength ?? '—'}
+                        </Typography>
+                      </Box>
+                      <IconButton
+                        size="small"
+                        onClick={(e) => { e.stopPropagation(); onRemoveFavorite(f.id); }}
+                        sx={{ p: 0.25 }}
+                      >
+                        <DeleteIcon fontSize="inherit" />
+                      </IconButton>
+                    </Box>
+                  );
+                })}
+              </Box>
+            ) : (() => {
+              const savedData = loadedFavorite?.data ?? (backtestSettings as any)?.data ?? {};
+              const formKey = loadedFavorite
+                ? `fav-${loadedFavorite.id}-${favoriteLoadVersion}`
+                : JSON.stringify((backtestSettings as any) ?? 'default');
               const mergedDefaults = { pairId, tf, ...DEFAULT_BACKTEST_VALUES, ...savedData };
               return (
                 <StrategiesBacktestForm
@@ -972,6 +1190,10 @@ export default function DhmIndexView({ tf, pairId }: any) {
                   onSubmit={onRunTestSubmit}
                   onReset={() => {}}
                   resetValues={{ pairId, tf, ...DEFAULT_BACKTEST_VALUES }}
+                  favorites={currentPairFavorites}
+                  onToggleFavorite={onToggleFavorite}
+                  onLoadFavorite={onLoadFavorite}
+                  onRemoveFavorite={onRemoveFavorite}
                 />
               );
             })()}

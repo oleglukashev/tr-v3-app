@@ -1,11 +1,86 @@
 import {FormContainer, TextFieldElement} from "react-hook-form-mui";
-import {Button, Grid, TextField} from "@mui/material";
+import {Box, Button, Chip, Grid, IconButton, TextField, Tooltip} from "@mui/material";
 import CustomFormButton from "@/src/components/custom-form-button/custom-form-button";
 import {object} from "zod";
 import {zodNumberSchema, zodStringSchema} from "@/src/helpers/form-validation.helper";
 import {zodResolver} from "@hookform/resolvers/zod";
-import {Controller, useFormContext} from "react-hook-form";
+import {Controller, useFormContext, useWatch} from "react-hook-form";
+import FavoriteIcon from "@mui/icons-material/Favorite";
+import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
 import moment from "moment";
+
+const FAVORITE_MATCH_KEYS = [
+  'enterLevel1', 'enterLevel2', 'enterLevel3',
+  'takeProfitLevel1', 'takeProfitLevel2', 'takeProfitLevel3',
+  'triggerLevel', 'stopLossLevel', 'finishLevel',
+  'minPriceSize', 'direction', 'maxSessionLength',
+  'startTs', 'finishTs',
+] as const;
+
+function favoritesMatch(a: any, b: any): boolean {
+  for (const k of FAVORITE_MATCH_KEYS) {
+    if (String(a?.[k] ?? '') !== String(b?.[k] ?? '')) return false;
+  }
+  return true;
+}
+
+function FavoriteToggle({ favorites, onToggleFavorite }: { favorites: any[]; onToggleFavorite: (values: any) => void }) {
+  const { getValues } = useFormContext();
+  const values = useWatch();
+  const isFavorite = (favorites || []).some((f: any) => favoritesMatch(f.data, values));
+  return (
+    <Tooltip title={isFavorite ? 'Удалить из избранного' : 'Сохранить в избранное'}>
+      <IconButton
+        type="button"
+        size="small"
+        onClick={() => onToggleFavorite(getValues())}
+        sx={{ color: isFavorite ? '#e91e63' : 'text.secondary' }}
+      >
+        {isFavorite ? <FavoriteIcon fontSize="small" /> : <FavoriteBorderIcon fontSize="small" />}
+      </IconButton>
+    </Tooltip>
+  );
+}
+
+function FavoritesList({
+  favorites,
+  onLoadFavorite,
+  onRemoveFavorite,
+}: {
+  favorites: any[];
+  onLoadFavorite: (fav: any) => void;
+  onRemoveFavorite: (id: any) => void;
+}) {
+  const values = useWatch();
+  if (!favorites?.length) return null;
+  return (
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1 }}>
+      {favorites.map((f: any, i: number) => {
+        const active = favoritesMatch(f.data, values);
+        const d = f.data || {};
+        const tip =
+          `dir: ${d.direction || '—'} | ` +
+          `enter: ${d.enterLevel1 ?? '—'}/${d.enterLevel2 ?? '—'}/${d.enterLevel3 ?? '—'} | ` +
+          `tp: ${d.takeProfitLevel1 ?? '—'}/${d.takeProfitLevel2 ?? '—'}/${d.takeProfitLevel3 ?? '—'} | ` +
+          `sl: ${d.stopLossLevel ?? '—'} | ` +
+          `min%: ${d.minPriceSize ?? '—'} | ` +
+          `len: ${d.maxSessionLength ?? '—'}`;
+        return (
+          <Tooltip key={f.id} title={tip}>
+            <Chip
+              label={`★ ${i + 1}`}
+              size="small"
+              color={active ? 'primary' : 'default'}
+              variant={active ? 'filled' : 'outlined'}
+              onClick={() => onLoadFavorite(f)}
+              onDelete={() => onRemoveFavorite(f.id)}
+            />
+          </Tooltip>
+        );
+      })}
+    </Box>
+  );
+}
 
 function DateTsField({ name, label }: { name: string; label: string }) {
   const { control } = useFormContext();
@@ -49,7 +124,11 @@ function ResetButton({ resetValues }: { resetValues: any }) {
   );
 }
 
-export function StrategiesBacktestForm({ defaultValues, isLoading, onSubmit, resetValues }: any) {
+export function StrategiesBacktestForm({
+  defaultValues, isLoading, onSubmit, resetValues,
+  favorites, onToggleFavorite, onLoadFavorite, onRemoveFavorite,
+}: any) {
+  const showFavorites = typeof onToggleFavorite === 'function';
   return (
     <FormContainer
       defaultValues={defaultValues}
@@ -73,6 +152,13 @@ export function StrategiesBacktestForm({ defaultValues, isLoading, onSubmit, res
       }))}
       onSuccess={onSubmit}
     >
+      {showFavorites && (
+        <FavoritesList
+          favorites={favorites || []}
+          onLoadFavorite={onLoadFavorite}
+          onRemoveFavorite={onRemoveFavorite}
+        />
+      )}
       <Grid container direction='row' spacing={2}>
         <Grid item size={6}>
           <TextFieldElement
@@ -189,7 +275,14 @@ export function StrategiesBacktestForm({ defaultValues, isLoading, onSubmit, res
           <DateTsField name='finishTs' label='Finish date' />
         </Grid>
       </Grid>
-      <CustomFormButton isLoading={isLoading} value='Run' />
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+        <Box sx={{ flex: 1 }}>
+          <CustomFormButton isLoading={isLoading} value='Run' sx={{ my: 0 }} />
+        </Box>
+        {showFavorites && (
+          <FavoriteToggle favorites={favorites || []} onToggleFavorite={onToggleFavorite} />
+        )}
+      </Box>
       {resetValues && <ResetButton resetValues={resetValues} />}
     </FormContainer>
   )
