@@ -244,6 +244,34 @@ export const dhmApi = (new BaseApi({
           };
         },
       }),
+      // @ts-ignore
+      getDhmFavorites: builder.query<any[], void>({
+        query() {
+          return { url: `${collectionPath}/favorites` };
+        },
+        providesTags: () => [{ type: collectionPath, id: 'FAVORITES' }],
+      }),
+      // @ts-ignore
+      createDhmFavorite: builder.mutation<any, { pairId: number; tf: number; data: any }>({
+        query(body: any) {
+          return {
+            url: `${collectionPath}/favorites`,
+            method: 'POST',
+            body,
+          };
+        },
+        invalidatesTags: () => [{ type: collectionPath, id: 'FAVORITES' }],
+      }),
+      // @ts-ignore
+      deleteDhmFavorite: builder.mutation<any, number>({
+        query(id: any) {
+          return {
+            url: `${collectionPath}/favorites/${id}`,
+            method: 'DELETE',
+          };
+        },
+        invalidatesTags: () => [{ type: collectionPath, id: 'FAVORITES' }],
+      }),
     }
   }
 })).create();
@@ -273,4 +301,7 @@ export const {
   useDeleteAllTestDhm2Mutation,
   useGetBacktestSettingsQuery,
   useSaveBacktestSettingsMutation,
+  useGetDhmFavoritesQuery,
+  useCreateDhmFavoriteMutation,
+  useDeleteDhmFavoriteMutation,
 } = dhmApi;

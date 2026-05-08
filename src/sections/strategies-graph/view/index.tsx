@@ -6,6 +6,7 @@ import {
   useCreateDhmMutation,
   useGetAllDhmQuery, useRemoveDhmMutation, useUpdateDhmMutation, useGetAllActiveDhmQuery,
   useGetBacktestSettingsQuery, useSaveBacktestSettingsMutation,
+  useGetDhmFavoritesQuery, useCreateDhmFavoriteMutation, useDeleteDhmFavoriteMutation,
 } from "@/lib/redux/api/dhmApi";
 import { runDhmBacktestForUI } from "@/src/utils/dhm-backtest";
 import { useGetAllQuery as useGetAllFppQuery } from "@/lib/redux/api/fppApi";
@@ -334,28 +335,13 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const { data: dhmSidebarItems } = useGetAllActiveDhmQuery({ });
   const { data: backtestSettings } = useGetBacktestSettingsQuery({ pairId, tf }, { skip: !isTestPanelOpen });
   const [saveBacktestSettings] = useSaveBacktestSettingsMutation();
-  // Global favorites are stored under a sentinel pairId/tf so the same list
-  // is available from every pair page.
-  const GLOBAL_FAV_PAIR = 0;
-  const GLOBAL_FAV_TF = 0;
-  const { data: globalFavRecord, refetch: refetchGlobalFav } = useGetBacktestSettingsQuery(
-    { pairId: GLOBAL_FAV_PAIR, tf: GLOBAL_FAV_TF },
-    { skip: !isTestPanelOpen },
-  );
-  const allFavorites: any[] = (() => {
-    const raw = (globalFavRecord as any)?.data?.__favorites;
-    return Array.isArray(raw) ? raw : [];
-  })();
+  const { data: favoritesResponse } = useGetDhmFavoritesQuery(undefined, { skip: !isTestPanelOpen });
+  const [createDhmFavorite] = useCreateDhmFavoriteMutation();
+  const [deleteDhmFavorite] = useDeleteDhmFavoriteMutation();
+  const allFavorites: any[] = Array.isArray(favoritesResponse) ? favoritesResponse : [];
   const currentPairFavorites = allFavorites.filter(
     (f: any) => Number(f.pairId) === Number(pairId) && Number(f.tf) === Number(tf),
   );
-  const persistAllFavorites = useCallback((next: any[]) => {
-    return saveBacktestSettings({
-      pairId: GLOBAL_FAV_PAIR,
-      tf: GLOBAL_FAV_TF,
-      data: { __favorites: next },
-    });
-  }, [saveBacktestSettings]);
   const FAVORITE_MATCH_KEYS = [
     'enterLevel1', 'enterLevel2', 'enterLevel3',
     'takeProfitLevel1', 'takeProfitLevel2', 'takeProfitLevel3',
@@ -366,32 +352,20 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const onToggleFavorite = useCallback(async (values: any) => {
     const equal = (a: any, b: any) =>
       FAVORITE_MATCH_KEYS.every((k) => String(a?.[k] ?? '') === String(b?.[k] ?? ''));
-    const idx = allFavorites.findIndex(
+    const existing = allFavorites.find(
       (f: any) =>
         Number(f.pairId) === Number(pairId) &&
         Number(f.tf) === Number(tf) &&
         equal(f.data, values),
     );
-    let next: any[];
-    if (idx >= 0) {
-      next = allFavorites.filter((_: any, i: number) => i !== idx);
+    if (existing) {
+      await deleteDhmFavorite(existing.id);
     } else {
       const data: any = {};
       for (const k of FAVORITE_MATCH_KEYS) data[k] = values?.[k] ?? null;
-      next = [
-        ...allFavorites,
-        {
-          id: Date.now(),
-          pairId: Number(pairId),
-          tf: Number(tf),
-          data,
-          createdAt: Date.now(),
-        },
-      ];
+      await createDhmFavorite({ pairId: Number(pairId), tf: Number(tf), data });
     }
-    await persistAllFavorites(next);
-    refetchGlobalFav();
-  }, [allFavorites, persistAllFavorites, refetchGlobalFav, pairId, tf]);
+  }, [allFavorites, createDhmFavorite, deleteDhmFavorite, pairId, tf]);
   const onLoadFavorite = useCallback((fav: any) => {
     if (Number(fav?.pairId) === Number(pairId) && Number(fav?.tf) === Number(tf)) {
       setLoadedFavorite(fav);
@@ -407,11 +381,9 @@ export default function DhmIndexView({ tf, pairId }: any) {
     router.push(`/dhm-graph/${fav.pairId}/${fav.tf}`);
   }, [router, pairId, tf]);
   const onRemoveFavorite = useCallback(async (id: any) => {
-    const next = allFavorites.filter((f: any) => f.id !== id);
-    await persistAllFavorites(next);
+    await deleteDhmFavorite(id);
     setLoadedFavorite((cur: any) => (cur?.id === id ? null : cur));
-    refetchGlobalFav();
-  }, [allFavorites, persistAllFavorites, refetchGlobalFav]);
+  }, [deleteDhmFavorite]);
   const { data: tdaPoints } = useGetAllQuery({ pairId });
   const { data: pairsList } = useGetAllPairsQuery({});
   const pairNameById = (() => {
