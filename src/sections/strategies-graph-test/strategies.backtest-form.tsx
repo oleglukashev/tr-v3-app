@@ -1,5 +1,5 @@
 import {FormContainer, TextFieldElement} from "react-hook-form-mui";
-import {Box, Button, Chip, Grid, IconButton, TextField, Tooltip} from "@mui/material";
+import {Box, Button, Grid, IconButton, TextField, Tooltip} from "@mui/material";
 import CustomFormButton from "@/src/components/custom-form-button/custom-form-button";
 import {object} from "zod";
 import {zodNumberSchema, zodStringSchema} from "@/src/helpers/form-validation.helper";
@@ -39,46 +39,6 @@ function FavoriteToggle({ favorites, onToggleFavorite }: { favorites: any[]; onT
         {isFavorite ? <FavoriteIcon fontSize="small" /> : <FavoriteBorderIcon fontSize="small" />}
       </IconButton>
     </Tooltip>
-  );
-}
-
-function FavoritesList({
-  favorites,
-  onLoadFavorite,
-  onRemoveFavorite,
-}: {
-  favorites: any[];
-  onLoadFavorite: (fav: any) => void;
-  onRemoveFavorite: (id: any) => void;
-}) {
-  const values = useWatch();
-  if (!favorites?.length) return null;
-  return (
-    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1 }}>
-      {favorites.map((f: any, i: number) => {
-        const active = favoritesMatch(f.data, values);
-        const d = f.data || {};
-        const tip =
-          `dir: ${d.direction || '—'} | ` +
-          `enter: ${d.enterLevel1 ?? '—'}/${d.enterLevel2 ?? '—'}/${d.enterLevel3 ?? '—'} | ` +
-          `tp: ${d.takeProfitLevel1 ?? '—'}/${d.takeProfitLevel2 ?? '—'}/${d.takeProfitLevel3 ?? '—'} | ` +
-          `sl: ${d.stopLossLevel ?? '—'} | ` +
-          `min%: ${d.minPriceSize ?? '—'} | ` +
-          `len: ${d.maxSessionLength ?? '—'}`;
-        return (
-          <Tooltip key={f.id} title={tip}>
-            <Chip
-              label={`★ ${i + 1}`}
-              size="small"
-              color={active ? 'primary' : 'default'}
-              variant={active ? 'filled' : 'outlined'}
-              onClick={() => onLoadFavorite(f)}
-              onDelete={() => onRemoveFavorite(f.id)}
-            />
-          </Tooltip>
-        );
-      })}
-    </Box>
   );
 }
 
@@ -126,7 +86,7 @@ function ResetButton({ resetValues }: { resetValues: any }) {
 
 export function StrategiesBacktestForm({
   defaultValues, isLoading, onSubmit, resetValues,
-  favorites, onToggleFavorite, onLoadFavorite, onRemoveFavorite,
+  favorites, onToggleFavorite,
 }: any) {
   const showFavorites = typeof onToggleFavorite === 'function';
   return (
@@ -152,13 +112,6 @@ export function StrategiesBacktestForm({
       }))}
       onSuccess={onSubmit}
     >
-      {showFavorites && (
-        <FavoritesList
-          favorites={favorites || []}
-          onLoadFavorite={onLoadFavorite}
-          onRemoveFavorite={onRemoveFavorite}
-        />
-      )}
       <Grid container direction='row' spacing={2}>
         <Grid item size={6}>
           <TextFieldElement
