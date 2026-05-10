@@ -138,6 +138,12 @@ registerIndicator(ema);
 registerIndicator(bollingerBands);
 registerFigure(godKline);
 
+// DHM test sessions are always built on 60-minute data, regardless of
+// which timeframe the user is currently viewing in the chart URL. That
+// way switching the chart to e.g. 5m doesn't hide hourly sessions —
+// the overlay simply lands on the underlying hour-boundary kline.
+const TEST_SESSION_TF = 60;
+
 const DEFAULT_BACKTEST_VALUES = {
   enterLevel1: '0.5',
   enterLevel2: '0.618',
@@ -241,12 +247,20 @@ export default function DhmIndexView({ tf, pairId }: any) {
     setHeatmapTick((t) => t + 1);
   }, []);
 
+  // Bidask clusters are pair+tf-scoped (the WS stream subscribes per
+  // tf), so they have to clear whenever either changes.
   useEffect(() => {
     setBidaskClustersByTs({});
+  }, [pairId, tf]);
+
+  // Test sessions and favorites are pair-only (always tf=TEST_SESSION_TF).
+  // Switching the chart's tf shouldn't drop the current run or close
+  // the favorites list; only a pair switch should.
+  useEffect(() => {
     setTestSessions([]);
     setLoadedFavorite(null);
     setShowFavoritesList(false);
-  }, [pairId, tf]);
+  }, [pairId]);
 
   useEffect(() => {
     if (typeof window === 'undefined') { return; }
@@ -255,7 +269,8 @@ export default function DhmIndexView({ tf, pairId }: any) {
     if (!raw) { return; }
     try {
       const fav = JSON.parse(raw);
-      if (Number(fav?.pairId) === Number(pairId) && Number(fav?.tf) === Number(tf)) {
+      // Favorites are tf-independent now; match on pair alone.
+      if (Number(fav?.pairId) === Number(pairId)) {
         window.sessionStorage.removeItem('pendingDhmFavorite');
         setLoadedFavorite(fav);
         setFavoriteLoadVersion((v) => v + 1);
@@ -339,14 +354,17 @@ export default function DhmIndexView({ tf, pairId }: any) {
     { pairId, tf: 60, statusFilters },
   );
   const { data: dhmSidebarItems } = useGetAllActiveDhmQuery({ });
-  const { data: backtestSettings } = useGetBacktestSettingsQuery({ pairId, tf }, { skip: !isTestPanelOpen });
+  // Backtest settings, favorites and test sessions are pair-scoped
+  // only. tf for the test pipeline is pinned to TEST_SESSION_TF so the
+  // user sees the same hourly data regardless of chart tf.
+  const { data: backtestSettings } = useGetBacktestSettingsQuery({ pairId, tf: TEST_SESSION_TF }, { skip: !isTestPanelOpen });
   const [saveBacktestSettings] = useSaveBacktestSettingsMutation();
   const { data: favoritesResponse } = useGetDhmFavoritesQuery(undefined, { skip: !isTestPanelOpen });
   const [createDhmFavorite] = useCreateDhmFavoriteMutation();
   const [deleteDhmFavorite] = useDeleteDhmFavoriteMutation();
   const allFavorites: any[] = Array.isArray(favoritesResponse) ? favoritesResponse : [];
   const currentPairFavorites = allFavorites.filter(
-    (f: any) => Number(f.pairId) === Number(pairId) && Number(f.tf) === Number(tf),
+    (f: any) => Number(f.pairId) === Number(pairId) && Number(f.tf) === TEST_SESSION_TF,
   );
   const FAVORITE_MATCH_KEYS = [
     'enterLevel1', 'enterLevel2', 'enterLevel3',
@@ -361,7 +379,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
     const existing = allFavorites.find(
       (f: any) =>
         Number(f.pairId) === Number(pairId) &&
-        Number(f.tf) === Number(tf) &&
+        Number(f.tf) === TEST_SESSION_TF &&
         equal(f.data, values),
     );
     if (existing) {
@@ -369,11 +387,14 @@ export default function DhmIndexView({ tf, pairId }: any) {
     } else {
       const data: any = {};
       for (const k of FAVORITE_MATCH_KEYS) data[k] = values?.[k] ?? null;
-      await createDhmFavorite({ pairId: Number(pairId), tf: Number(tf), data });
+      await createDhmFavorite({ pairId: Number(pairId), tf: TEST_SESSION_TF, data });
     }
-  }, [allFavorites, createDhmFavorite, deleteDhmFavorite, pairId, tf]);
+  }, [allFavorites, createDhmFavorite, deleteDhmFavorite, pairId]);
   const onLoadFavorite = useCallback((fav: any) => {
-    if (Number(fav?.pairId) === Number(pairId) && Number(fav?.tf) === Number(tf)) {
+    // Favorites are always tf=TEST_SESSION_TF, so the "same location"
+    // check is pair-only. Cross-pair load keeps the user on their
+    // current chart tf — test data renders the same way on any tf.
+    if (Number(fav?.pairId) === Number(pairId)) {
       setLoadedFavorite(fav);
       setFavoriteLoadVersion((v) => v + 1);
       setShowFavoritesList(false);
@@ -384,7 +405,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
         window.sessionStorage.setItem('pendingDhmFavorite', JSON.stringify(fav));
       } catch {}
     }
-    router.push(`/dhm-graph/${fav.pairId}/${fav.tf}`);
+    router.push(`/dhm-graph/${fav.pairId}/${tf}`);
   }, [router, pairId, tf]);
   const onRemoveFavorite = useCallback(async (id: any) => {
     await deleteDhmFavorite(id);
@@ -524,14 +545,16 @@ export default function DhmIndexView({ tf, pairId }: any) {
 
   const onRunTestSubmit = useCallback(async (values: any) => {
     const { pairId: _p, tf: _t, ...settingsToSave } = values;
-    saveBacktestSettings({ pairId, tf, data: settingsToSave });
+    saveBacktestSettings({ pairId, tf: TEST_SESSION_TF, data: settingsToSave });
     setIsRunningTest(true);
     const entryMode: 'levels' | 'fpp' = values.entryMode === 'fpp' ? 'fpp' : 'levels';
     const fppEntryTypes: string[] = Array.isArray(values.fppEntryTypes) ? values.fppEntryTypes : [];
     try {
       const sessions = await runDhmBacktestForUI({
         pairId: Number(pairId),
-        tf: Number(tf),
+        // Always backtest on hourly data, irrespective of which tf the
+        // user has the chart switched to.
+        tf: TEST_SESSION_TF,
         startTs: Number(values.startTs),
         finishTs: values.finishTs ? Number(values.finishTs) : null,
         settings: {
@@ -566,7 +589,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
     } finally {
       setIsRunningTest(false);
     }
-  }, [pairId, tf, saveBacktestSettings]);
+  }, [pairId, saveBacktestSettings]);
 
   const onDragHandleMouseDown = useCallback((e: React.MouseEvent) => {
     dragStartY.current = e.clientY;
@@ -1150,8 +1173,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
                 )}
                 {allFavorites.map((f: any) => {
                   const d = f.data || {};
-                  const sameLoc =
-                    Number(f.pairId) === Number(pairId) && Number(f.tf) === Number(tf);
+                  const sameLoc = Number(f.pairId) === Number(pairId);
                   const pairName = pairNameById[String(f.pairId)] ?? `#${f.pairId}`;
                   return (
                     <Box
@@ -1214,7 +1236,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
               const formKey = loadedFavorite
                 ? `fav-${loadedFavorite.id}-${favoriteLoadVersion}`
                 : JSON.stringify((backtestSettings as any) ?? 'default');
-              const mergedDefaults = { pairId, tf, ...DEFAULT_BACKTEST_VALUES, ...savedData };
+              const mergedDefaults = { pairId, tf: TEST_SESSION_TF, ...DEFAULT_BACKTEST_VALUES, ...savedData };
               return (
                 <StrategiesBacktestForm
                   key={formKey}
@@ -1222,7 +1244,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
                   isLoading={isRunningTest}
                   onSubmit={onRunTestSubmit}
                   onReset={() => {}}
-                  resetValues={{ pairId, tf, ...DEFAULT_BACKTEST_VALUES }}
+                  resetValues={{ pairId, tf: TEST_SESSION_TF, ...DEFAULT_BACKTEST_VALUES }}
                   favorites={currentPairFavorites}
                   onToggleFavorite={onToggleFavorite}
                   onLoadFavorite={onLoadFavorite}
