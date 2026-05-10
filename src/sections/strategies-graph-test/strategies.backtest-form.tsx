@@ -1,7 +1,7 @@
-import {FormContainer, TextFieldElement} from "react-hook-form-mui";
+import {FormContainer, MultiSelectElement, RadioButtonGroup, TextFieldElement} from "react-hook-form-mui";
 import {Box, Button, Grid, IconButton, TextField, Tooltip} from "@mui/material";
 import CustomFormButton from "@/src/components/custom-form-button/custom-form-button";
-import {object} from "zod";
+import {object, array, string, union, literal} from "zod";
 import {zodNumberSchema, zodStringSchema} from "@/src/helpers/form-validation.helper";
 import {zodResolver} from "@hookform/resolvers/zod";
 import {Controller, useFormContext, useWatch} from "react-hook-form";
@@ -15,13 +15,32 @@ const FAVORITE_MATCH_KEYS = [
   'triggerLevel', 'stopLossLevel', 'finishLevel',
   'minPriceSize', 'direction', 'maxSessionLength',
   'startTs', 'finishTs',
+  'entryMode', 'fppEntryTypes',
 ] as const;
+
+export const FPP_TYPE_OPTIONS = [
+  { id: 'interception', label: 'Interception' },
+  { id: 'reverse', label: 'Reverse' },
+  { id: 'locked_volume', label: 'Locked volume' },
+  { id: 'locked_delta', label: 'Locked delta' },
+  { id: 'locked_imbalance', label: 'Locked imbalance' },
+  { id: 'test_volume', label: 'Test volume' },
+  { id: 'resistance', label: 'Resistance' },
+  { id: 'weakness', label: 'Weakness' },
+  { id: 'low_last_price_volume', label: 'Low last price volume' },
+];
 
 function favoritesMatch(a: any, b: any): boolean {
   for (const k of FAVORITE_MATCH_KEYS) {
-    if (String(a?.[k] ?? '') !== String(b?.[k] ?? '')) return false;
+    if (normalizeForMatch(a?.[k]) !== normalizeForMatch(b?.[k])) return false;
   }
   return true;
+}
+
+function normalizeForMatch(v: any): string {
+  // Sort arrays so order doesn't matter (fppEntryTypes is a set, not a list).
+  if (Array.isArray(v)) return [...v].map(String).sort().join(',');
+  return String(v ?? '');
 }
 
 function FavoriteToggle({ favorites, onToggleFavorite }: { favorites: any[]; onToggleFavorite: (values: any) => void }) {
@@ -84,6 +103,83 @@ function ResetButton({ resetValues }: { resetValues: any }) {
   );
 }
 
+function EntryFields() {
+  const entryMode = useWatch({ name: 'entryMode' }) ?? 'levels';
+  if (entryMode === 'fpp') {
+    return (
+      <Grid item size={12}>
+        <MultiSelectElement
+          name='fppEntryTypes'
+          fullWidth
+          showCheckbox
+          size='small'
+          label='Enter by FPP patterns'
+          options={FPP_TYPE_OPTIONS}
+          MenuProps={{ PaperProps: { style: { maxHeight: 1000 } } }}
+        />
+      </Grid>
+    );
+  }
+  return (
+    <>
+      <Grid item size={6}>
+        <TextFieldElement
+          name='enterLevel1'
+          label='Enter level 1'
+          type='number'
+          size='small'
+          fullWidth
+        />
+      </Grid>
+      <Grid item size={6}>
+        <TextFieldElement
+          name='takeProfitLevel1'
+          label='Take profit level 1'
+          type='number'
+          size='small'
+          fullWidth
+        />
+      </Grid>
+      <Grid item size={6}>
+        <TextFieldElement
+          name='enterLevel2'
+          label='Enter level 2'
+          type='number'
+          size='small'
+          fullWidth
+        />
+      </Grid>
+      <Grid item size={6}>
+        <TextFieldElement
+          name='takeProfitLevel2'
+          label='Take profit level 2'
+          type='number'
+          size='small'
+          fullWidth
+        />
+      </Grid>
+      <Grid item size={6}>
+        <TextFieldElement
+          name='enterLevel3'
+          label='Enter level 3'
+          type='number'
+          size='small'
+          fullWidth
+        />
+      </Grid>
+      <Grid item size={6}>
+        <TextFieldElement
+          name='takeProfitLevel3'
+          label='Take profit level 3'
+          type='number'
+          size='small'
+          fullWidth
+        />
+      </Grid>
+    </>
+  );
+}
+
 export function StrategiesBacktestForm({
   defaultValues, isLoading, onSubmit, resetValues,
   favorites, onToggleFavorite,
@@ -95,8 +191,10 @@ export function StrategiesBacktestForm({
       resolver={zodResolver(object({
         pairId: zodNumberSchema(),
         tf: zodNumberSchema(),
-        enterLevel1: zodNumberSchema(),
-        takeProfitLevel1: zodNumberSchema(),
+        // enter levels are optional in 'fpp' entryMode — validate loosely
+        // so the form doesn't reject FPP-only submissions.
+        enterLevel1: zodNumberSchema().nullish(),
+        takeProfitLevel1: zodNumberSchema().nullish(),
         enterLevel2: zodNumberSchema().nullish(),
         takeProfitLevel2: zodNumberSchema().nullish(),
         enterLevel3: zodNumberSchema().nullish(),
@@ -109,64 +207,24 @@ export function StrategiesBacktestForm({
         maxSessionLength: zodNumberSchema(),
         startTs: zodNumberSchema(),
         finishTs: zodNumberSchema().nullish(),
+        entryMode: union([literal('levels'), literal('fpp')]).nullish(),
+        fppEntryTypes: array(string()).nullish(),
       }))}
       onSuccess={onSubmit}
     >
       <Grid container direction='row' spacing={2}>
-        <Grid item size={6}>
-          <TextFieldElement
-            name='enterLevel1'
-            label='Enter level 1'
-            type='number'
-            size='small'
-            fullWidth
+        <Grid item size={12}>
+          <RadioButtonGroup
+            name='entryMode'
+            label='Entry mode'
+            row
+            options={[
+              { id: 'levels', label: 'Enter level' },
+              { id: 'fpp', label: 'Enter level by FPP' },
+            ]}
           />
         </Grid>
-        <Grid item size={6}>
-          <TextFieldElement
-            name='takeProfitLevel1'
-            label='Take profit level 1'
-            type='number'
-            size='small'
-            fullWidth
-          />
-        </Grid>
-        <Grid item size={6}>
-          <TextFieldElement
-            name='enterLevel2'
-            label='Enter level 2'
-            type='number'
-            size='small'
-            fullWidth
-          />
-        </Grid>
-        <Grid item size={6}>
-          <TextFieldElement
-            name='takeProfitLevel2'
-            label='Take profit level 2'
-            type='number'
-            size='small'
-            fullWidth
-          />
-        </Grid>
-        <Grid item size={6}>
-          <TextFieldElement
-            name='enterLevel3'
-            label='Enter level 3'
-            type='number'
-            size='small'
-            fullWidth
-          />
-        </Grid>
-        <Grid item size={6}>
-          <TextFieldElement
-            name='takeProfitLevel3'
-            label='Take profit level 3'
-            type='number'
-            size='small'
-            fullWidth
-          />
-        </Grid>
+        <EntryFields />
         <Grid item size={12}>
           <TextFieldElement
             name='triggerLevel'

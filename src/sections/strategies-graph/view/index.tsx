@@ -15,6 +15,7 @@ import {onSubmitWrapper} from "@/src/utils/submit";
 import {StrategiesDhmDialog} from "@/src/sections/strategies-graph/strategies.dhm-dialog";
 import {IconButton} from "@mui/material";
 import SettingsIcon from '@mui/icons-material/Settings';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import DeleteIcon from "@mui/icons-material/Delete";
 import {StrategiesDhmSettingsDialog} from "@/src/sections/strategies-graph/strategies.dhm-settings-dialog";
 import {StrategiesDhmFppFiltersDialog} from "@/src/sections/strategies-graph/strategies.dhm-global-settings-dialog";
@@ -66,8 +67,10 @@ import {
   ListItem,
   ListItemButton,
   ListItemText,
+  Popover,
   Tab,
   Tabs,
+  TextField,
   Typography,
 } from "@mui/material";
 import {useGetSettingsDhmByPairIdAndTfQuery} from "@/lib/redux/api/dhmApi";
@@ -150,6 +153,8 @@ const DEFAULT_BACKTEST_VALUES = {
   startTs: 1767211200000,
   finishTs: null,
   direction: 'up',
+  entryMode: 'levels' as 'levels' | 'fpp',
+  fppEntryTypes: [] as string[],
 };
 
 export default function DhmIndexView({ tf, pairId }: any) {
@@ -185,6 +190,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const [loadedFavorite, setLoadedFavorite] = useState<any>(null);
   const [favoriteLoadVersion, setFavoriteLoadVersion] = useState(0);
   const [showFavoritesList, setShowFavoritesList] = useState(false);
+  const [datePickerAnchor, setDatePickerAnchor] = useState<HTMLElement | null>(null);
   const { mapDrawingOverlayActiveRef, onDrawingInteractionChange } = useMapDrawingOverlayRef();
   const [globalSettings, setGlobalSettings] = useState<any>(DEFAULT_GLOBAL_SETTINGS);
   const {
@@ -520,6 +526,8 @@ export default function DhmIndexView({ tf, pairId }: any) {
     const { pairId: _p, tf: _t, ...settingsToSave } = values;
     saveBacktestSettings({ pairId, tf, data: settingsToSave });
     setIsRunningTest(true);
+    const entryMode: 'levels' | 'fpp' = values.entryMode === 'fpp' ? 'fpp' : 'levels';
+    const fppEntryTypes: string[] = Array.isArray(values.fppEntryTypes) ? values.fppEntryTypes : [];
     try {
       const sessions = await runDhmBacktestForUI({
         pairId: Number(pairId),
@@ -539,8 +547,13 @@ export default function DhmIndexView({ tf, pairId }: any) {
           triggerLevel: values.triggerLevel,
           stopLossLevel: values.stopLossLevel,
           finishLevel: values.finishLevel,
+          entryMode,
+          fppEntryTypes,
         },
         klinesApiBase: process.env.NEXT_PUBLIC_TR_KLINES_DOMAIN as string,
+        // Pass the already-fetched FPP list (per pair/tf) so FPP-mode can
+        // resolve the earliest matching pattern per detected session.
+        fpps: entryMode === 'fpp' ? ((fpp as any[]) ?? []) : undefined,
       });
       setTestSessions(sessions);
     } catch (e) {
@@ -548,7 +561,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
     } finally {
       setIsRunningTest(false);
     }
-  }, [pairId, tf, saveBacktestSettings]);
+  }, [pairId, tf, saveBacktestSettings, fpp]);
 
   const onDragHandleMouseDown = useCallback((e: React.MouseEvent) => {
     dragStartY.current = e.clientY;
@@ -816,6 +829,49 @@ export default function DhmIndexView({ tf, pairId }: any) {
       }}>
         <SettingsIcon />
       </IconButton>
+
+      <IconButton
+        key='go-to-date'
+        aria-label="go to date"
+        sx={{
+          position: 'absolute',
+          zIndex: 1,
+          left: '18px',
+          top: '156px',
+          background: theme.palette.grey[200],
+          '&:hover': { background: theme.palette.grey[300] },
+        }}
+        onClick={(e) => setDatePickerAnchor(e.currentTarget)}
+      >
+        <ArrowBackIcon />
+      </IconButton>
+      <Popover
+        open={!!datePickerAnchor}
+        anchorEl={datePickerAnchor}
+        onClose={() => setDatePickerAnchor(null)}
+        anchorOrigin={{ vertical: 'center', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'center', horizontal: 'left' }}
+      >
+        <Box sx={{ p: 1.5 }}>
+          <TextField
+            type="date"
+            size="small"
+            autoFocus
+            defaultValue={(() => {
+              const ts = searchParams.get('ts');
+              return ts ? moment.utc(Number(ts)).format('YYYY-MM-DD') : '';
+            })()}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (!v) { return; }
+              const targetTs = moment.utc(v).valueOf();
+              setDatePickerAnchor(null);
+              router.push(`/dhm-graph/${pairId}/${tf}?ts=${targetTs}`);
+            }}
+            InputLabelProps={{ shrink: true }}
+          />
+        </Box>
+      </Popover>
 
       <MapTools
         chart={chart}

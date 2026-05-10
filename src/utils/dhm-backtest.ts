@@ -44,6 +44,22 @@ export type DhmSettings = {
   triggerLevel?: string | number | null;
   stopLossLevel?: string | number | null;
   finishLevel?: string | number | null;
+  // Switches the trigger condition for waiting → triggered:
+  // 'levels' (default) — original DHM logic, fires when price reaches
+  //   the lowest non-null enterLevel*.
+  // 'fpp'              — fires when an FPP record of one of the
+  //   `fppEntryTypes` types and matching session direction becomes
+  //   actionable (its source kline closed at FPP.ts + sessionTfMs).
+  entryMode?: 'levels' | 'fpp';
+  fppEntryTypes?: string[];
+};
+
+export type Fpp = {
+  ts: string | number;
+  pairId?: number;
+  tf?: number;
+  direction: 'up' | 'down';
+  type: string;
 };
 
 export type DhmStatus =
@@ -75,6 +91,9 @@ export type DhmSession = {
   data: any;
   finishTs?: any;
   triggeredAt?: any;
+  // FPP-mode only: actionable timestamp of the earliest matching FPP
+  // record after kline2.ts. Computed once at session creation.
+  fppTriggerTs?: number | null;
 };
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -150,6 +169,18 @@ function checkAndSetTriggeredStatus(session: DhmSession, price: any, ts: any) {
   }
 }
 
+// FPP-mode trigger: pre-computed `fppTriggerTs` becomes actionable when
+// the simulation cursor crosses it. Direction match and type filter are
+// applied at session creation, so here we just need a timestamp gate.
+function checkAndSetTriggeredStatusByFpp(session: DhmSession, ts: any) {
+  if (session.status !== 'waiting') return;
+  if (session.fppTriggerTs == null) return;
+  if (Number(ts) >= session.fppTriggerTs) {
+    session.status = 'triggered';
+    session.triggeredAt = ts;
+  }
+}
+
 function checkAndSetFinishedBySizeStatus(session: DhmSession, price: any) {
   if (
     session.status === 'created' &&
@@ -165,13 +196,26 @@ function checkAndSetFinishedStatus(session: DhmSession, price: any, ts: any) {
   if (session.status !== 'triggered') return;
   const key = session.direction === 'up' ? 'buy' : 'sell';
   const orders = session.data?.orders ?? {};
-  const takeProfitLevel = orders?.[key]?.[String(session.settings?.enterLevel3)]
-    ? session.settings.takeProfitLevel3
-    : orders?.[key]?.[String(session.settings?.enterLevel2)]
-    ? session.settings.takeProfitLevel2
-    : session.settings.enterLevel1
-    ? session.settings.takeProfitLevel1
-    : null;
+  // FPP entry mode never places per-level orders, so the
+  // "deepest-order" cascade has nothing to choose from. Fall back to
+  // takeProfitLevel1 (or the first non-null tp) so the session still
+  // has a finish target.
+  let takeProfitLevel: any = null;
+  if (session.settings.entryMode === 'fpp') {
+    takeProfitLevel =
+      session.settings.takeProfitLevel1 ??
+      session.settings.takeProfitLevel2 ??
+      session.settings.takeProfitLevel3 ??
+      null;
+  } else {
+    takeProfitLevel = orders?.[key]?.[String(session.settings?.enterLevel3)]
+      ? session.settings.takeProfitLevel3
+      : orders?.[key]?.[String(session.settings?.enterLevel2)]
+      ? session.settings.takeProfitLevel2
+      : session.settings.enterLevel1
+      ? session.settings.takeProfitLevel1
+      : null;
+  }
   if (takeProfitLevel != null && !fibLevelIsTriggered(session, price, takeProfitLevel)) {
     session.status = 'finished';
     session.finishTs = ts;
@@ -347,12 +391,18 @@ function createdProcess(kline: Kline, session: DhmSession, minuteLowPrice: any, 
 }
 
 function waitingProcess(kline: Kline, session: DhmSession, minuteLowPrice: any, minuteHighPrice: any) {
-  tryCreateOrders(session, minuteLowPrice, minuteHighPrice);
-  checkAndSetTriggeredStatus(
-    session,
-    session.direction === 'up' ? minuteLowPrice : minuteHighPrice,
-    kline.ts,
-  );
+  // FPP-mode skips per-level limit-order placement entirely; the trigger
+  // is the appearance of an FPP record, not a fib-level touch.
+  if (session.settings.entryMode === 'fpp') {
+    checkAndSetTriggeredStatusByFpp(session, kline.ts);
+  } else {
+    tryCreateOrders(session, minuteLowPrice, minuteHighPrice);
+    checkAndSetTriggeredStatus(
+      session,
+      session.direction === 'up' ? minuteLowPrice : minuteHighPrice,
+      kline.ts,
+    );
+  }
   checkAndSetClosedByLengthStatus(session, kline.ts);
 }
 
@@ -363,7 +413,9 @@ function triggerProcess(
   minuteHighPrice: any,
   minuteClosePrice: any,
 ) {
-  tryCreateOrders(session, minuteLowPrice, minuteHighPrice);
+  if (session.settings.entryMode !== 'fpp') {
+    tryCreateOrders(session, minuteLowPrice, minuteHighPrice);
+  }
 
   checkAndSetFinishedStatus(
     session,
@@ -425,11 +477,32 @@ function lowerBoundIdx(arr: Kline[], ts: number): number {
   return lo;
 }
 
+function findEarliestMatchingFppTs(
+  fpps: Fpp[],
+  direction: 'up' | 'down',
+  types: string[] | undefined,
+  afterTs: number,
+): number | null {
+  if (!types?.length) return null;
+  const typeSet = new Set(types);
+  let earliest: number | null = null;
+  for (const f of fpps) {
+    if (f.direction !== direction) continue;
+    if (!typeSet.has(f.type)) continue;
+    const t = Number(f.ts);
+    if (!Number.isFinite(t)) continue;
+    if (t < afterTs) continue;
+    if (earliest === null || t < earliest) earliest = t;
+  }
+  return earliest;
+}
+
 function processForDirection(
   pairId: number,
   tf: number,
   klinesTf: Kline[],
   klines5m: Kline[],
+  fpps: Fpp[],
   settings: DhmSettings,
   result: DhmSession[],
   idCounter: { v: number },
@@ -437,6 +510,7 @@ function processForDirection(
   const tfSize = KLINE_TS_SIZE_BY_TF[tf];
   const maxSessionLength = Number(settings.maxSessionLength ?? MAX_SESSION_LENGTH);
   const direction = settings.direction;
+  const isFppMode = settings.entryMode === 'fpp';
 
   for (let i = 2; i < klinesTf.length; i++) {
     const kline1 = klinesTf[i - 2];
@@ -444,6 +518,20 @@ function processForDirection(
     const session = detectDhm(pairId, tf, kline1, kline2, settings, idCounter);
     if (!session) continue;
     if (direction && session.direction !== direction) continue;
+
+    if (isFppMode) {
+      const earliest = findEarliestMatchingFppTs(
+        fpps,
+        session.direction,
+        settings.fppEntryTypes,
+        Number(kline2.ts),
+      );
+      // The FPP only becomes actionable after its source kline closes,
+      // i.e. at FPP.ts + tfSize. If no matching FPP exists in this
+      // pair's stream after kline2, the session can never trigger and
+      // will eventually transition via closedByLength.
+      session.fppTriggerTs = earliest === null ? null : earliest + tfSize;
+    }
 
     const startProcessTs = Number(kline2.ts) + tfSize;
     const startIdx = lowerBoundIdx(klines5m, startProcessTs);
@@ -475,6 +563,7 @@ export type RunDhmBacktestArgs = {
   klinesTf: Kline[];
   klines5m: Kline[];
   settings: DhmSettings;
+  fpps?: Fpp[];
 };
 
 export function runDhmBacktest({
@@ -483,19 +572,21 @@ export function runDhmBacktest({
   klinesTf,
   klines5m,
   settings,
+  fpps,
 }: RunDhmBacktestArgs): DhmSession[] {
   const result: DhmSession[] = [];
   const idCounter = { v: 0 };
+  const fppList = fpps ?? [];
 
   if (settings.direction) {
-    processForDirection(pairId, tf, klinesTf, klines5m, settings, result, idCounter);
+    processForDirection(pairId, tf, klinesTf, klines5m, fppList, settings, result, idCounter);
   } else {
     processForDirection(
-      pairId, tf, klinesTf, klines5m,
+      pairId, tf, klinesTf, klines5m, fppList,
       { ...settings, direction: 'up' }, result, idCounter,
     );
     processForDirection(
-      pairId, tf, klinesTf, klines5m,
+      pairId, tf, klinesTf, klines5m, fppList,
       { ...settings, direction: 'down' }, result, idCounter,
     );
   }
@@ -562,6 +653,7 @@ export async function runDhmBacktestForUI({
   finishTs,
   settings,
   klinesApiBase,
+  fpps,
 }: {
   pairId: number;
   tf: number;
@@ -569,6 +661,7 @@ export async function runDhmBacktestForUI({
   finishTs: number | null;
   settings: DhmSettings;
   klinesApiBase: string;
+  fpps?: Fpp[];
 }): Promise<DhmSession[]> {
   const tfSize = KLINE_TS_SIZE_BY_TF[tf];
   if (!tfSize) throw new Error(`Unsupported tf=${tf}`);
@@ -610,5 +703,6 @@ export async function runDhmBacktestForUI({
     klinesTf,
     klines5m,
     settings: { ...settings, maxSessionLength },
+    fpps,
   });
 }
