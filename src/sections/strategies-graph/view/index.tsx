@@ -1240,6 +1240,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
               status === 'finished' ? 'success'
               : status === 'finished_by_lose' ? 'error'
               : status === 'finished_by_size' || status === 'finished_by_length' ? 'warning'
+              : status === 'finished_by_no_fpp' ? 'warning'
               : status === 'created' || status === 'waiting' || status === 'triggered' ? 'info'
               : 'default';
             const STATUS_COLORS: Record<string, string> = {
@@ -1247,6 +1248,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
               finished_by_lose: '#f44336',
               finished_by_size: '#ed6c02',
               finished_by_length: '#ed6c02',
+              finished_by_no_fpp: '#9c27b0',
               created: '#0288d1',
               waiting: '#0288d1',
               triggered: '#0288d1',
