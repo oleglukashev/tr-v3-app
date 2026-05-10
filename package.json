@@ -23,6 +23,7 @@
     "@mui/styled-engine-sc": "^7.1.0",
     "@mui/x-data-grid-pro": "^8.27.0",
     "@reduxjs/toolkit": "1.9.5",
+    "dhm-strategy": "file:../dhm-strategy",
     "klinecharts": "10.0.0-alpha8",
     "klines-footprint-patterns": "oleglukashev/klines-footprint-patterns#672f65d",
     "lodash": "^4.17.21",
