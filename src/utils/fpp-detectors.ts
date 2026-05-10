@@ -43,6 +43,11 @@ export type Detection = {
   ts: string | number;
   type: FppType;
   direction: 'up' | 'down';
+  // Closing price of the kline that produced the pattern. The backtest
+  // uses this to gate the FPP against the session's enterLevel /
+  // stopLossLevel zone — i.e. an FPP only counts when its price falls
+  // inside the fib entry band.
+  price: string | number;
 };
 
 function klineDirection(k: Kline): 'up' | 'down' | 'neutral' {
@@ -82,10 +87,10 @@ function detectLockedVolume(c: Cluster, k: Kline): Detection | null {
   const p = parseFloat(poc.p);
   const open = parseFloat(String(k.open));
   if (d === 'down' && p > open) {
-    return { ts: k.ts, type: 'locked_volume', direction: 'down' };
+    return { ts: k.ts, type: 'locked_volume', direction: 'down', price: k.close };
   }
   if (d === 'up' && p < open) {
-    return { ts: k.ts, type: 'locked_volume', direction: 'up' };
+    return { ts: k.ts, type: 'locked_volume', direction: 'up', price: k.close };
   }
   return null;
 }
@@ -102,10 +107,10 @@ function detectLockedDelta(c: Cluster, k: Kline): Detection | null {
   if (!d1 || !d2 || !d3 || d1 <= 0 || d2 <= 0 || d3 <= 0) return null;
   const third = parseFloat(rows[2].p);
   if (d === 'down' && third > open) {
-    return { ts: k.ts, type: 'locked_delta', direction: 'down' };
+    return { ts: k.ts, type: 'locked_delta', direction: 'down', price: k.close };
   }
   if (d !== 'down' && third < open) {
-    return { ts: k.ts, type: 'locked_delta', direction: 'up' };
+    return { ts: k.ts, type: 'locked_delta', direction: 'up', price: k.close };
   }
   return null;
 }
@@ -125,10 +130,10 @@ function detectLockedImbalance(c: Cluster, k: Kline): Detection | null {
   if (!zeros) return null;
   const third = parseFloat(r3.p);
   if (d === 'down' && third > open) {
-    return { ts: k.ts, type: 'locked_imbalance', direction: 'down' };
+    return { ts: k.ts, type: 'locked_imbalance', direction: 'down', price: k.close };
   }
   if (d !== 'down' && third < open) {
-    return { ts: k.ts, type: 'locked_imbalance', direction: 'up' };
+    return { ts: k.ts, type: 'locked_imbalance', direction: 'up', price: k.close };
   }
   return null;
 }
@@ -144,10 +149,10 @@ function detectLowLastPriceVolume(c: Cluster, k: Kline): Detection | null {
   const pocV = parseFloat(String(poc.v));
   if (pocV <= 0 || closeV / pocV > 0.1) return null;
   if (d === 'down') {
-    return { ts: k.ts, type: 'low_last_price_volume', direction: 'down' };
+    return { ts: k.ts, type: 'low_last_price_volume', direction: 'down', price: k.close };
   }
   if (d === 'up') {
-    return { ts: k.ts, type: 'low_last_price_volume', direction: 'up' };
+    return { ts: k.ts, type: 'low_last_price_volume', direction: 'up', price: k.close };
   }
   return null;
 }
@@ -169,10 +174,10 @@ function detectWeakness(c: Cluster, k: Kline): Detection | null {
   if (!wickRatio || !bodyRatio) return null;
   const p = parseFloat(poc.p);
   if (d === 'down' && p > open) {
-    return { ts: k.ts, type: 'weakness', direction: 'down' };
+    return { ts: k.ts, type: 'weakness', direction: 'down', price: k.close };
   }
   if (d === 'up' && p < open) {
-    return { ts: k.ts, type: 'weakness', direction: 'up' };
+    return { ts: k.ts, type: 'weakness', direction: 'up', price: k.close };
   }
   return null;
 }
@@ -195,11 +200,11 @@ function detectInterception(
   const p2Val = parseFloat(p2.p);
   if (d1 === 'up') {
     if (p1Val > parseFloat(String(k1.close)) && p2Val > parseFloat(String(k2.close))) {
-      return { ts: k2.ts, type: 'interception', direction: 'down' };
+      return { ts: k2.ts, type: 'interception', direction: 'down', price: k2.close };
     }
   } else {
     if (p1Val < parseFloat(String(k1.close)) && p2Val < parseFloat(String(k2.close))) {
-      return { ts: k2.ts, type: 'interception', direction: 'up' };
+      return { ts: k2.ts, type: 'interception', direction: 'up', price: k2.close };
     }
   }
   return null;
@@ -221,11 +226,11 @@ function detectReverse(
   const p2Val = parseFloat(p2.p);
   if (d1 === 'up') {
     if (p1Val > parseFloat(String(k1.open)) && p2Val < parseFloat(String(k2.open))) {
-      return { ts: k2.ts, type: 'reverse', direction: 'down' };
+      return { ts: k2.ts, type: 'reverse', direction: 'down', price: k2.close };
     }
   } else {
     if (p1Val < parseFloat(String(k1.open)) && p2Val > parseFloat(String(k2.open))) {
-      return { ts: k2.ts, type: 'reverse', direction: 'up' };
+      return { ts: k2.ts, type: 'reverse', direction: 'up', price: k2.close };
     }
   }
   return null;
@@ -240,10 +245,10 @@ function detectTestVolume(c1: Cluster, k2: Kline): Detection | null {
   const high = parseFloat(String(k2.high));
   const low = parseFloat(String(k2.low));
   if (p > close && p > open && p < high) {
-    return { ts: k2.ts, type: 'test_volume', direction: 'down' };
+    return { ts: k2.ts, type: 'test_volume', direction: 'down', price: k2.close };
   }
   if (p < close && p < open && p > low) {
-    return { ts: k2.ts, type: 'test_volume', direction: 'up' };
+    return { ts: k2.ts, type: 'test_volume', direction: 'up', price: k2.close };
   }
   return null;
 }
@@ -254,11 +259,11 @@ function detectResistance(k1: Kline, k2: Kline): Detection | null {
   if (d1 === d2) return null;
   if (d1 === 'up') {
     if (parseFloat(String(k1.open)) > parseFloat(String(k2.close))) {
-      return { ts: k2.ts, type: 'resistance', direction: 'down' };
+      return { ts: k2.ts, type: 'resistance', direction: 'down', price: k2.close };
     }
   } else {
     if (parseFloat(String(k1.open)) < parseFloat(String(k2.close))) {
-      return { ts: k2.ts, type: 'resistance', direction: 'up' };
+      return { ts: k2.ts, type: 'resistance', direction: 'up', price: k2.close };
     }
   }
   return null;

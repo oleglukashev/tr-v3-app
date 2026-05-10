@@ -65,6 +65,10 @@ export type Fpp = {
   tf?: number;
   direction: 'up' | 'down';
   type: string;
+  // Price at which the pattern fired (kline close). Optional for back
+  // compat with the server-fed /api/v1/fpp records, which don't carry
+  // price — in that case the zone gate is skipped.
+  price?: string | number;
 };
 
 export type DhmStatus =
@@ -460,19 +464,35 @@ function lowerBoundIdx(arr: Kline[], ts: number): number {
 
 function findEarliestMatchingFppTs(
   fpps: Fpp[],
-  direction: 'up' | 'down',
+  session: DhmSession,
   types: string[] | undefined,
   afterTs: number,
 ): number | null {
   if (!types?.length) return null;
   const typeSet = new Set(types);
+  // The FPP must fire in the entry zone — between fib enterLevel and
+  // stopLossLevel — otherwise it isn't a tradable signal. Use the
+  // session's own getFib / fibLevelIsTriggered semantics so the zone
+  // boundaries match the rest of the engine.
+  const triggerLevel = session.settings.enterLevel1
+    ?? session.settings.enterLevel2
+    ?? session.settings.enterLevel3
+    ?? null;
+  const stopLossLevel = session.settings.stopLossLevel ?? null;
+  const checkZone = triggerLevel != null && stopLossLevel != null;
   let earliest: number | null = null;
   for (const f of fpps) {
-    if (f.direction !== direction) continue;
+    if (f.direction !== session.direction) continue;
     if (!typeSet.has(f.type)) continue;
     const t = Number(f.ts);
     if (!Number.isFinite(t)) continue;
     if (t < afterTs) continue;
+    if (checkZone && f.price != null) {
+      // Inside the zone = price has reached enterLevel but not stopLoss.
+      const reachedEntry = fibLevelIsTriggered(session, f.price, triggerLevel);
+      const reachedStop = fibLevelIsTriggered(session, f.price, stopLossLevel);
+      if (!reachedEntry || reachedStop) continue;
+    }
     if (earliest === null || t < earliest) earliest = t;
   }
   return earliest;
@@ -503,14 +523,15 @@ function processForDirection(
     if (isFppMode) {
       const earliest = findEarliestMatchingFppTs(
         fpps,
-        session.direction,
+        session,
         settings.fppEntryTypes,
         Number(kline2.ts),
       );
       // The FPP only becomes actionable after its source kline closes,
       // i.e. at FPP.ts + tfSize. If no matching FPP exists in this
-      // pair's stream after kline2, the session can never trigger and
-      // will eventually transition via closedByLength.
+      // pair's stream after kline2 (or inside the entry zone), the
+      // session can never trigger and will eventually transition via
+      // closedByLength.
       session.fppTriggerTs = earliest === null ? null : earliest + tfSize;
     }
 
