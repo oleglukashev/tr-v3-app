@@ -25,7 +25,7 @@
     "@reduxjs/toolkit": "1.9.5",
     "klinecharts": "10.0.0-alpha8",
     "klines-footprint-patterns": "oleglukashev/klines-footprint-patterns#672f65d",
-    "tr-strategies-dhm": "oleglukashev/tr-strategies-dhm#6f79dd2",
+    "tr-strategies-dhm": "oleglukashev/tr-strategies-dhm#dd36a33",
     "lodash": "^4.17.21",
     "moment": "^2.30.1",
     "next": "15.2.3",
