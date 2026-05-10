@@ -16,7 +16,7 @@ import {
   type DhmSettings,
   type Fpp,
   type Kline,
-} from 'dhm-strategy';
+} from 'tr-strategies-dhm';
 
 export {
   KLINE_TS_SIZE_BY_TF,

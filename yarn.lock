@@ -1817,9 +1817,6 @@ detect-libc@^2.0.3:
   resolved "https://registry.npmjs.org/detect-libc/-/detect-libc-2.0.3.tgz"
   integrity sha512-bwy0MGW55bG41VqxxypOsdSdGqLwXPI/focwgTYCFMbdUiBAxLg9CFzG08sz2aqzknwiX7Hkl0bQENjg8iLByw==
 
-"dhm-strategy@file:../dhm-strategy":
-  version "1.0.0"
-
 doctrine@^2.1.0:
   version "2.1.0"
   resolved "https://registry.npmjs.org/doctrine/-/doctrine-2.1.0.tgz"
@@ -4029,6 +4026,10 @@ to-regex-range@^5.0.1:
   integrity sha512-65P7iz6X5yEr1cwcgvQxbbIw7Uk3gOy5dIdtZ4rDveLqhrdJP+Li/Hx6tyK0NEb+2GCyneCMJiGqrADCSNk8sQ==
   dependencies:
     is-number "^7.0.0"
+
+tr-strategies-dhm@oleglukashev/tr-strategies-dhm#6f79dd2:
+  version "1.0.0"
+  resolved "git+ssh://git@github.com/oleglukashev/tr-strategies-dhm.git#6f79dd29170f2f95f4d21015da87178d3dc97f44"
 
 tr46@~0.0.3:
   version "0.0.3"
