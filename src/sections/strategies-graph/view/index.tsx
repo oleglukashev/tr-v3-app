@@ -551,9 +551,14 @@ export default function DhmIndexView({ tf, pairId }: any) {
           fppEntryTypes,
         },
         klinesApiBase: process.env.NEXT_PUBLIC_TR_KLINES_DOMAIN as string,
-        // Pass the already-fetched FPP list (per pair/tf) so FPP-mode can
-        // resolve the earliest matching pattern per detected session.
-        fpps: entryMode === 'fpp' ? ((fpp as any[]) ?? []) : undefined,
+        // In FPP mode the backtest pulls raw clusters from the bidasks
+        // server directly and runs pattern detection client-side, so it
+        // doesn't depend on the server's generate-fpp cron having
+        // processed the chosen historical range.
+        clustersApiBase:
+          entryMode === 'fpp'
+            ? (process.env.NEXT_PUBLIC_TR_CLUSTERS_DOMAIN as string)
+            : undefined,
       });
       setTestSessions(sessions);
     } catch (e) {
@@ -561,7 +566,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
     } finally {
       setIsRunningTest(false);
     }
-  }, [pairId, tf, saveBacktestSettings, fpp]);
+  }, [pairId, tf, saveBacktestSettings]);
 
   const onDragHandleMouseDown = useCallback((e: React.MouseEvent) => {
     dragStartY.current = e.clientY;

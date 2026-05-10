@@ -6,6 +6,10 @@
 // are stripped — they do not affect the algorithm.
 
 import { getFibRetracement } from './fib';
+import {
+  detectFppForSeries,
+  type Cluster as FppCluster,
+} from './fpp-detectors';
 
 export const KLINE_TS_SIZE_BY_TF: Record<number, number> = {
   1: 60000,
@@ -646,6 +650,46 @@ export async function fetchKlines({
   return out;
 }
 
+export async function fetchClusters({
+  baseUrl,
+  pairId,
+  tf,
+  startTs,
+  endTs,
+}: {
+  baseUrl: string;
+  pairId: number;
+  tf: number;
+  startTs: number;
+  endTs: number;
+}): Promise<FppCluster[]> {
+  const base = baseUrl.replace(/\/$/, '');
+  const out: FppCluster[] = [];
+  // Controller returns rows by ts DESC and ignores `page` in this code
+  // path, so we cursor by shrinking the upper bound after each page.
+  let cursor = endTs;
+
+  for (let page = 0; page < KLINES_FETCH_MAX_PAGES; page++) {
+    if (cursor < startTs) break;
+    const url =
+      `${base}/clusters` +
+      `?pairId=${pairId}&tf=${tf}` +
+      `&startTs=${startTs}&endTs=${cursor}` +
+      `&limit=${KLINES_FETCH_LIMIT}&page=1`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`clusters fetch failed (${res.status})`);
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) break;
+    for (let i = 0; i < data.length; i++) out.push(data[i] as FppCluster);
+    if (data.length < KLINES_FETCH_LIMIT) break;
+    const oldestTs = Number(data[data.length - 1].ts);
+    if (!Number.isFinite(oldestTs) || oldestTs >= cursor) break;
+    cursor = oldestTs - 1;
+  }
+
+  return out;
+}
+
 export async function runDhmBacktestForUI({
   pairId,
   tf,
@@ -653,6 +697,7 @@ export async function runDhmBacktestForUI({
   finishTs,
   settings,
   klinesApiBase,
+  clustersApiBase,
   fpps,
 }: {
   pairId: number;
@@ -661,6 +706,11 @@ export async function runDhmBacktestForUI({
   finishTs: number | null;
   settings: DhmSettings;
   klinesApiBase: string;
+  // Required for entryMode='fpp' — the bidasks server origin so we can
+  // pull raw clusters and run pattern detection client-side.
+  clustersApiBase?: string;
+  // Optional override: skip the clusters fetch + detection and use this
+  // pre-built list instead. Mostly useful for tests.
   fpps?: Fpp[];
 }): Promise<DhmSession[]> {
   const tfSize = KLINE_TS_SIZE_BY_TF[tf];
@@ -680,7 +730,10 @@ export async function runDhmBacktestForUI({
   const fiveMinRangeEnd =
     effectiveFinishTs + maxSessionLength * 20 * fiveMinSize + 1;
 
-  const [klinesTf, klines5m] = await Promise.all([
+  const wantsClusterFpps =
+    settings.entryMode === 'fpp' && !fpps && !!clustersApiBase;
+
+  const [klinesTf, klines5m, clusters] = await Promise.all([
     fetchKlines({
       baseUrl: klinesApiBase,
       pairId,
@@ -695,7 +748,29 @@ export async function runDhmBacktestForUI({
       startTs: fiveMinRangeStart,
       endTs: fiveMinRangeEnd,
     }),
+    wantsClusterFpps
+      ? fetchClusters({
+          baseUrl: clustersApiBase!,
+          pairId,
+          tf,
+          startTs: tfRangeStart,
+          endTs: tfRangeEnd,
+        })
+      : Promise.resolve(null as FppCluster[] | null),
   ]);
+
+  // If running in FPP mode without an explicit `fpps` override, derive
+  // detections from the just-fetched clusters using the same logic that
+  // tr-v3-bidasks/generate-fpp runs server-side as a cron.
+  let effectiveFpps: Fpp[] | undefined = fpps;
+  if (wantsClusterFpps && clusters) {
+    const clustersByTs = new Map<number, FppCluster>();
+    for (const c of clusters) {
+      const t = Number(c.ts);
+      if (Number.isFinite(t)) clustersByTs.set(t, c);
+    }
+    effectiveFpps = detectFppForSeries(clustersByTs, klinesTf as any);
+  }
 
   return runDhmBacktest({
     pairId,
@@ -703,6 +778,6 @@ export async function runDhmBacktestForUI({
     klinesTf,
     klines5m,
     settings: { ...settings, maxSessionLength },
-    fpps,
+    fpps: effectiveFpps,
   });
 }
