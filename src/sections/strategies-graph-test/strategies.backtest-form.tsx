@@ -103,80 +103,25 @@ function ResetButton({ resetValues }: { resetValues: any }) {
   );
 }
 
-function EntryFields() {
+// FPP entry types are an extra gate on top of the fib enterLevel — when
+// the entryMode is 'fpp', triggering also requires that at least one FPP
+// of one of the selected types (and matching session direction) has
+// appeared by the time price reaches the enterLevel.
+function FppEntryFilters() {
   const entryMode = useWatch({ name: 'entryMode' }) ?? 'levels';
-  if (entryMode === 'fpp') {
-    return (
-      <Grid item size={12}>
-        <MultiSelectElement
-          name='fppEntryTypes'
-          fullWidth
-          showCheckbox
-          size='small'
-          label='Enter by FPP patterns'
-          options={FPP_TYPE_OPTIONS}
-          MenuProps={{ PaperProps: { style: { maxHeight: 1000 } } }}
-        />
-      </Grid>
-    );
-  }
+  if (entryMode !== 'fpp') return null;
   return (
-    <>
-      <Grid item size={6}>
-        <TextFieldElement
-          name='enterLevel1'
-          label='Enter level 1'
-          type='number'
-          size='small'
-          fullWidth
-        />
-      </Grid>
-      <Grid item size={6}>
-        <TextFieldElement
-          name='takeProfitLevel1'
-          label='Take profit level 1'
-          type='number'
-          size='small'
-          fullWidth
-        />
-      </Grid>
-      <Grid item size={6}>
-        <TextFieldElement
-          name='enterLevel2'
-          label='Enter level 2'
-          type='number'
-          size='small'
-          fullWidth
-        />
-      </Grid>
-      <Grid item size={6}>
-        <TextFieldElement
-          name='takeProfitLevel2'
-          label='Take profit level 2'
-          type='number'
-          size='small'
-          fullWidth
-        />
-      </Grid>
-      <Grid item size={6}>
-        <TextFieldElement
-          name='enterLevel3'
-          label='Enter level 3'
-          type='number'
-          size='small'
-          fullWidth
-        />
-      </Grid>
-      <Grid item size={6}>
-        <TextFieldElement
-          name='takeProfitLevel3'
-          label='Take profit level 3'
-          type='number'
-          size='small'
-          fullWidth
-        />
-      </Grid>
-    </>
+    <Grid item size={12}>
+      <MultiSelectElement
+        name='fppEntryTypes'
+        fullWidth
+        showCheckbox
+        size='small'
+        label='Required FPP patterns'
+        options={FPP_TYPE_OPTIONS}
+        MenuProps={{ PaperProps: { style: { maxHeight: 1000 } } }}
+      />
+    </Grid>
   );
 }
 
@@ -191,10 +136,8 @@ export function StrategiesBacktestForm({
       resolver={zodResolver(object({
         pairId: zodNumberSchema(),
         tf: zodNumberSchema(),
-        // enter levels are optional in 'fpp' entryMode — validate loosely
-        // so the form doesn't reject FPP-only submissions.
-        enterLevel1: zodNumberSchema().nullish(),
-        takeProfitLevel1: zodNumberSchema().nullish(),
+        enterLevel1: zodNumberSchema(),
+        takeProfitLevel1: zodNumberSchema(),
         enterLevel2: zodNumberSchema().nullish(),
         takeProfitLevel2: zodNumberSchema().nullish(),
         enterLevel3: zodNumberSchema().nullish(),
@@ -224,7 +167,61 @@ export function StrategiesBacktestForm({
             ]}
           />
         </Grid>
-        <EntryFields />
+        <FppEntryFilters />
+        <Grid item size={6}>
+          <TextFieldElement
+            name='enterLevel1'
+            label='Enter level 1'
+            type='number'
+            size='small'
+            fullWidth
+          />
+        </Grid>
+        <Grid item size={6}>
+          <TextFieldElement
+            name='takeProfitLevel1'
+            label='Take profit level 1'
+            type='number'
+            size='small'
+            fullWidth
+          />
+        </Grid>
+        <Grid item size={6}>
+          <TextFieldElement
+            name='enterLevel2'
+            label='Enter level 2'
+            type='number'
+            size='small'
+            fullWidth
+          />
+        </Grid>
+        <Grid item size={6}>
+          <TextFieldElement
+            name='takeProfitLevel2'
+            label='Take profit level 2'
+            type='number'
+            size='small'
+            fullWidth
+          />
+        </Grid>
+        <Grid item size={6}>
+          <TextFieldElement
+            name='enterLevel3'
+            label='Enter level 3'
+            type='number'
+            size='small'
+            fullWidth
+          />
+        </Grid>
+        <Grid item size={6}>
+          <TextFieldElement
+            name='takeProfitLevel3'
+            label='Take profit level 3'
+            type='number'
+            size='small'
+            fullWidth
+          />
+        </Grid>
         <Grid item size={12}>
           <TextFieldElement
             name='triggerLevel'

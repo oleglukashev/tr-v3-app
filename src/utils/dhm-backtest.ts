@@ -48,12 +48,13 @@ export type DhmSettings = {
   triggerLevel?: string | number | null;
   stopLossLevel?: string | number | null;
   finishLevel?: string | number | null;
-  // Switches the trigger condition for waiting → triggered:
-  // 'levels' (default) — original DHM logic, fires when price reaches
-  //   the lowest non-null enterLevel*.
-  // 'fpp'              — fires when an FPP record of one of the
-  //   `fppEntryTypes` types and matching session direction becomes
-  //   actionable (its source kline closed at FPP.ts + sessionTfMs).
+  // Adds an extra gate on top of the original waiting → triggered
+  // transition:
+  // 'levels' (default) — fib enterLevel only, original DHM logic.
+  // 'fpp'              — same fib check PLUS at least one FPP record
+  //   of one of the `fppEntryTypes` types and matching session
+  //   direction must have been seen by the current tick (i.e. its
+  //   source kline has closed at FPP.ts + sessionTfMs ≤ tick.ts).
   entryMode?: 'levels' | 'fpp';
   fppEntryTypes?: string[];
 };
@@ -173,18 +174,6 @@ function checkAndSetTriggeredStatus(session: DhmSession, price: any, ts: any) {
   }
 }
 
-// FPP-mode trigger: pre-computed `fppTriggerTs` becomes actionable when
-// the simulation cursor crosses it. Direction match and type filter are
-// applied at session creation, so here we just need a timestamp gate.
-function checkAndSetTriggeredStatusByFpp(session: DhmSession, ts: any) {
-  if (session.status !== 'waiting') return;
-  if (session.fppTriggerTs == null) return;
-  if (Number(ts) >= session.fppTriggerTs) {
-    session.status = 'triggered';
-    session.triggeredAt = ts;
-  }
-}
-
 function checkAndSetFinishedBySizeStatus(session: DhmSession, price: any) {
   if (
     session.status === 'created' &&
@@ -200,26 +189,13 @@ function checkAndSetFinishedStatus(session: DhmSession, price: any, ts: any) {
   if (session.status !== 'triggered') return;
   const key = session.direction === 'up' ? 'buy' : 'sell';
   const orders = session.data?.orders ?? {};
-  // FPP entry mode never places per-level orders, so the
-  // "deepest-order" cascade has nothing to choose from. Fall back to
-  // takeProfitLevel1 (or the first non-null tp) so the session still
-  // has a finish target.
-  let takeProfitLevel: any = null;
-  if (session.settings.entryMode === 'fpp') {
-    takeProfitLevel =
-      session.settings.takeProfitLevel1 ??
-      session.settings.takeProfitLevel2 ??
-      session.settings.takeProfitLevel3 ??
-      null;
-  } else {
-    takeProfitLevel = orders?.[key]?.[String(session.settings?.enterLevel3)]
-      ? session.settings.takeProfitLevel3
-      : orders?.[key]?.[String(session.settings?.enterLevel2)]
-      ? session.settings.takeProfitLevel2
-      : session.settings.enterLevel1
-      ? session.settings.takeProfitLevel1
-      : null;
-  }
+  const takeProfitLevel = orders?.[key]?.[String(session.settings?.enterLevel3)]
+    ? session.settings.takeProfitLevel3
+    : orders?.[key]?.[String(session.settings?.enterLevel2)]
+    ? session.settings.takeProfitLevel2
+    : session.settings.enterLevel1
+    ? session.settings.takeProfitLevel1
+    : null;
   if (takeProfitLevel != null && !fibLevelIsTriggered(session, price, takeProfitLevel)) {
     session.status = 'finished';
     session.finishTs = ts;
@@ -395,12 +371,15 @@ function createdProcess(kline: Kline, session: DhmSession, minuteLowPrice: any, 
 }
 
 function waitingProcess(kline: Kline, session: DhmSession, minuteLowPrice: any, minuteHighPrice: any) {
-  // FPP-mode skips per-level limit-order placement entirely; the trigger
-  // is the appearance of an FPP record, not a fib-level touch.
-  if (session.settings.entryMode === 'fpp') {
-    checkAndSetTriggeredStatusByFpp(session, kline.ts);
-  } else {
-    tryCreateOrders(session, minuteLowPrice, minuteHighPrice);
+  tryCreateOrders(session, minuteLowPrice, minuteHighPrice);
+  // In FPP mode the fib-level trigger only fires once at least one
+  // matching FPP record has been observed by the current tick. The
+  // earliest matching FPP.ts + tfSize is precomputed into
+  // session.fppTriggerTs at session creation.
+  const fppGate =
+    session.settings.entryMode !== 'fpp' ||
+    (session.fppTriggerTs != null && Number(kline.ts) >= session.fppTriggerTs);
+  if (fppGate) {
     checkAndSetTriggeredStatus(
       session,
       session.direction === 'up' ? minuteLowPrice : minuteHighPrice,
@@ -417,9 +396,7 @@ function triggerProcess(
   minuteHighPrice: any,
   minuteClosePrice: any,
 ) {
-  if (session.settings.entryMode !== 'fpp') {
-    tryCreateOrders(session, minuteLowPrice, minuteHighPrice);
-  }
+  tryCreateOrders(session, minuteLowPrice, minuteHighPrice);
 
   checkAndSetFinishedStatus(
     session,
