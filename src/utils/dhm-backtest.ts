@@ -142,6 +142,10 @@ export async function runDhmBacktestForUI({
   const wantsClusterFpps =
     settings.entryMode === 'fpp' && !fpps && !!clustersApiBase;
 
+  // FPP source resolution: detection always runs on 5-minute clusters
+  // paired with 5-minute klines, regardless of session tf. Same range
+  // as `klines5m` so every simulation tick has a paired (cluster,
+  // kline) candidate.
   const [klinesTf, klines5m, clusters] = await Promise.all([
     fetchKlines({ baseUrl: klinesApiBase, pairId, tf, startTs: tfRangeStart, endTs: tfRangeEnd }),
     fetchKlines({ baseUrl: klinesApiBase, pairId, tf: 5, startTs: fiveMinRangeStart, endTs: fiveMinRangeEnd }),
@@ -149,9 +153,9 @@ export async function runDhmBacktestForUI({
       ? fetchClusters({
           baseUrl: clustersApiBase!,
           pairId,
-          tf,
-          startTs: tfRangeStart,
-          endTs: tfRangeEnd,
+          tf: 5,
+          startTs: fiveMinRangeStart,
+          endTs: fiveMinRangeEnd,
         })
       : Promise.resolve(null as Cluster[] | null),
   ]);
@@ -163,7 +167,7 @@ export async function runDhmBacktestForUI({
       const t = Number(c.ts);
       if (Number.isFinite(t)) clustersByTs.set(t, c);
     }
-    effectiveFpps = detectFppForSeries(clustersByTs, klinesTf);
+    effectiveFpps = detectFppForSeries(clustersByTs, klines5m);
   }
 
   return runDhmBacktest({
@@ -173,5 +177,9 @@ export async function runDhmBacktestForUI({
     klines5m,
     settings: { ...settings, maxSessionLength },
     fpps: effectiveFpps,
+    // FPPs are sourced from 5m clusters/klines, so the engine's
+    // actionable-by-now check (FPP.ts + fppTfSize <= cursorTs) uses
+    // 5-minute granularity rather than the session tf.
+    fppTf: 5,
   });
 }

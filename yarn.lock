@@ -4027,9 +4027,9 @@ to-regex-range@^5.0.1:
   dependencies:
     is-number "^7.0.0"
 
-tr-strategies-dhm@oleglukashev/tr-strategies-dhm#dd36a33:
+tr-strategies-dhm@oleglukashev/tr-strategies-dhm#c5659ae:
   version "1.0.0"
-  resolved "git+ssh://git@github.com/oleglukashev/tr-strategies-dhm.git#dd36a33bae940ee6f84c6e5b95cefdfc59022c1d"
+  resolved "git+ssh://git@github.com/oleglukashev/tr-strategies-dhm.git#c5659ae537b71c2fee325036812b0d511819d357"
 
 tr46@~0.0.3:
   version "0.0.3"
