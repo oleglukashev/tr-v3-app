@@ -34,6 +34,7 @@ export default function ExperimentsIndexView({ tf, pairId }: any) {
     'interception',
     'reverse',
     'locked_volume',
+    'weak_locked_volume',
     'locked_delta',
     'locked_imbalance',
     'test_volume',

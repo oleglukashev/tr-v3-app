@@ -88,6 +88,7 @@ export function StrategiesDhmGlobalSettingsForm({ defaultValues, onSubmit }: any
                 { id: 'interception', label: 'Interception' },
                 { id: 'reverse', label: 'Reverse' },
                 { id: 'locked_volume', label: 'Locked volume' },
+                { id: 'weak_locked_volume', label: 'Weak locked volume' },
                 { id: 'locked_delta', label: 'Locked delta' },
                 { id: 'locked_imbalance', label: 'Locked imbalance' },
                 { id: 'test_volume', label: 'Test Volume' },
