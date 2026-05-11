@@ -24,29 +24,28 @@ export {
 };
 export type { DhmSession, DhmSettings, Fpp, Kline };
 
-const KLINES_FETCH_LIMIT = 1000;
+// Big pages drastically cut request count (DB is the bottleneck server
+// side; the wire is cheap). Backtest ranges of 6+ months easily produce
+// 50+ pages at limit=1000.
+const KLINES_FETCH_LIMIT = 5000;
 const KLINES_FETCH_MAX_PAGES = 1000;
+// Split a fetch range into this many time windows and fetch them in
+// parallel. Each window paginates internally if it's still dense.
+const PARALLEL_TIME_WINDOWS = 4;
 
-export async function fetchKlines({
-  baseUrl,
-  pairId,
-  tf,
-  startTs,
-  endTs,
-}: {
-  baseUrl: string;
-  pairId: number;
-  tf: number;
-  startTs: number;
-  endTs: number;
-}): Promise<Kline[]> {
-  const base = baseUrl.replace(/\/$/, '');
+async function fetchKlinesWindow(
+  baseUrl: string,
+  pairId: number,
+  tf: number,
+  startTs: number,
+  endTs: number,
+): Promise<Kline[]> {
   const out: Kline[] = [];
   let cursor = startTs;
   for (let page = 0; page < KLINES_FETCH_MAX_PAGES; page++) {
     if (cursor >= endTs) break;
     const url =
-      `${base}/klines` +
+      `${baseUrl}/klines` +
       `?pairId=${pairId}&tf=${tf}` +
       `&startTs=${cursor}&endTs=${endTs}` +
       `&limit=${KLINES_FETCH_LIMIT}`;
@@ -65,20 +64,13 @@ export async function fetchKlines({
   return out;
 }
 
-export async function fetchClusters({
-  baseUrl,
-  pairId,
-  tf,
-  startTs,
-  endTs,
-}: {
-  baseUrl: string;
-  pairId: number;
-  tf: number;
-  startTs: number;
-  endTs: number;
-}): Promise<Cluster[]> {
-  const base = baseUrl.replace(/\/$/, '');
+async function fetchClustersWindow(
+  baseUrl: string,
+  pairId: number,
+  tf: number,
+  startTs: number,
+  endTs: number,
+): Promise<Cluster[]> {
   const out: Cluster[] = [];
   // Controller returns rows by ts DESC and ignores `page` in this code
   // path, so we cursor by shrinking the upper bound after each page.
@@ -86,7 +78,7 @@ export async function fetchClusters({
   for (let page = 0; page < KLINES_FETCH_MAX_PAGES; page++) {
     if (cursor < startTs) break;
     const url =
-      `${base}/clusters` +
+      `${baseUrl}/clusters` +
       `?pairId=${pairId}&tf=${tf}` +
       `&startTs=${startTs}&endTs=${cursor}` +
       `&limit=${KLINES_FETCH_LIMIT}&page=1`;
@@ -101,6 +93,74 @@ export async function fetchClusters({
     cursor = oldestTs - 1;
   }
   return out;
+}
+
+// Splits [startTs, endTs) into N non-overlapping windows and fetches
+// them concurrently. `inclusiveEnd` switches the per-window upper
+// bound: clusters API is gte/lte inclusive, so adjacent windows must
+// not share a ts (winEnd-1 boundary); klines API is gte/lt, so the
+// boundary endTs is naturally exclusive (winEnd boundary).
+async function fetchInParallel<T>(
+  startTs: number,
+  endTs: number,
+  inclusiveEnd: boolean,
+  fetchWindow: (winStart: number, winEnd: number) => Promise<T[]>,
+): Promise<T[]> {
+  const span = endTs - startTs;
+  if (span <= 0) return [];
+  const windowCount = Math.max(1, Math.min(PARALLEL_TIME_WINDOWS, Math.floor(span / 1000) || 1));
+  const windowSize = Math.ceil(span / windowCount);
+  const tasks: Promise<T[]>[] = [];
+  for (let i = 0; i < windowCount; i++) {
+    const winStart = startTs + i * windowSize;
+    const winEndRaw = Math.min(endTs, winStart + windowSize);
+    if (winStart >= winEndRaw) break;
+    const winEnd = inclusiveEnd ? winEndRaw - 1 : winEndRaw;
+    if (winEnd < winStart) continue;
+    tasks.push(fetchWindow(winStart, winEnd));
+  }
+  const chunks = await Promise.all(tasks);
+  const out: T[] = [];
+  for (const c of chunks) for (const x of c) out.push(x);
+  return out;
+}
+
+export async function fetchKlines({
+  baseUrl,
+  pairId,
+  tf,
+  startTs,
+  endTs,
+}: {
+  baseUrl: string;
+  pairId: number;
+  tf: number;
+  startTs: number;
+  endTs: number;
+}): Promise<Kline[]> {
+  const base = baseUrl.replace(/\/$/, '');
+  return fetchInParallel(startTs, endTs, false, (winStart, winEnd) =>
+    fetchKlinesWindow(base, pairId, tf, winStart, winEnd),
+  );
+}
+
+export async function fetchClusters({
+  baseUrl,
+  pairId,
+  tf,
+  startTs,
+  endTs,
+}: {
+  baseUrl: string;
+  pairId: number;
+  tf: number;
+  startTs: number;
+  endTs: number;
+}): Promise<Cluster[]> {
+  const base = baseUrl.replace(/\/$/, '');
+  return fetchInParallel(startTs, endTs, true, (winStart, winEnd) =>
+    fetchClustersWindow(base, pairId, tf, winStart, winEnd),
+  );
 }
 
 export async function runDhmBacktestForUI({
