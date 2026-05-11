@@ -15,7 +15,7 @@ const FAVORITE_MATCH_KEYS = [
   'triggerLevel', 'stopLossLevel', 'finishLevel',
   'minPriceSize', 'direction', 'maxSessionLength',
   'startTs', 'finishTs',
-  'entryMode', 'fppEntryTypes',
+  'entryMode', 'fppEntryTypes', 'fppStopLossPoints',
 ] as const;
 
 export const FPP_TYPE_OPTIONS = [
@@ -111,17 +111,28 @@ function FppEntryFilters() {
   const entryMode = useWatch({ name: 'entryMode' }) ?? 'levels';
   if (entryMode !== 'fpp') return null;
   return (
-    <Grid item size={12}>
-      <MultiSelectElement
-        name='fppEntryTypes'
-        fullWidth
-        showCheckbox
-        size='small'
-        label='Required FPP patterns'
-        options={FPP_TYPE_OPTIONS}
-        MenuProps={{ PaperProps: { style: { maxHeight: 1000 } } }}
-      />
-    </Grid>
+    <>
+      <Grid item size={12}>
+        <MultiSelectElement
+          name='fppEntryTypes'
+          fullWidth
+          showCheckbox
+          size='small'
+          label='Required FPP patterns'
+          options={FPP_TYPE_OPTIONS}
+          MenuProps={{ PaperProps: { style: { maxHeight: 1000 } } }}
+        />
+      </Grid>
+      <Grid item size={12}>
+        <TextFieldElement
+          name='fppStopLossPoints'
+          label='Stop loss (FPP candle ± N price ticks)'
+          type='number'
+          size='small'
+          fullWidth
+        />
+      </Grid>
+    </>
   );
 }
 
@@ -152,6 +163,7 @@ export function StrategiesBacktestForm({
         finishTs: zodNumberSchema().nullish(),
         entryMode: union([literal('levels'), literal('fpp')]).nullish(),
         fppEntryTypes: array(string()).nullish(),
+        fppStopLossPoints: zodNumberSchema().nullish(),
       }))}
       onSuccess={onSubmit}
     >

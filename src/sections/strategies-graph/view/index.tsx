@@ -161,6 +161,7 @@ const DEFAULT_BACKTEST_VALUES = {
   direction: 'up',
   entryMode: 'levels' as 'levels' | 'fpp',
   fppEntryTypes: [] as string[],
+  fppStopLossPoints: 2,
 };
 
 export default function DhmIndexView({ tf, pairId }: any) {
@@ -372,6 +373,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
     'triggerLevel', 'stopLossLevel', 'finishLevel',
     'minPriceSize', 'direction', 'maxSessionLength',
     'startTs', 'finishTs',
+    'entryMode', 'fppEntryTypes', 'fppStopLossPoints',
   ];
   const onToggleFavorite = useCallback(async (values: any) => {
     const equal = (a: any, b: any) =>
@@ -572,6 +574,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
           finishLevel: values.finishLevel,
           entryMode,
           fppEntryTypes,
+          fppStopLossPoints: values.fppStopLossPoints,
         },
         klinesApiBase: process.env.NEXT_PUBLIC_TR_KLINES_DOMAIN as string,
         // In FPP mode the backtest pulls raw clusters from the bidasks
