@@ -570,6 +570,35 @@ export const testDhmDown: any = {
   },
 };
 
+// Small dot anchored just under the FPP-trigger candle (or above it,
+// for a down session). The overlay's point.value is set to the
+// candle's low (up) or high (down), and a few pixels of screen offset
+// then put the dot clearly outside the body.
+export const fppMark: any = {
+  name: 'fppMark',
+  totalStep: 2,
+  createPointFigures: ({ overlay, coordinates }: any) => {
+    if (!coordinates?.length) return [];
+    const direction = overlay?.extendData?.direction ?? 'up';
+    const baseColor = direction === 'up' ? '#4caf50' : '#f44336';
+    const x = coordinates[0].x;
+    const y = direction === 'up' ? coordinates[0].y + 10 : coordinates[0].y - 10;
+    return [
+      {
+        type: 'circle',
+        attrs: { x, y, r: 4 },
+        ignoreEvent: true,
+        styles: {
+          color: baseColor,
+          borderColor: '#ffffff',
+          borderSize: 1,
+          style: 'stroke_fill',
+        },
+      },
+    ];
+  },
+};
+
 export const dhmLevel: any = {
   name: 'dhmLevel',
   totalStep: 2,

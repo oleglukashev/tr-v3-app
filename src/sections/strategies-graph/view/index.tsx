@@ -35,6 +35,7 @@ import {
   waitingStartKline, noneditableRect, clusterKline,
   upCircleBySize, downCircleBySize, bollingerBands, createdStartKline, dhmUp, dhmDown,
   testDhmUp, testDhmDown,
+  fppMark,
   londonSession, drawLondonSessionOverlays, mintSession, drawMintSessionOverlays,
   blueSession, drawBlueSessionOverlays,
 } from "@/src/helpers/klinecharts.helper";
@@ -134,6 +135,7 @@ registerOverlay(dhmUp);
 registerOverlay(dhmDown);
 registerOverlay(testDhmUp);
 registerOverlay(testDhmDown);
+registerOverlay(fppMark);
 registerIndicator(ema);
 registerIndicator(bollingerBands);
 registerFigure(godKline);
@@ -791,6 +793,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
     if (!chart) { return; }
     chart.removeOverlay({ name: 'testDhmUp' });
     chart.removeOverlay({ name: 'testDhmDown' });
+    chart.removeOverlay({ name: 'fppMark' });
     if (!isTestPanelOpen || !testSessions?.length) { return; }
     const visibleSessions = testSessionsTab === 'all'
       ? testSessions
@@ -807,6 +810,26 @@ export default function DhmIndexView({ tf, pairId }: any) {
         },
         points: [{ timestamp: parseInt(kline1.ts), value: parseFloat(item.direction === 'up' ? kline1.low : kline1.high) }],
       });
+
+      // FPP-mode session that opened its gate → mark the 5-min candle
+      // that triggered the gate. The overlay anchors at the candle's
+      // low (up) / high (down) and offsets a few pixels outside.
+      const fpp = item.fppTriggerFpp;
+      if (fpp) {
+        const anchorPrice = item.direction === 'up' ? fpp.low : fpp.high;
+        const ts = parseInt(fpp.ts);
+        if (Number.isFinite(ts) && anchorPrice != null) {
+          chart.createOverlay({
+            name: 'fppMark',
+            extendData: {
+              direction: item.direction,
+              type: fpp.type,
+              ts: fpp.ts,
+            },
+            points: [{ timestamp: ts, value: parseFloat(String(anchorPrice)) }],
+          });
+        }
+      }
     }
   }, [chart, isTestPanelOpen, testSessions, testSessionsTab]);
 
