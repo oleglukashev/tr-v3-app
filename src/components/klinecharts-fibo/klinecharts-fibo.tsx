@@ -24,8 +24,13 @@ const fibonacciLine2: any = {
       })
       const lines: any[] = []
       const texts: any[] = []
-      const startX = 0
-      const endX = bounding.width
+      // Mirror klinecharts' built-in `fibonacciSegment`: each fib level
+      // is drawn only between the two anchor X-coordinates instead of
+      // spanning the entire chart width.
+      const x0 = coordinates[0].x
+      const x1 = coordinates[1]?.x ?? coordinates[0].x
+      const startX = Math.min(x0, x1)
+      const endX = Math.max(x0, x1)
       if (coordinates.length > 1 && typeof points[0].value === 'number' && Number.isFinite(points[0].value) && typeof points[1].value === 'number' && Number.isFinite(points[1].value)) {
         const percents = [1.618, 1.1, 1, 0.786, 0.618, 0.5, 0.382, 0.236, 0]
         //const percents = [1, 0.5, 0]
