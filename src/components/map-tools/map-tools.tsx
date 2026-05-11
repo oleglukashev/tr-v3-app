@@ -202,10 +202,11 @@ const SAVED_DRAWING_TYPES = [
   'priceChannelLine',
   'longPosition',
   'shortPosition',
+  'fibonacciLine2',
 ];
 
 /** Оверлеи, создаваемые MapTools (для show/hide всех фигур рисования) */
-const MAP_TOOL_OVERLAY_NAMES = new Set<string>([...SAVED_DRAWING_TYPES, "fibonacciLine2"]);
+const MAP_TOOL_OVERLAY_NAMES = new Set<string>(SAVED_DRAWING_TYPES);
 
 function applyMapDrawingsVisibility(chart: any, visible: boolean) {
   if (!chart?.getOverlays) {
