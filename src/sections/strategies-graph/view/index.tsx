@@ -163,6 +163,7 @@ const DEFAULT_BACKTEST_VALUES = {
   direction: 'up',
   entryMode: 'levels' as 'levels' | 'fpp',
   fppEntryTypes: [] as string[],
+  fppStopLossMode: 'candle' as 'fib' | 'candle',
   fppStopLossPoints: 2,
 };
 
@@ -375,7 +376,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
     'triggerLevel', 'stopLossLevel', 'finishLevel',
     'minPriceSize', 'direction', 'maxSessionLength',
     'startTs', 'finishTs',
-    'entryMode', 'fppEntryTypes', 'fppStopLossPoints',
+    'entryMode', 'fppEntryTypes', 'fppStopLossMode', 'fppStopLossPoints',
   ];
   const onToggleFavorite = useCallback(async (values: any) => {
     const equal = (a: any, b: any) =>
@@ -576,6 +577,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
           finishLevel: values.finishLevel,
           entryMode,
           fppEntryTypes,
+          fppStopLossMode: values.fppStopLossMode === 'fib' ? 'fib' : 'candle',
           fppStopLossPoints: values.fppStopLossPoints,
         },
         klinesApiBase: process.env.NEXT_PUBLIC_TR_KLINES_DOMAIN as string,

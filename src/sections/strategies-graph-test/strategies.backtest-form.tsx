@@ -12,10 +12,10 @@ import moment from "moment";
 const FAVORITE_MATCH_KEYS = [
   'enterLevel1', 'enterLevel2', 'enterLevel3',
   'takeProfitLevel1', 'takeProfitLevel2', 'takeProfitLevel3',
-  'triggerLevel', 'stopLossLevel', 'finishLevel',
+  'stopLossLevel',
   'minPriceSize', 'direction', 'maxSessionLength',
   'startTs', 'finishTs',
-  'entryMode', 'fppEntryTypes', 'fppStopLossPoints',
+  'entryMode', 'fppEntryTypes', 'fppStopLossMode', 'fppStopLossPoints',
 ] as const;
 
 export const FPP_TYPE_OPTIONS = [
@@ -109,6 +109,7 @@ function ResetButton({ resetValues }: { resetValues: any }) {
 // appeared by the time price reaches the enterLevel.
 function FppEntryFilters() {
   const entryMode = useWatch({ name: 'entryMode' }) ?? 'levels';
+  const stopMode = useWatch({ name: 'fppStopLossMode' }) ?? 'candle';
   if (entryMode !== 'fpp') return null;
   return (
     <>
@@ -124,14 +125,27 @@ function FppEntryFilters() {
         />
       </Grid>
       <Grid item size={12}>
-        <TextFieldElement
-          name='fppStopLossPoints'
-          label='Stop loss (FPP candle ± N price ticks)'
-          type='number'
-          size='small'
-          fullWidth
+        <RadioButtonGroup
+          name='fppStopLossMode'
+          label='Stop loss source'
+          row
+          options={[
+            { id: 'candle', label: 'FPP candle ± N ticks' },
+            { id: 'fib', label: 'Fib stopLossLevel' },
+          ]}
         />
       </Grid>
+      {stopMode === 'candle' && (
+        <Grid item size={12}>
+          <TextFieldElement
+            name='fppStopLossPoints'
+            label='N price ticks'
+            type='number'
+            size='small'
+            fullWidth
+          />
+        </Grid>
+      )}
     </>
   );
 }
@@ -153,9 +167,9 @@ export function StrategiesBacktestForm({
         takeProfitLevel2: zodNumberSchema().nullish(),
         enterLevel3: zodNumberSchema().nullish(),
         takeProfitLevel3: zodNumberSchema().nullish(),
-        triggerLevel: zodNumberSchema(),
+        triggerLevel: zodNumberSchema().nullish(),
         stopLossLevel: zodNumberSchema(),
-        finishLevel: zodNumberSchema(),
+        finishLevel: zodNumberSchema().nullish(),
         minPriceSize: zodNumberSchema(),
         direction: zodStringSchema().nullish(),
         maxSessionLength: zodNumberSchema(),
@@ -164,6 +178,7 @@ export function StrategiesBacktestForm({
         entryMode: union([literal('levels'), literal('fpp')]).nullish(),
         fppEntryTypes: array(string()).nullish(),
         fppStopLossPoints: zodNumberSchema().nullish(),
+        fppStopLossMode: union([literal('fib'), literal('candle')]).nullish(),
       }))}
       onSuccess={onSubmit}
     >
@@ -236,15 +251,6 @@ export function StrategiesBacktestForm({
         </Grid>
         <Grid item size={12}>
           <TextFieldElement
-            name='triggerLevel'
-            label='Trigger level'
-            type='number'
-            size='small'
-            fullWidth
-          />
-        </Grid>
-        <Grid item size={12}>
-          <TextFieldElement
             name='stopLossLevel'
             label='Stop loss level'
             type='number'
@@ -252,15 +258,10 @@ export function StrategiesBacktestForm({
             fullWidth
           />
         </Grid>
-        <Grid item size={12}>
-          <TextFieldElement
-            name='finishLevel'
-            label='Finish level'
-            type='number'
-            size='small'
-            fullWidth
-          />
-        </Grid>
+        {/* triggerLevel and finishLevel are stored on the settings but
+            never read by the engine — derived from enterLevel1/2/3
+            instead. Kept in defaults for back-compat with saved
+            favorites, hidden here to declutter the form. */}
         <Grid item size={12}>
           <TextFieldElement
             name='minPriceSize'
