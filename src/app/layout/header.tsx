@@ -82,6 +82,7 @@ export default function Header() {
   const pages = [
     { url: 'dhm-graph', label: 'DHM (graph)' },
     { url: 'dhm2-graph', label: 'DHM2 (graph)' },
+    { url: 'dzm-graph', label: 'DZM (graph)' },
     { url: 'dhm-graph-test', label: 'DHM (graph) TEST' },
     { url: 'dhm2-graph-test', label: 'DHM2 (graph) TEST' },
     { url: 'dhm', label: 'DHMs' },
@@ -109,7 +110,7 @@ export default function Header() {
     return pages.find(item => item.url === pageUrl);
   }, [pathname]);
   const ts = searchParams.get('ts');
-  const showChartSettingsButton = page?.url === 'dhm-graph';
+  const showChartSettingsButton = page?.url === 'dhm-graph' || page?.url === 'dzm-graph';
 
   const rawPairId = pathname.split('/')[2] || null;
   const rawTf = pathname.split('/')[3] || null;

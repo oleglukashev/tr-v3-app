@@ -1,6 +1,7 @@
 import { configureStore } from "@reduxjs/toolkit";
 import {klineApi} from "@/lib/redux/api/klineApi";
 import {dhmApi} from "@/lib/redux/api/dhmApi";
+import {dzmApi} from "@/lib/redux/api/dzmApi";
 import {pairApi} from "@/lib/redux/api/pairApi";
 import {clusterApi} from "@/lib/redux/api/clusterApi";
 import {fppApi} from "@/lib/redux/api/fppApi";
@@ -21,6 +22,7 @@ export const reduxStore = configureStore({
   reducer: {
     [klineApi.reducerPath]: klineApi.reducer,
     [dhmApi.reducerPath]: dhmApi.reducer,
+    [dzmApi.reducerPath]: dzmApi.reducer,
     [pairApi.reducerPath]: pairApi.reducer,
     [clusterApi.reducerPath]: clusterApi.reducer,
     [fppApi.reducerPath]: fppApi.reducer,
@@ -42,6 +44,7 @@ export const reduxStore = configureStore({
     getDefaultMiddleware({}).concat([
       klineApi.middleware,
       dhmApi.middleware,
+      dzmApi.middleware,
       pairApi.middleware,
       clusterApi.middleware,
       fppApi.middleware,

@@ -70,6 +70,7 @@ export default function AdminHeader() {
   const pages = [
     { url: 'dhm-graph', label: 'DHM (graph)' },
     { url: 'dhm2-graph', label: 'DHM2 (graph)' },
+    { url: 'dzm-graph', label: 'DZM (graph)' },
     { url: 'dhm-graph-test', label: 'DHM (graph) TEST' },
     { url: 'dhm2-graph-test', label: 'DHM2 (graph) TEST' },
     { url: 'dhm', label: 'DHMs' },
