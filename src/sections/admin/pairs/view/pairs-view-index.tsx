@@ -24,6 +24,7 @@ export default function AdminPairsIndexView({ }: any) {
         { id: 'id', label: 'ID' },
         { id: 'name', label: 'Name' },
         { id: 'active', label: 'Activated?' },
+        { id: 'isDhm', label: 'DHM/DZM?' },
         { id: 'getKlineData', label: 'Get kline data?' },
         { id: 'getBidasksData', label: 'Get orderbooks data?' },
         { id: 'actions', label: null}

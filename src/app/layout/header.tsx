@@ -9,7 +9,7 @@ import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
 import MenuItem from '@mui/material/MenuItem';
 import {useGetAllQuery} from "@/lib/redux/api/pairApi";
-import {useGetAllDhmQuery, useGetSettingsDhmQuery} from "@/lib/redux/api/dhmApi";
+import {useGetAllDhmQuery} from "@/lib/redux/api/dhmApi";
 import Avatar from '@mui/material/Avatar';
 import Menu from '@mui/material/Menu';
 import {usePathname, useRouter, useSearchParams} from "next/navigation";
@@ -67,7 +67,6 @@ export default function Header() {
 
   const { data: pairs, isLoading } = useGetAllQuery({});
   const { data: balance, isLoading: isBalanceLoading } = useGetQuery({});
-  const { data: settings } = useGetSettingsDhmQuery({});
   const tfs = [
     {id: 1, label: '1'},
     {id: 5, label: '5'},
@@ -148,15 +147,6 @@ export default function Header() {
     return 'error';
   };
 
-  const settingsByPairId = useMemo(() => {
-    const result: any = {}
-    if (!settings?.length) { return result }
-    for (const setting of settings) {
-      result[setting.pairId] = true
-    }
-    return result;
-  }, [settings]);
-
   return (
     <AppBar
       position="fixed"
@@ -229,10 +219,10 @@ export default function Header() {
               >
                 {(pairs || []).map((item: any) => (
                   <MenuItem sx={{
-                    backgroundColor: settingsByPairId[item.id] ? theme.palette.primary.main : 'white',
-                    color: settingsByPairId[item.id] ? 'white' : theme.palette.text.primary,
+                    backgroundColor: item.isDhm ? theme.palette.primary.main : 'white',
+                    color: item.isDhm ? 'white' : theme.palette.text.primary,
                     '&:hover': {
-                      backgroundColor: settingsByPairId[item.id] ? theme.palette.primary.main : 'white',
+                      backgroundColor: item.isDhm ? theme.palette.primary.main : 'white',
                     }
                   }} key={item.id} onClick={() => router.replace(`/${page.url}/${item.id}/${tf.id}`)}>
                     {item.name}

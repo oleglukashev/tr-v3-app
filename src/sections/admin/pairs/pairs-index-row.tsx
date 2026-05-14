@@ -38,6 +38,7 @@ export default function PairsIndexRow({ item }: Props) {
       <TableCell>{item.id}</TableCell>
       <TableCell><Label color='success'>{item.name}</Label></TableCell>
       <TableCell><Label color={item.activated ? 'success' : 'error'}>{item.activated ? 'Yes' : 'No'}</Label></TableCell>
+      <TableCell><Label color={item.isDhm ? 'success' : 'default'}>{item.isDhm ? 'DHM' : '-'}</Label></TableCell>
       <TableCell><Label color={item.isUsedToKline ? 'success' : 'error'}>{item.isUsedToKline ? 'Yes' : 'No'}</Label></TableCell>
       <TableCell><Label color={item.isUsedToBidasks ? 'success' : 'error'}>{item.isUsedToBidasks ? 'Yes' : 'No'}</Label></TableCell>
       <TableCell align='right'>

@@ -20,6 +20,7 @@ export default function PairForm({ defaultValues, isLoading, onSubmit }) {
       tradingServiceId: zodNumberSchema(),
       precision: zodNumberSchema(),
       activated: boolean(),
+      isDhm: boolean(),
       isUsedToKline: boolean(),
       isUsedToBidasks: boolean(),
       tickerAnswerSymbol: zodStringSchema(),
@@ -90,6 +91,13 @@ export default function PairForm({ defaultValues, isLoading, onSubmit }) {
             <CheckboxElement
               name='activated'
               label='Активен?'
+            />
+          </Box>
+
+          <Box sx={{ mt: 1 }}>
+            <CheckboxElement
+              name='isDhm'
+              label='DHM/DZM стратегии?'
             />
           </Box>
 
