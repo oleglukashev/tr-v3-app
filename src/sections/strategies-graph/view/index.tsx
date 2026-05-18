@@ -667,10 +667,17 @@ export default function DhmIndexView({ tf, pairId }: any) {
     if (!chart) { return; }
     if (!showBidasks) {
       chart.removeOverlay({ name: 'clusterKline' });
+      chart.removeOverlay({ name: 'clusterSpikeCircle' });
       return;
     }
+    // Cluster klines first, spike circles second — order matters for z-layering
     drawClusterKlinesForVisible(chart, bidaskClustersByTs);
-  }, [chart, klinesUpdatedAt, bidaskClustersByTs, showBidasks, heatmapTick]);
+    if (showClusterSpike) {
+      drawClusterVolumeSpikeCircles(chart, bidaskClustersByTs, clusterSpikeMultiplier);
+    } else {
+      chart.removeOverlay({ name: 'clusterSpikeCircle' });
+    }
+  }, [chart, klinesUpdatedAt, bidaskClustersByTs, showBidasks, heatmapTick, showClusterSpike, clusterSpikeMultiplier]);
 
   useEffect((): void => {
     if (!chart) { return; }
@@ -716,15 +723,6 @@ export default function DhmIndexView({ tf, pairId }: any) {
     }
     chart.createIndicator('ZIGZAG', true, { id: 'candle_pane' });
   }, [chart, showZigzag]);
-
-  useEffect((): void => {
-    if (!chart) { return; }
-    if (!showClusterSpike || !showBidasks) {
-      chart.removeOverlay({ name: 'clusterSpikeCircle' });
-      return;
-    }
-    drawClusterVolumeSpikeCircles(chart, bidaskClustersByTs, clusterSpikeMultiplier);
-  }, [chart, klinesUpdatedAt, bidaskClustersByTs, showClusterSpike, clusterSpikeMultiplier, showBidasks]);
 
   // Refs so click handler always reads latest values without being a dep of the overlay effect
   const isTestPanelOpenRef = useRef(isTestPanelOpen);
