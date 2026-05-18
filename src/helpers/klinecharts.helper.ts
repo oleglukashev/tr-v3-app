@@ -1409,6 +1409,75 @@ function getColorIndex(min, max, current) {
   return Math.floor(ratio * 9)                          // масштабируем в [0–9]
 }
 
+export const zigzag = {
+  name: 'ZIGZAG',
+  shortName: 'ZigZag',
+  series: 'price',
+  calcParams: [5],
+  precision: 2,
+  shouldOhlc: true,
+  figures: [
+    { key: 'value', title: 'ZigZag: ', type: 'line' },
+  ],
+  regenerateFigures: (params: number[]) => [
+    { key: 'value', title: `ZigZag(${params[0]}): `, type: 'line' },
+  ],
+  calc: (dataList: any[], indicator: any) => {
+    const depth: number = indicator.calcParams[0] ?? 5;
+    const n = dataList.length;
+    const result: Array<{ value?: number }> = new Array(n).fill(null).map(() => ({}));
+
+    // Detect swing highs and lows
+    const pivots: Array<{ index: number; price: number; type: 'high' | 'low' }> = [];
+    for (let i = depth; i < n - depth; i++) {
+      const high = parseFloat(dataList[i].high);
+      const low = parseFloat(dataList[i].low);
+      let isSwingHigh = true;
+      let isSwingLow = true;
+      for (let j = 1; j <= depth; j++) {
+        if (parseFloat(dataList[i - j].high) >= high) isSwingHigh = false;
+        if (parseFloat(dataList[i + j].high) >= high) isSwingHigh = false;
+        if (parseFloat(dataList[i - j].low) <= low) isSwingLow = false;
+        if (parseFloat(dataList[i + j].low) <= low) isSwingLow = false;
+      }
+      if (isSwingHigh) pivots.push({ index: i, price: high, type: 'high' });
+      if (isSwingLow) pivots.push({ index: i, price: low, type: 'low' });
+    }
+
+    // Sort by index, then reduce to strictly alternating high/low keeping most extreme
+    pivots.sort((a, b) => a.index - b.index);
+    const zz: typeof pivots = [];
+    for (const p of pivots) {
+      const last = zz[zz.length - 1];
+      if (!last || last.type !== p.type) {
+        zz.push({ ...p });
+      } else if (p.type === 'high' && p.price > last.price) {
+        zz[zz.length - 1] = { ...p };
+      } else if (p.type === 'low' && p.price < last.price) {
+        zz[zz.length - 1] = { ...p };
+      }
+    }
+
+    // Linearly interpolate between pivot pairs so the line figure draws straight segments
+    for (let k = 0; k < zz.length - 1; k++) {
+      const p1 = zz[k];
+      const p2 = zz[k + 1];
+      const span = p2.index - p1.index;
+      for (let i = p1.index; i <= p2.index; i++) {
+        const t = span === 0 ? 1 : (i - p1.index) / span;
+        result[i] = { value: p1.price + (p2.price - p1.price) * t };
+      }
+    }
+    // Mark the last pivot itself
+    if (zz.length > 0) {
+      const last = zz[zz.length - 1];
+      result[last.index] = { value: last.price };
+    }
+
+    return result;
+  },
+};
+
 export const volBarsOnly = {
   name: 'VOL',
   shortName: 'VOL',

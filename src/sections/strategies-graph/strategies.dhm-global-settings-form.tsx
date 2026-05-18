@@ -139,6 +139,9 @@ export function StrategiesDhmGlobalSettingsForm({ defaultValues, onSubmit }: any
             <CheckboxElement name='showVolume' label='Показывать объем?' />
           </Grid>
           <Grid item size={12}>
+            <CheckboxElement name='showZigzag' label='Показывать ZigZag?' />
+          </Grid>
+          <Grid item size={12}>
             <CheckboxElement name='showDrawingElements' label='Показывать элементы рисования?' />
           </Grid>
           <Grid item size={12}>
