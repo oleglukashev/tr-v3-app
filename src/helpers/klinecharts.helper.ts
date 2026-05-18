@@ -766,7 +766,19 @@ export function clusterKline(data?: any) {
     name: 'clusterKline',
     lock: true,
     createPointFigures: ({ chart, coordinates, overlay }: any) => {
-      const data = overlay?.extendData ?? closureData;
+      const extData = overlay?.extendData ?? closureData;
+      let data: any;
+      let showSpike = false;
+      let spikeMultiplier = 3;
+
+      if (extData && typeof extData === 'object' && 'levels' in extData) {
+        data = extData.levels;
+        showSpike = !!extData.showSpike;
+        spikeMultiplier = Number(extData.spikeMultiplier) || 3;
+      } else {
+        data = extData;
+      }
+
       if (!data || typeof data !== 'object') {
         return [];
       }
@@ -987,6 +999,35 @@ export function clusterKline(data?: any) {
           }
         })
       }
+      // Spike circles — drawn last so they render on top of cluster bars
+      if (showSpike && sortedData.length >= 2) {
+        const volumes = sortedData.map((l: any) => parseFloat(l.v)).filter((v: number) => Number.isFinite(v) && v > 0);
+        if (volumes.length >= 2) {
+          const vSorted = [...volumes].sort((a, b) => a - b);
+          const mid = Math.floor(vSorted.length / 2);
+          const median = vSorted.length % 2 !== 0 ? vSorted[mid] : (vSorted[mid - 1] + vSorted[mid]) / 2;
+          if (median > 0) {
+            const threshold = median * spikeMultiplier;
+            for (let idx = 0; idx < sortedData.length; idx++) {
+              const levelItem = sortedData[idx];
+              const lv = parseFloat(levelItem.v);
+              if (!Number.isFinite(lv) || lv < threshold) continue;
+              const ratio = lv / median;
+              const norm = Math.min(Math.max((ratio - 1) / 5, 0), 1);
+              const alpha = 0.25 + norm * 0.70;
+              const r = 5 + norm * 4;
+              const circleY = coordinates[0].y + (idx + 0.5) * clusterLevelHeight;
+              result.push({
+                type: 'circle',
+                attrs: { x: coordinates[0].x, y: circleY, r },
+                styles: { color: `rgba(180, 0, 220, ${alpha})`, style: 'fill' },
+                ignoreEvent: true,
+              });
+            }
+          }
+        }
+      }
+
       return result;
     }
   }
@@ -1409,31 +1450,6 @@ function getColorIndex(min, max, current) {
   return Math.floor(ratio * 9)                          // масштабируем в [0–9]
 }
 
-export function clusterSpikeCircle() {
-  return {
-    name: 'clusterSpikeCircle',
-    totalStep: 1,
-    lock: true,
-    needDefaultPointFigure: false,
-    createPointFigures: ({ coordinates, overlay }: any) => {
-      const [point] = coordinates;
-      if (!point) return [];
-      const ratio: number = overlay?.extendData?.ratio ?? 1;
-      // ratio 1 = только порог, выше = темнее. Насыщенность растёт до ratio=6
-      const normalized = Math.min(Math.max((ratio - 1) / 5, 0), 1);
-      const alpha = 0.25 + normalized * 0.70; // 0.25..0.95
-      const r = 5 + normalized * 4; // 5..9px
-      return [
-        {
-          type: 'circle',
-          attrs: { x: point.x, y: point.y, r },
-          styles: { color: `rgba(180, 0, 220, ${alpha})`, style: 'fill' },
-          ignoreEvent: true,
-        },
-      ];
-    },
-  };
-}
 
 export const zigzag = {
   name: 'ZIGZAG',

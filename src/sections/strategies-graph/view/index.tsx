@@ -23,7 +23,7 @@ import {StrategiesDhmKlineFppsDialog} from "@/src/sections/strategies-graph/stra
 import {StrategiesBacktestForm} from "@/src/sections/strategies-graph-test/strategies.backtest-form";
 import moment from "moment/moment";
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
-import {clearFppPatterns, drawClusterKlinesForVisible, drawFppPatterns, drawClusterVolumeSpikeCircles} from "@/src/utils/klinecharts";
+import {clearFppPatterns, drawClusterKlinesForVisible, drawFppPatterns} from "@/src/utils/klinecharts";
 import { BIDASK_CLUSTER_TF, getBidasksWebSocketUrl } from "@/src/utils/bidasksWebSocket";
 import MapTools from "@/src/components/map-tools/map-tools";
 import { useMapDrawingOverlayRef } from "@/src/components/map-tools/use-map-drawing-overlay-ref";
@@ -38,7 +38,6 @@ import {
   fppMark,
   londonSession, drawLondonSessionOverlays, mintSession, drawMintSessionOverlays,
   blueSession, drawBlueSessionOverlays,
-  clusterSpikeCircle,
 } from "@/src/helpers/klinecharts.helper";
 import Map from "@/src/components/map/map";
 import {useTheme} from "@mui/material/styles";
@@ -121,7 +120,6 @@ const DEFAULT_GLOBAL_SETTINGS = {
 };
 
 registerOverlay(confirmedCircle);
-registerOverlay(clusterSpikeCircle());
 registerOverlay(finishedStartKline);
 registerOverlay(triggeredStartKline);
 registerOverlay(finishedByLoseStartKline);
@@ -667,16 +665,12 @@ export default function DhmIndexView({ tf, pairId }: any) {
     if (!chart) { return; }
     if (!showBidasks) {
       chart.removeOverlay({ name: 'clusterKline' });
-      chart.removeOverlay({ name: 'clusterSpikeCircle' });
       return;
     }
-    // Cluster klines first, spike circles second — order matters for z-layering
-    drawClusterKlinesForVisible(chart, bidaskClustersByTs);
-    if (showClusterSpike) {
-      drawClusterVolumeSpikeCircles(chart, bidaskClustersByTs, clusterSpikeMultiplier);
-    } else {
-      chart.removeOverlay({ name: 'clusterSpikeCircle' });
-    }
+    drawClusterKlinesForVisible(chart, bidaskClustersByTs, {
+      showSpike: showClusterSpike,
+      spikeMultiplier: clusterSpikeMultiplier,
+    });
   }, [chart, klinesUpdatedAt, bidaskClustersByTs, showBidasks, heatmapTick, showClusterSpike, clusterSpikeMultiplier]);
 
   useEffect((): void => {
