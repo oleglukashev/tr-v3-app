@@ -23,7 +23,7 @@ import {StrategiesDhmKlineFppsDialog} from "@/src/sections/strategies-graph/stra
 import {StrategiesBacktestForm} from "@/src/sections/strategies-graph-test/strategies.backtest-form";
 import moment from "moment/moment";
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
-import {clearFppPatterns, drawClusterKlinesForVisible, drawFppPatterns} from "@/src/utils/klinecharts";
+import {clearFppPatterns, drawClusterKlinesForVisible, drawFppPatterns, drawClusterVolumeSpikeCircles} from "@/src/utils/klinecharts";
 import { BIDASK_CLUSTER_TF, getBidasksWebSocketUrl } from "@/src/utils/bidasksWebSocket";
 import MapTools from "@/src/components/map-tools/map-tools";
 import { useMapDrawingOverlayRef } from "@/src/components/map-tools/use-map-drawing-overlay-ref";
@@ -38,6 +38,7 @@ import {
   fppMark,
   londonSession, drawLondonSessionOverlays, mintSession, drawMintSessionOverlays,
   blueSession, drawBlueSessionOverlays,
+  clusterSpikeCircle,
 } from "@/src/helpers/klinecharts.helper";
 import Map from "@/src/components/map/map";
 import {useTheme} from "@mui/material/styles";
@@ -113,11 +114,14 @@ const DEFAULT_GLOBAL_SETTINGS = {
   showSessions: true,
   showVolume: true,
   showZigzag: false,
+  showClusterSpike: false,
+  clusterSpikeMultiplier: 3,
   showDrawingElements: true,
   dhmVisibleStatuses: ['created', 'waiting', 'triggered', 'finished', 'finished_by_lose', 'finished_by_size'],
 };
 
 registerOverlay(confirmedCircle);
+registerOverlay(clusterSpikeCircle());
 registerOverlay(finishedStartKline);
 registerOverlay(triggeredStartKline);
 registerOverlay(finishedByLoseStartKline);
@@ -215,6 +219,8 @@ export default function DhmIndexView({ tf, pairId }: any) {
     showSessions,
     showVolume,
     showZigzag,
+    showClusterSpike,
+    clusterSpikeMultiplier,
     showDrawingElements,
     dhmVisibleStatuses,
   } = globalSettings;
@@ -448,6 +454,8 @@ export default function DhmIndexView({ tf, pairId }: any) {
       showSessions: !!values.showSessions,
       showVolume: values.showVolume !== false,
       showZigzag: !!values.showZigzag,
+      showClusterSpike: !!values.showClusterSpike,
+      clusterSpikeMultiplier: Number(values.clusterSpikeMultiplier) || 3,
       showDrawingElements: values.showDrawingElements !== false,
       dhmVisibleStatuses: values.dhmVisibleStatuses || [],
     };
@@ -497,6 +505,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
             fppCombine: !!parsed.fppCombine,
             showBidasks:
               parsed.showBidasks ?? parsed.showLiquidity ?? DEFAULT_GLOBAL_SETTINGS.showBidasks,
+            clusterSpikeMultiplier: Number(parsed.clusterSpikeMultiplier) || DEFAULT_GLOBAL_SETTINGS.clusterSpikeMultiplier,
           };
           setGlobalSettings(nextSettings);
           localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(nextSettings));
@@ -707,6 +716,15 @@ export default function DhmIndexView({ tf, pairId }: any) {
     }
     chart.createIndicator('ZIGZAG', true, { id: 'candle_pane' });
   }, [chart, showZigzag]);
+
+  useEffect((): void => {
+    if (!chart) { return; }
+    if (!showClusterSpike || !showBidasks) {
+      chart.removeOverlay({ name: 'clusterSpikeCircle' });
+      return;
+    }
+    drawClusterVolumeSpikeCircles(chart, bidaskClustersByTs, clusterSpikeMultiplier);
+  }, [chart, klinesUpdatedAt, bidaskClustersByTs, showClusterSpike, clusterSpikeMultiplier, showBidasks]);
 
   // Refs so click handler always reads latest values without being a dep of the overlay effect
   const isTestPanelOpenRef = useRef(isTestPanelOpen);

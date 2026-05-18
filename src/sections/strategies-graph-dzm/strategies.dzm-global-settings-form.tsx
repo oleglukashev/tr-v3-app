@@ -1,4 +1,4 @@
-import {FormContainer, MultiSelectElement, CheckboxElement, useFormContext} from "react-hook-form-mui";
+import {FormContainer, MultiSelectElement, CheckboxElement, TextFieldElement, useFormContext} from "react-hook-form-mui";
 import {Grid, Checkbox, FormControlLabel, Box, Typography} from "@mui/material";
 import CustomFormButton from "@/src/components/custom-form-button/custom-form-button";
 import Container from "@mui/material/Container";
@@ -140,6 +140,19 @@ export function StrategiesDzmGlobalSettingsForm({ defaultValues, onSubmit }: any
           </Grid>
           <Grid item size={12}>
             <CheckboxElement name='showZigzag' label='Показывать ZigZag?' />
+          </Grid>
+          <Grid item size={12}>
+            <CheckboxElement name='showClusterSpike' label='Показывать кластерные выбросы объёма?' />
+          </Grid>
+          <Grid item size={12}>
+            <TextFieldElement
+              name='clusterSpikeMultiplier'
+              label='Кратность выброса (x медианы)'
+              type='number'
+              inputProps={{ min: 1, step: 0.5 }}
+              size='small'
+              fullWidth
+            />
           </Grid>
           <Grid item size={12}>
             <CheckboxElement name='showDrawingElements' label='Показывать элементы рисования?' />

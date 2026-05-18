@@ -86,6 +86,57 @@ export function drawClusterKlinesForVisible(
   }
 }
 
+/**
+ * Draw clusterSpikeCircle overlays at price levels where volume >= median * multiplier.
+ * Circles are darker / larger the higher the ratio is.
+ */
+export function drawClusterVolumeSpikeCircles(
+  chart: any,
+  bidaskClustersByTs: Record<string, any>,
+  multiplier: number,
+): void {
+  if (!chart) return;
+  chart.removeOverlay({ name: 'clusterSpikeCircle' });
+  if (!multiplier || multiplier <= 0) return;
+
+  for (const cluster of Object.values(bidaskClustersByTs)) {
+    const raw = cluster?.data;
+    if (!raw || typeof raw !== 'object') continue;
+    const levels = Object.values(raw) as any[];
+    if (levels.length < 2) continue;
+
+    const volumes = levels
+      .map((l) => parseFloat(l.v))
+      .filter((v) => Number.isFinite(v) && v > 0);
+    if (!volumes.length) continue;
+
+    const sorted = [...volumes].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    const median =
+      sorted.length % 2 !== 0
+        ? sorted[mid]
+        : (sorted[mid - 1] + sorted[mid]) / 2;
+    if (!median || median <= 0) continue;
+
+    const threshold = median * multiplier;
+    const ts = Number(cluster.ts);
+    if (!Number.isFinite(ts)) continue;
+
+    for (const level of levels) {
+      const v = parseFloat(level.v);
+      if (!Number.isFinite(v) || v < threshold) continue;
+      const price = parseFloat(level.p);
+      if (!Number.isFinite(price)) continue;
+      const ratio = v / median;
+      chart.createOverlay({
+        name: 'clusterSpikeCircle',
+        points: [{ timestamp: ts, value: price }],
+        extendData: { ratio },
+      });
+    }
+  }
+}
+
 export function drawFppPatterns(chart: any, klines: any[], fpp: any, tdaPoints = [], fppFilters: any[], combine: boolean = false): void {
   if (!fpp?.length) { return }
   for (const kline of klines) {

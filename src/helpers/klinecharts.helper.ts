@@ -1409,6 +1409,32 @@ function getColorIndex(min, max, current) {
   return Math.floor(ratio * 9)                          // масштабируем в [0–9]
 }
 
+export function clusterSpikeCircle() {
+  return {
+    name: 'clusterSpikeCircle',
+    totalStep: 1,
+    lock: true,
+    needDefaultPointFigure: false,
+    createPointFigures: ({ coordinates, overlay }: any) => {
+      const [point] = coordinates;
+      if (!point) return [];
+      const ratio: number = overlay?.extendData?.ratio ?? 1;
+      // ratio 1 = только порог, выше = темнее. Насыщенность растёт до ratio=6
+      const normalized = Math.min(Math.max((ratio - 1) / 5, 0), 1);
+      const alpha = 0.25 + normalized * 0.70; // 0.25..0.95
+      const r = 5 + normalized * 4; // 5..9px
+      return [
+        {
+          type: 'circle',
+          attrs: { x: point.x, y: point.y, r },
+          styles: { color: `rgba(180, 0, 220, ${alpha})`, style: 'fill' },
+          ignoreEvent: true,
+        },
+      ];
+    },
+  };
+}
+
 export const zigzag = {
   name: 'ZIGZAG',
   shortName: 'ZigZag',
