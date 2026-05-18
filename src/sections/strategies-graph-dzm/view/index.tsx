@@ -948,6 +948,7 @@ export default function DzmIndexView({ tf, pairId }: any) {
         pairId={pairId}
         tf={tf}
         showDrawingElements={showDrawingElements}
+        chartReady={klinesUpdatedAt !== null}
         onDrawingInteractionChange={onDrawingInteractionChange}
       />
 

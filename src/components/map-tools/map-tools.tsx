@@ -313,6 +313,8 @@ export default function MapTools({
   pairId,
   tf,
   showDrawingElements = true,
+  /** True when the chart has received its first batch of klines — gates overlay creation. */
+  chartReady = false,
   /** When user is placing or editing a map drawing overlay, parent can ignore candle clicks (e.g. Kline dialog). */
   onDrawingInteractionChange,
 }: any) {
@@ -365,7 +367,7 @@ export default function MapTools({
 
   const { data: drawingElements } = useGetAllQuery(
     { pairId },
-    { skip: !pairId || !chart },
+    { skip: !pairId || !chart || !chartReady },
   );
 
   const loadedIdsRef = useRef<Set<string>>(new Set());
@@ -542,9 +544,9 @@ export default function MapTools({
     loadedIdsRef.current.clear();
   }, [chart, showDrawingElements]);
 
-  // Restore drawing elements loaded from API
+  // Restore drawing elements loaded from API — only after chart has first klines
   useEffect(() => {
-    if (!chart || !showDrawingElements) return;
+    if (!chart || !showDrawingElements || !chartReady) return;
     const elements = drawingElements as any[];
     if (!Array.isArray(elements) || !elements.length) return;
     for (const element of elements) {
@@ -582,7 +584,7 @@ export default function MapTools({
         },
       });
     }
-  }, [chart, drawingElements, showDrawingElements, overlayMode]);
+  }, [chart, drawingElements, showDrawingElements, overlayMode, chartReady]);
 
   const handleDrawingClick = useCallback((name: string) => {
     if (!chart) return;

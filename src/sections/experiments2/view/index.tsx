@@ -19,7 +19,7 @@ import {
   ema, getInterception,
   getPriceByWebSocket,
   getWeaknessKline,
-  upCircleBySize, cumDelta, bollingerBands, getReverse2
+  upCircleBySize, cumDelta, bollingerBands, zigzag, getReverse2
 
 } from "@/src/helpers/klinecharts.helper";
 import {useTheme} from "@mui/material/styles";
@@ -31,6 +31,7 @@ export default function ExperimentsIndexView({ tf, pairId }: any) {
   const mapDrawingOverlay = useMapDrawingOverlayRef();
   const FPP_FILTERS_STORAGE_KEY = `fppFilter${pairId}`;
   const [chart, setChart] = useState<any>(null);
+  const [chartDataLoaded, setChartDataLoaded] = useState(false);
   const [page, setPage] = useState<number>(1);
   const [currentKlineFpp, setCurrentKlineFpp] = useState<any[]>(null);
   const [openFppFilters, setOpenFppFilters] = useState(false);
@@ -166,6 +167,7 @@ export default function ExperimentsIndexView({ tf, pairId }: any) {
   }, [chart, clustersAsHashByTs]);
 
   const setDataLoaderCallback = useCallback(() => {
+    setChartDataLoaded(true);
     if (fpp && drawFppPatterns) {
       drawFppPatterns(fpp);
     }
@@ -222,6 +224,7 @@ export default function ExperimentsIndexView({ tf, pairId }: any) {
 
   registerIndicator(bollingerBands);
   registerIndicator(ema);
+  registerIndicator(zigzag);
   registerIndicator({
     name: 'CUM_DELTA',
     calc: (dataList) => {
@@ -281,6 +284,7 @@ export default function ExperimentsIndexView({ tf, pairId }: any) {
         pairId={pairId}
         tf={tf}
         showDrawingElements
+        chartReady={chartDataLoaded}
         onDrawingInteractionChange={mapDrawingOverlay.onDrawingInteractionChange}
       />
 

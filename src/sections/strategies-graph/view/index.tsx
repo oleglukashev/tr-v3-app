@@ -33,7 +33,7 @@ import {
   finishedStartKline,
   godKline, triggeredStartKline,
   waitingStartKline, noneditableRect, clusterKline,
-  upCircleBySize, downCircleBySize, bollingerBands, createdStartKline, dhmUp, dhmDown,
+  upCircleBySize, downCircleBySize, bollingerBands, zigzag, createdStartKline, dhmUp, dhmDown,
   testDhmUp, testDhmDown,
   fppMark,
   londonSession, drawLondonSessionOverlays, mintSession, drawMintSessionOverlays,
@@ -112,6 +112,7 @@ const DEFAULT_GLOBAL_SETTINGS = {
   showBidasks: true,
   showSessions: true,
   showVolume: true,
+  showZigzag: false,
   showDrawingElements: true,
   dhmVisibleStatuses: ['created', 'waiting', 'triggered', 'finished', 'finished_by_lose', 'finished_by_size'],
 };
@@ -139,6 +140,7 @@ registerOverlay(testDhmDown);
 registerOverlay(fppMark);
 registerIndicator(ema);
 registerIndicator(bollingerBands);
+registerIndicator(zigzag);
 registerFigure(godKline);
 
 // DHM test sessions are always built on 60-minute data, regardless of
@@ -212,6 +214,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
     showBidasks: showBidasksSetting,
     showSessions,
     showVolume,
+    showZigzag,
     showDrawingElements,
     dhmVisibleStatuses,
   } = globalSettings;
@@ -444,6 +447,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
       showBidasks: !!values.showBidasks,
       showSessions: !!values.showSessions,
       showVolume: values.showVolume !== false,
+      showZigzag: !!values.showZigzag,
       showDrawingElements: values.showDrawingElements !== false,
       dhmVisibleStatuses: values.dhmVisibleStatuses || [],
     };
@@ -695,6 +699,15 @@ export default function DhmIndexView({ tf, pairId }: any) {
     }, 'vol_pane');
   }, [chart, klinesUpdatedAt, showVolume]);
 
+  useEffect((): void => {
+    if (!chart) { return; }
+    if (!showZigzag) {
+      chart.removeIndicator('candle_pane', 'ZIGZAG');
+      return;
+    }
+    chart.createIndicator('ZIGZAG', true, { id: 'candle_pane' });
+  }, [chart, showZigzag]);
+
   // Refs so click handler always reads latest values without being a dep of the overlay effect
   const isTestPanelOpenRef = useRef(isTestPanelOpen);
   const testSessionsRef = useRef(testSessions);
@@ -935,6 +948,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
         pairId={pairId}
         tf={tf}
         showDrawingElements={showDrawingElements}
+        chartReady={klinesUpdatedAt !== null}
         onDrawingInteractionChange={onDrawingInteractionChange}
       />
 

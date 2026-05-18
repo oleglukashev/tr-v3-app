@@ -23,6 +23,7 @@ export default function ExperimentsIndexView({ tf, pairId }: any) {
   const mapDrawingOverlay = useMapDrawingOverlayRef();
   const FPP_FILTERS_STORAGE_KEY = `fppFilter${pairId}`;
   const [chart, setChart] = useState<any>(null);
+  const [chartDataLoaded, setChartDataLoaded] = useState(false);
   const [page, setPage] = useState<number>(1);
   const [currentKlineFpp, setCurrentKlineFpp] = useState<any[]>(null);
   const [openFppFilters, setOpenFppFilters] = useState(false);
@@ -273,6 +274,7 @@ export default function ExperimentsIndexView({ tf, pairId }: any) {
         tf={tf}
         setParentChart={setChart}
         setDataLoaderCallback={() => {
+          setChartDataLoaded(true);
           drawFppPatterns(fpp);
         }}
       />
@@ -297,6 +299,7 @@ export default function ExperimentsIndexView({ tf, pairId }: any) {
         pairId={pairId}
         tf={tf}
         showDrawingElements
+        chartReady={chartDataLoaded}
         onDrawingInteractionChange={mapDrawingOverlay.onDrawingInteractionChange}
       />
 
