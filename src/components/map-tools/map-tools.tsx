@@ -364,8 +364,8 @@ export default function MapTools({
   const [removeMutation] = useRemoveMutation();
 
   const { data: drawingElements } = useGetAllQuery(
-    { pairId, tf },
-    { skip: !pairId || !tf || !chart },
+    { pairId },
+    { skip: !pairId || !chart },
   );
 
   const loadedIdsRef = useRef<Set<string>>(new Set());
@@ -641,7 +641,6 @@ export default function MapTools({
         createMutationRef.current({
           type: overlay.name,
           pairId: Number(pairId),
-          tf: Number(tf),
           data: { points },
         }).then((result: any) => {
           if (result?.data?.id) {
