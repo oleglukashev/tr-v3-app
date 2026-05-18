@@ -56,8 +56,8 @@ export default function Map({
   const subscribeBarCallbackRef = useRef<((data: any) => void) | null>(null);
   const onBidasksChunkRef = useRef<typeof onBidasksChunk>(onBidasksChunk);
   onBidasksChunkRef.current = onBidasksChunk;
-  const enableBidasksClustersRef = useRef(enableBidasksClusters !== false);
-  enableBidasksClustersRef.current = enableBidasksClusters !== false;
+  const enableBidasksClustersRef = useRef(enableBidasksClusters !== false && Number(tf) === BIDASKS_CLUSTERS_TF);
+  enableBidasksClustersRef.current = enableBidasksClusters !== false && Number(tf) === BIDASKS_CLUSTERS_TF;
 
   useEffect(() => {
     const newTs = Number(defaultTs);
