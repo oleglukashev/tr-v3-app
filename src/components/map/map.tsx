@@ -56,6 +56,8 @@ export default function Map({
   const subscribeBarCallbackRef = useRef<((data: any) => void) | null>(null);
   const onBidasksChunkRef = useRef<typeof onBidasksChunk>(onBidasksChunk);
   onBidasksChunkRef.current = onBidasksChunk;
+  const updateWebsocketPriceCallbackRef = useRef<typeof updateWebsocketPriceCallback>(updateWebsocketPriceCallback);
+  updateWebsocketPriceCallbackRef.current = updateWebsocketPriceCallback;
   const enableBidasksClustersRef = useRef(enableBidasksClusters !== false && Number(tf) === BIDASKS_CLUSTERS_TF);
   enableBidasksClustersRef.current = enableBidasksClusters !== false && Number(tf) === BIDASKS_CLUSTERS_TF;
 
@@ -538,15 +540,15 @@ export default function Map({
           subscribeBarCallbackRef.current(klineBar);
         }
 
-        if (updateWebsocketPriceCallback) {
-          updateWebsocketPriceCallback();
+        if (updateWebsocketPriceCallbackRef.current) {
+          updateWebsocketPriceCallbackRef.current();
         }
       }
     })
     return () => {
       socket?.close()
     }
-  }, [chart, pairId, tf, updateWebsocketPriceCallback])
+  }, [chart, pairId, tf])
 
   // resize map
   useEffect(() => {
