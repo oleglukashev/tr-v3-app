@@ -244,6 +244,7 @@ export default function Map({
       // layout: [
       //   { type: 'indicator', content: ['VOL'], options: { order: 10 }  },
       // ]
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     });
     chart.setStyles({
       separator: {
