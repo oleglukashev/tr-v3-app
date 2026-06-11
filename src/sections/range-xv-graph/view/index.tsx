@@ -2,14 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { init, dispose, registerIndicator } from "klinecharts";
-import {
-  Box, IconButton, FormControlLabel, Switch, Button, CircularProgress, TextField,
-} from "@mui/material";
+import { Box, IconButton } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import SettingsIcon from "@mui/icons-material/Settings";
-import RefreshIcon from "@mui/icons-material/Refresh";
 import CustomDialog from "src/components/custom-dialog/custom-dialog";
 import { resizeChart } from "@/src/helpers/klinecharts.helper";
+import { RangeXvSettingsForm } from "@/src/sections/range-xv-graph/range-xv-settings-form";
 
 // XV is served by the bidasks service (NEXT_PUBLIC_TR_CLUSTERS_DOMAIN), type=xv, by r (range size).
 const KLINES_API_BASE =
@@ -206,12 +204,11 @@ export default function RangeXvGraphView({ pairId }: any) {
     }
   }, [volumeWidth]);
 
-  const reload = useCallback(() => {
-    const chart = chartRef.current;
-    if (!chart) return;
-    allBarsRef.current.clear();
-    chart.setDataLoader({ getBars });
-  }, [getBars]);
+  const onSaveChartSettings = useCallback((values: any) => {
+    setVolumeWidth(!!values.volumeWidth);
+    setR(values.r != null ? String(values.r) : '');
+    setOpenChartSettings(false);
+  }, []);
 
   return (
     <Box sx={{ position: 'relative', height: '100vh' }}>
@@ -240,34 +237,10 @@ export default function RangeXvGraphView({ pairId }: any) {
         actions={null}
         maxWidth="sm"
         content={(
-          <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-            <TextField
-              label="R (размер бара)"
-              size="small"
-              value={r}
-              onChange={(e) => setR(e.target.value)}
-              helperText="например 0.0005 для KAS, 100 для BTC"
-              sx={{ width: 220 }}
-            />
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={volumeWidth}
-                  onChange={(e) => setVolumeWidth(e.target.checked)}
-                />
-              }
-              label="Ширина по объёму"
-            />
-            <Button
-              size="small"
-              startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <RefreshIcon />}
-              disabled={loading}
-              onClick={reload}
-              sx={{ alignSelf: 'flex-start' }}
-            >
-              Обновить
-            </Button>
-          </Box>
+          <RangeXvSettingsForm
+            defaultValues={{ r, volumeWidth }}
+            onSubmit={onSaveChartSettings}
+          />
         )}
       />
     </Box>
