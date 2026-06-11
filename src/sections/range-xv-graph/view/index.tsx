@@ -211,22 +211,21 @@ export default function RangeXvGraphView({ pairId }: any) {
   }, []);
 
   return (
-    <Box sx={{ position: 'relative', height: '100vh' }}>
-      <Box ref={containerRef} sx={{ position: 'absolute', inset: 0 }} />
+    <main style={{ position: 'relative' }}>
+      <Box ref={containerRef} sx={{ width: '100%' }} />
 
-      <IconButton
-        key="settings"
-        aria-label="settings"
-        onClick={() => setOpenChartSettings(true)}
-        sx={{
-          position: 'absolute',
-          zIndex: 1,
-          left: '18px',
-          top: `${112}px`,
-          background: theme.palette.grey[200],
-          '&:hover': { background: theme.palette.grey[300] },
-        }}
-      >
+      <IconButton key='settings' sx={{
+        position: 'absolute',
+        zIndex: 1,
+        left: '18px',
+        top: `${112}px`,
+        background: theme.palette.grey[200],
+        '&:hover': {
+          background: theme.palette.grey[300],
+        }
+      }} aria-label="settings" onClick={() => {
+        setOpenChartSettings(true);
+      }}>
         <SettingsIcon />
       </IconButton>
 
@@ -243,6 +242,6 @@ export default function RangeXvGraphView({ pairId }: any) {
           />
         )}
       />
-    </Box>
+    </main>
   );
 }
