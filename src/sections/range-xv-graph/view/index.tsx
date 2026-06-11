@@ -10,6 +10,7 @@ import SettingsIcon from "@mui/icons-material/Settings";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { useSearchParams } from "next/navigation";
 import CustomDialog from "src/components/custom-dialog/custom-dialog";
+import { resizeChart } from "@/src/helpers/klinecharts.helper";
 
 // XV is served by the bidasks service (NEXT_PUBLIC_TR_CLUSTERS_DOMAIN), type=xv, by r (range size).
 const KLINES_API_BASE =
@@ -150,7 +151,10 @@ export default function RangeXvGraphView({ pairId }: any) {
     chartRef.current = chart;
     chart?.setStyles({ indicator: { tooltip: { show: false } } } as any);
     chart?.setDataLoader({ getBars });
+    // Adapt to window resize (same as dhm Map).
+    const resizeCleanup = resizeChart(chart);
     return () => {
+      if (resizeCleanup) resizeCleanup();
       if (containerRef.current) dispose(containerRef.current);
       chartRef.current = null;
       xvIndicatorOnRef.current = false;
