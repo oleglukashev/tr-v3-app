@@ -3,9 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { init, dispose, registerIndicator } from "klinecharts";
 import {
-  Box, Stack, TextField, Switch, FormControlLabel, IconButton, Button, Typography, CircularProgress,
+  Box, Stack, Switch, FormControlLabel, Button, Typography, CircularProgress,
 } from "@mui/material";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { getBidasksWebSocketUrl } from "@/src/utils/bidasksWebSocket";
@@ -182,7 +181,7 @@ export default function RangeXvGraphView({ pairId }: any) {
   const klinesRef = useRef<any[]>([]);          // cached raw 1s klines
   const barsRef = useRef<any[]>([]);            // built Range XV bars
 
-  const [hours, setHours] = useState<number>(3);
+  const hours = 6; // initial 1s window to load (hours)
   const [volumeWidth, setVolumeWidth] = useState<boolean>(false);
   const [live, setLive] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
@@ -389,18 +388,6 @@ export default function RangeXvGraphView({ pairId }: any) {
         alignItems="center"
         sx={{ p: 1.5, borderBottom: '1px solid #eceff1', flexWrap: 'wrap' }}
       >
-        <IconButton size="small" onClick={() => router.back()}>
-          <ArrowBackIcon />
-        </IconButton>
-
-        <TextField
-          label="История, ч"
-          type="number"
-          size="small"
-          value={hours}
-          onChange={(e) => setHours(Math.max(1, Number(e.target.value) || 1))}
-          sx={{ width: 110 }}
-        />
         <FormControlLabel
           control={
             <Switch
