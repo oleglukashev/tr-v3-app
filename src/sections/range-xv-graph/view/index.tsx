@@ -7,7 +7,7 @@ import {
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { getBidasksWebSocketUrl } from "@/src/utils/bidasksWebSocket";
 
 // Our 1s klines API lives on the bidasks service (NEXT_PUBLIC_TR_CLUSTERS_DOMAIN).
@@ -174,12 +174,14 @@ function registerRangeXvIndicator() {
 
 export default function RangeXvGraphView({ pairId }: any) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const urlR = searchParams?.get('r');
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<any>(null);
   const klinesRef = useRef<any[]>([]);          // cached raw 1s klines
   const barsRef = useRef<any[]>([]);            // built Range XV bars
 
-  const [R, setR] = useState<number>(100);
   const [hours, setHours] = useState<number>(3);
   const [volumeWidth, setVolumeWidth] = useState<boolean>(false);
   const [live, setLive] = useState<boolean>(true);
@@ -236,11 +238,16 @@ export default function RangeXvGraphView({ pairId }: any) {
       const byTs = new globalThis.Map<number, any>();
       for (const it of mapped) byTs.set(it.timestamp, it);
       klinesRef.current = Array.from(byTs.values()).sort((a, b) => a.timestamp - b.timestamp);
-      // Auto-pick R for the instrument scale on first load (until user edits R).
-      if (autoRRef.current && klinesRef.current.length) {
+      // R from the header (?r=) wins; otherwise auto-pick for the instrument scale
+      // on first load and reflect it in the URL so the header control shows it.
+      const urlRNum = Number(urlR);
+      if (urlR && urlRNum > 0) {
+        rRef.current = urlRNum;
+        autoRRef.current = false;
+      } else if (autoRRef.current && klinesRef.current.length) {
         const defR = computeDefaultR(klinesRef.current);
         rRef.current = defR;
-        setR(defR);
+        if (pathname) router.replace(`${pathname}?r=${defR}`);
       }
       applyBars();
     } catch (e: any) {
@@ -248,7 +255,7 @@ export default function RangeXvGraphView({ pairId }: any) {
     } finally {
       setLoading(false);
     }
-  }, [pairId, hours, applyBars]);
+  }, [pairId, hours, applyBars, urlR, pathname, router]);
 
   // Init chart once.
   useEffect(() => {
@@ -310,6 +317,17 @@ export default function RangeXvGraphView({ pairId }: any) {
   useEffect(() => {
     applyBarsRef.current = applyBars;
   }, [applyBars]);
+
+  // React to R changed from the header (?r=).
+  useEffect(() => {
+    const v = Number(urlR);
+    if (urlR && v > 0) {
+      rRef.current = v;
+      autoRRef.current = false;
+      if (chartRef.current && klinesRef.current.length) applyBars();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlR]);
 
   // Live: stream closed 1s candles via the bidasks WS (subscribeKlines) and rebuild XV.
   useEffect(() => {
@@ -375,20 +393,6 @@ export default function RangeXvGraphView({ pairId }: any) {
           <ArrowBackIcon />
         </IconButton>
 
-        <TextField
-          label="R (пунктов)"
-          type="number"
-          size="small"
-          value={R}
-          onChange={(e) => {
-            const v = Math.max(0, Number(e.target.value) || 0);
-            rRef.current = v;
-            autoRRef.current = false;
-            setR(v);
-            if (chartRef.current && klinesRef.current.length) applyBars();
-          }}
-          sx={{ width: 130 }}
-        />
         <TextField
           label="История, ч"
           type="number"
