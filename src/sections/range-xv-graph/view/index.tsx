@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { init, dispose, registerIndicator } from "klinecharts";
 import {
-  Box, Stack, IconButton, Popover, FormControlLabel, Switch, Typography, Button, CircularProgress,
+  Box, IconButton, FormControlLabel, Switch, Typography, Button, CircularProgress,
 } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import SettingsIcon from "@mui/icons-material/Settings";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { useSearchParams } from "next/navigation";
+import CustomDialog from "src/components/custom-dialog/custom-dialog";
 
 // XV is served by the bidasks service (NEXT_PUBLIC_TR_CLUSTERS_DOMAIN), type=xv, by r (range size).
 const KLINES_API_BASE =
@@ -73,6 +75,7 @@ function registerRangeXvIndicator() {
 }
 
 export default function RangeXvGraphView({ pairId }: any) {
+  const theme = useTheme();
   const searchParams = useSearchParams();
   const urlR = searchParams?.get('r') ?? '';
 
@@ -87,7 +90,7 @@ export default function RangeXvGraphView({ pairId }: any) {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [barsCount, setBarsCount] = useState<number>(0);
-  const [settingsAnchor, setSettingsAnchor] = useState<any>(null);
+  const [openChartSettings, setOpenChartSettings] = useState<boolean>(false);
 
   const fetchXv = useCallback(async (r: string, startTs: number, endTs: number) => {
     const url = `${KLINES_API_BASE}/klines?type=xv&pairId=${pairId}&r=${r}&startTs=${startTs}&endTs=${endTs}`;
@@ -214,35 +217,47 @@ export default function RangeXvGraphView({ pairId }: any) {
   }, [getBars]);
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <Stack
-        direction="row"
-        spacing={1.5}
-        alignItems="center"
-        sx={{ p: 1.5, borderBottom: '1px solid #eceff1', flexWrap: 'wrap' }}
+    <Box sx={{ position: 'relative', height: '100vh' }}>
+      <Box ref={containerRef} sx={{ position: 'absolute', inset: 0 }} />
+
+      <IconButton
+        key="settings"
+        aria-label="settings"
+        onClick={() => setOpenChartSettings(true)}
+        sx={{
+          position: 'absolute',
+          zIndex: 1,
+          left: '18px',
+          top: '18px',
+          background: theme.palette.grey[200],
+          '&:hover': { background: theme.palette.grey[300] },
+        }}
       >
-        <IconButton size="small" onClick={(e) => setSettingsAnchor(e.currentTarget)}>
-          <SettingsIcon />
-        </IconButton>
+        <SettingsIcon />
+      </IconButton>
 
-        <Typography variant="caption" color="text.secondary">
-          {!urlR
-            ? 'Задай R в шапке'
-            : error
-              ? `Ошибка: ${error}`
-              : loading
-                ? 'Загрузка…'
-                : `${barsCount} баров (R=${urlR})`}
-        </Typography>
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        sx={{ position: 'absolute', zIndex: 1, left: '66px', top: '24px' }}
+      >
+        {!urlR
+          ? 'Задай R в шапке'
+          : error
+            ? `Ошибка: ${error}`
+            : loading
+              ? 'Загрузка…'
+              : `${barsCount} баров (R=${urlR})`}
+      </Typography>
 
-        <Popover
-          open={Boolean(settingsAnchor)}
-          anchorEl={settingsAnchor}
-          onClose={() => setSettingsAnchor(null)}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-        >
-          <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 220 }}>
-            <Typography variant="subtitle2">Настройки графика</Typography>
+      <CustomDialog
+        open={openChartSettings}
+        onClose={() => setOpenChartSettings(false)}
+        title="Chart settings"
+        actions={null}
+        maxWidth="sm"
+        content={(
+          <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
             <FormControlLabel
               control={
                 <Switch
@@ -257,14 +272,13 @@ export default function RangeXvGraphView({ pairId }: any) {
               startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <RefreshIcon />}
               disabled={loading}
               onClick={reload}
+              sx={{ alignSelf: 'flex-start' }}
             >
               Обновить
             </Button>
           </Box>
-        </Popover>
-      </Stack>
-
-      <Box ref={containerRef} sx={{ flex: 1, width: '100%' }} />
+        )}
+      />
     </Box>
   );
 }
