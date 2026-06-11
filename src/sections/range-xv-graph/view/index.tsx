@@ -2,9 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { init, dispose, registerIndicator } from "klinecharts";
-import { Box, IconButton } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
-import SettingsIcon from "@mui/icons-material/Settings";
+import { Box } from "@mui/material";
 import CustomDialog from "src/components/custom-dialog/custom-dialog";
 import { resizeChart } from "@/src/helpers/klinecharts.helper";
 import { RangeXvSettingsForm } from "@/src/sections/range-xv-graph/range-xv-settings-form";
@@ -73,8 +71,9 @@ function registerRangeXvIndicator() {
 }
 
 export default function RangeXvGraphView({ pairId }: any) {
-  const theme = useTheme();
-
+  // Persist chart settings per pair (R is price-scale specific to each pair),
+  // mirroring how the dhm graph stores its global settings in localStorage.
+  const SETTINGS_STORAGE_KEY = `rangeXvGraphSettings_${pairId}`;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<any>(null);
   const xvIndicatorOnRef = useRef<boolean>(false);
@@ -147,6 +146,11 @@ export default function RangeXvGraphView({ pairId }: any) {
     const chart = init(containerRef.current);
     chartRef.current = chart;
     chart?.setStyles({ indicator: { tooltip: { show: false } } } as any);
+    // klinecharts only invokes the data loader once symbol+period are set
+    // (see StoreImp._processDataLoad). XV is range-based, not time-based, so
+    // the period is a placeholder — bars carry their own real timestamps.
+    chart?.setSymbol({ ticker: String(pairId), pricePrecision: 5 } as any);
+    chart?.setPeriod({ span: 1, type: 'minute' } as any);
     chart?.setDataLoader({ getBars });
     // Adapt to window resize (same as dhm Map).
     const resizeCleanup = resizeChart(chart);
@@ -204,30 +208,53 @@ export default function RangeXvGraphView({ pairId }: any) {
     }
   }, [volumeWidth]);
 
-  const onSaveChartSettings = useCallback((values: any) => {
-    setVolumeWidth(!!values.volumeWidth);
-    setR(values.r != null ? String(values.r) : '');
-    setOpenChartSettings(false);
+  // Restore saved settings on mount / pair change. Setting `r` retriggers the
+  // reload effect below, so the chart loads with the persisted range size.
+  useEffect(() => {
+    if (typeof window === 'undefined') { return; }
+    try {
+      const saved = localStorage.getItem(SETTINGS_STORAGE_KEY);
+      if (!saved) { return; }
+      const parsed = JSON.parse(saved);
+      if (parsed && typeof parsed === 'object') {
+        setR(parsed.r != null ? String(parsed.r) : '');
+        setVolumeWidth(!!parsed.volumeWidth);
+      }
+    } catch {}
+  }, [SETTINGS_STORAGE_KEY]);
+
+  // Chart settings is opened from the header's chart-line icon (same as dhm graph).
+  useEffect(() => {
+    const onOpenChartSettings = () => setOpenChartSettings(true);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('open-chart-settings-dialog', onOpenChartSettings);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('open-chart-settings-dialog', onOpenChartSettings);
+      }
+    };
   }, []);
+
+  const onSaveChartSettings = useCallback((values: any) => {
+    const nextVolumeWidth = !!values.volumeWidth;
+    const nextR = values.r != null ? String(values.r) : '';
+    setVolumeWidth(nextVolumeWidth);
+    setR(nextR);
+    setOpenChartSettings(false);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(
+          SETTINGS_STORAGE_KEY,
+          JSON.stringify({ r: nextR, volumeWidth: nextVolumeWidth }),
+        );
+      } catch {}
+    }
+  }, [SETTINGS_STORAGE_KEY]);
 
   return (
     <main style={{ position: 'relative' }}>
       <Box ref={containerRef} sx={{ width: '100%' }} />
-
-      <IconButton key='settings' sx={{
-        position: 'absolute',
-        zIndex: 1,
-        left: '18px',
-        top: `${112}px`,
-        background: theme.palette.grey[200],
-        '&:hover': {
-          background: theme.palette.grey[300],
-        }
-      }} aria-label="settings" onClick={() => {
-        setOpenChartSettings(true);
-      }}>
-        <SettingsIcon />
-      </IconButton>
 
       <CustomDialog
         open={openChartSettings}

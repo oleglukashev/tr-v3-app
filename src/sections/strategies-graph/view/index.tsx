@@ -23,7 +23,7 @@ import {StrategiesDhmKlineFppsDialog} from "@/src/sections/strategies-graph/stra
 import {StrategiesBacktestForm} from "@/src/sections/strategies-graph-test/strategies.backtest-form";
 import moment from "moment/moment";
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
-import {clearFppPatterns, drawClusterKlinesForVisible, drawFppPatterns} from "@/src/utils/klinecharts";
+import {clearFppPatterns, drawClusterKlinesForVisible, drawFppPatterns, drawStrongLevels} from "@/src/utils/klinecharts";
 import { BIDASK_CLUSTER_TF, getBidasksWebSocketUrl } from "@/src/utils/bidasksWebSocket";
 import MapTools from "@/src/components/map-tools/map-tools";
 import { useMapDrawingOverlayRef } from "@/src/components/map-tools/use-map-drawing-overlay-ref";
@@ -38,6 +38,7 @@ import {
   fppMark,
   londonSession, drawLondonSessionOverlays, mintSession, drawMintSessionOverlays,
   blueSession, drawBlueSessionOverlays,
+  strongLevel,
 } from "@/src/helpers/klinecharts.helper";
 import Map from "@/src/components/map/map";
 import {useTheme} from "@mui/material/styles";
@@ -112,11 +113,17 @@ const DEFAULT_GLOBAL_SETTINGS = {
   showBidasks: true,
   showSessions: true,
   showVolume: true,
+  volumeWidth: false,
   showZigzag: false,
   showClusterSpike: false,
   clusterSpikeMultiplier: 3,
   showDrawingElements: true,
   dhmVisibleStatuses: ['created', 'waiting', 'triggered', 'finished', 'finished_by_lose', 'finished_by_size'],
+  showStrongLevels: true,
+  strongLevelsLookback: 5,
+  strongLevelsTolerance: 0.2,
+  strongLevelsMinTouches: 2,
+  strongLevelsMaxCount: 20,
 };
 
 registerOverlay(confirmedCircle);
@@ -140,10 +147,70 @@ registerOverlay(dhmDown);
 registerOverlay(testDhmUp);
 registerOverlay(testDhmDown);
 registerOverlay(fppMark);
+registerOverlay(strongLevel);
 registerIndicator(ema);
 registerIndicator(bollingerBands);
 registerIndicator(zigzag);
 registerFigure(godKline);
+
+// Variable-width candle rendering (body width ∝ volume), same as the Range XV chart.
+const VOL_WIDTH_UP = '#26a69a';
+const VOL_WIDTH_DOWN = '#ef5350';
+const dhmVolWidthConfig = { volP5: 0, volP95: 1 };
+
+function volWidthPct(arr: number[], p: number): number {
+  if (arr.length === 0) return 0;
+  const s = [...arr].sort((a, b) => a - b);
+  return s[Math.max(0, Math.min(s.length - 1, Math.floor((p / 100) * (s.length - 1))))];
+}
+
+let dhmVolWidthIndicatorRegistered = false;
+function registerDhmVolumeWidthIndicator() {
+  if (dhmVolWidthIndicatorRegistered) { return; }
+  dhmVolWidthIndicatorRegistered = true;
+  registerIndicator({
+    name: 'DHM_VOLUME_WIDTH',
+    shortName: 'VolWidth',
+    series: 'price',
+    calc: (dataList: any[]) => dataList.map(() => ({})),
+    draw: ({ ctx, chart, xAxis, yAxis }: any) => {
+      const dataList = chart.getDataList();
+      const vr = chart.getVisibleRange();
+      const slot = chart.getBarSpace().bar;
+      ctx.save();
+      ctx.setLineDash([]);
+      ctx.lineCap = 'butt';
+      for (let i = vr.from; i < vr.to; i++) {
+        const d = dataList[i];
+        if (!d) { continue; }
+        const x = xAxis.convertToPixel(i);
+        const yH = yAxis.convertToPixel(d.high);
+        const yL = yAxis.convertToPixel(d.low);
+        const yO = yAxis.convertToPixel(d.open);
+        const yC = yAxis.convertToPixel(d.close);
+        const up = d.close >= d.open;
+        const col = up ? VOL_WIDTH_UP : VOL_WIDTH_DOWN;
+        let t = (Number(d.volume) - dhmVolWidthConfig.volP5) / (dhmVolWidthConfig.volP95 - dhmVolWidthConfig.volP5);
+        t = Math.max(0, Math.min(1, t));
+        const w = Math.max(1, Math.min(slot * 0.96, slot * (0.14 + 0.84 * Math.sqrt(t))));
+        ctx.strokeStyle = col;
+        ctx.fillStyle = col;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x, yH);
+        ctx.lineTo(x, yL);
+        ctx.stroke();
+        const top = Math.min(yO, yC);
+        let h = Math.abs(yO - yC);
+        if (h < 1) { h = 1; }
+        ctx.fillRect(x - w / 2, top, w, h);
+      }
+      ctx.restore();
+      return true;
+    },
+  } as any);
+}
+registerDhmVolumeWidthIndicator();
 
 // DHM test sessions are always built on 60-minute data, regardless of
 // which timeframe the user is currently viewing in the chart URL. That
@@ -216,11 +283,17 @@ export default function DhmIndexView({ tf, pairId }: any) {
     showBidasks: showBidasksSetting,
     showSessions,
     showVolume,
+    volumeWidth,
     showZigzag,
     showClusterSpike,
     clusterSpikeMultiplier,
     showDrawingElements,
     dhmVisibleStatuses,
+    showStrongLevels,
+    strongLevelsLookback,
+    strongLevelsTolerance,
+    strongLevelsMinTouches,
+    strongLevelsMaxCount,
   } = globalSettings;
   const showBidasks = showBidasksSetting ?? showLiquidity ?? true;
   const getLimitOrderPrice = useCallback((order: any, level: any) => {
@@ -451,11 +524,17 @@ export default function DhmIndexView({ tf, pairId }: any) {
       showBidasks: !!values.showBidasks,
       showSessions: !!values.showSessions,
       showVolume: values.showVolume !== false,
+      volumeWidth: !!values.volumeWidth,
       showZigzag: !!values.showZigzag,
       showClusterSpike: !!values.showClusterSpike,
       clusterSpikeMultiplier: Number(values.clusterSpikeMultiplier) || 3,
       showDrawingElements: values.showDrawingElements !== false,
       dhmVisibleStatuses: values.dhmVisibleStatuses || [],
+      showStrongLevels: values.showStrongLevels !== false,
+      strongLevelsLookback: Number(values.strongLevelsLookback) || 5,
+      strongLevelsTolerance: Number(values.strongLevelsTolerance) || 0.2,
+      strongLevelsMinTouches: Number(values.strongLevelsMinTouches) || 2,
+      strongLevelsMaxCount: Number(values.strongLevelsMaxCount) || 20,
     };
     setGlobalSettings(nextSettings);
     if (typeof window !== 'undefined') {
@@ -717,6 +796,64 @@ export default function DhmIndexView({ tf, pairId }: any) {
     }
     chart.createIndicator('ZIGZAG', true, { id: 'candle_pane' });
   }, [chart, showZigzag]);
+
+  // Render mode: OFF = native candles; ON = variable-width bodies scaled by volume.
+  const volWidthOnRef = useRef(false);
+  useEffect((): void => {
+    if (!chart) { return; }
+    const klines = chart.getDataList();
+    const vols = (klines || []).map((b: any) => Number(b.volume)).filter((v: number) => Number.isFinite(v));
+    dhmVolWidthConfig.volP5 = volWidthPct(vols, 5);
+    dhmVolWidthConfig.volP95 = volWidthPct(vols, 95);
+    if (dhmVolWidthConfig.volP95 <= dhmVolWidthConfig.volP5) {
+      dhmVolWidthConfig.volP95 = dhmVolWidthConfig.volP5 + 1;
+    }
+    if (volumeWidth) {
+      chart.setStyles({
+        candle: {
+          bar: {
+            upColor: 'rgba(0,0,0,0)', downColor: 'rgba(0,0,0,0)', noChangeColor: 'rgba(0,0,0,0)',
+            upBorderColor: 'rgba(0,0,0,0)', downBorderColor: 'rgba(0,0,0,0)', noChangeBorderColor: 'rgba(0,0,0,0)',
+            upWickColor: 'rgba(0,0,0,0)', downWickColor: 'rgba(0,0,0,0)', noChangeWickColor: 'rgba(0,0,0,0)',
+          },
+        },
+      } as any);
+      if (!volWidthOnRef.current) {
+        chart.createIndicator('DHM_VOLUME_WIDTH', true, { id: 'candle_pane' });
+        volWidthOnRef.current = true;
+      }
+    } else {
+      if (volWidthOnRef.current) {
+        chart.removeIndicator?.('candle_pane', 'DHM_VOLUME_WIDTH');
+        volWidthOnRef.current = false;
+      }
+      chart.setStyles({
+        candle: {
+          bar: {
+            upColor: '#2DC08E', downColor: '#F92855', noChangeColor: '#76808F',
+            upBorderColor: '#2DC08E', downBorderColor: '#F92855', noChangeBorderColor: '#76808F',
+            upWickColor: '#2DC08E', downWickColor: '#F92855', noChangeWickColor: '#76808F',
+          },
+        },
+      } as any);
+    }
+  }, [chart, volumeWidth, klinesUpdatedAt]);
+
+  useEffect((): void => {
+    if (!chart) { return; }
+    if (!showStrongLevels) {
+      chart.removeOverlay({ name: 'strongLevel' });
+      return;
+    }
+    const klines = chart.getDataList();
+    if (!klines?.length) { return; }
+    drawStrongLevels(chart, klines, {
+      lookback: strongLevelsLookback,
+      tolerance: strongLevelsTolerance,
+      minTouches: strongLevelsMinTouches,
+      maxCount: strongLevelsMaxCount,
+    });
+  }, [chart, klinesUpdatedAt, showStrongLevels, strongLevelsLookback, strongLevelsTolerance, strongLevelsMinTouches, strongLevelsMaxCount]);
 
   // Refs so click handler always reads latest values without being a dep of the overlay effect
   const isTestPanelOpenRef = useRef(isTestPanelOpen);

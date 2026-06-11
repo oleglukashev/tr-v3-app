@@ -139,6 +139,9 @@ export function StrategiesDhmGlobalSettingsForm({ defaultValues, onSubmit }: any
             <CheckboxElement name='showVolume' label='Показывать объем?' />
           </Grid>
           <Grid item size={12}>
+            <CheckboxElement name='volumeWidth' label='Ширина по объёму' />
+          </Grid>
+          <Grid item size={12}>
             <CheckboxElement name='showZigzag' label='Показывать ZigZag?' />
           </Grid>
           <Grid item size={12}>
@@ -156,6 +159,49 @@ export function StrategiesDhmGlobalSettingsForm({ defaultValues, onSubmit }: any
           </Grid>
           <Grid item size={12}>
             <CheckboxElement name='showDrawingElements' label='Показывать элементы рисования?' />
+          </Grid>
+          <Grid item size={12}>
+            <CheckboxElement name='showStrongLevels' label='Показывать сильные уровни (S/R)?' />
+          </Grid>
+          <Grid item size={12}>
+            <TextFieldElement
+              name='strongLevelsLookback'
+              label='S/R: Lookback (баров для свинга)'
+              type='number'
+              inputProps={{ min: 1, step: 1 }}
+              size='small'
+              fullWidth
+            />
+          </Grid>
+          <Grid item size={12}>
+            <TextFieldElement
+              name='strongLevelsTolerance'
+              label='S/R: Допуск кластеризации (%)'
+              type='number'
+              inputProps={{ min: 0.01, step: 0.05 }}
+              size='small'
+              fullWidth
+            />
+          </Grid>
+          <Grid item size={12}>
+            <TextFieldElement
+              name='strongLevelsMinTouches'
+              label='S/R: Минимум касаний'
+              type='number'
+              inputProps={{ min: 1, step: 1 }}
+              size='small'
+              fullWidth
+            />
+          </Grid>
+          <Grid item size={12}>
+            <TextFieldElement
+              name='strongLevelsMaxCount'
+              label='S/R: Макс. количество уровней'
+              type='number'
+              inputProps={{ min: 1, step: 1 }}
+              size='small'
+              fullWidth
+            />
           </Grid>
           <Grid item size={12}>
             <DhmStatusCheckboxes />

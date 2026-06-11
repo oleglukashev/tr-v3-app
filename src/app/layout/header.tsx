@@ -80,18 +80,16 @@ export default function Header() {
   const searchParams = useSearchParams();
   const pages = [
     { url: 'dhm-graph', label: 'DHM (graph)' },
-    { url: 'dhm2-graph', label: 'DHM2 (graph)' },
+    { url: 'dhm3-graph', label: 'DHM3 S/R + FPP' },
     { url: 'dzm-graph', label: 'DZM (graph)' },
-    { url: 'dhm-graph-test', label: 'DHM (graph) TEST' },
-    { url: 'dhm2-graph-test', label: 'DHM2 (graph) TEST' },
+    { url: 'range-xv-graph', label: 'Range XV' },
     { url: 'dhm', label: 'DHMs' },
     { url: 'clusters', label: 'Clusters' },
-    { url: 'experiments', label: 'Experiments (graph)' },
-    { url: 'experiments2', label: 'Experiments2 (graph)' },
     { url: 'tda', label: 'TDA' },
     { url: 'admin', label: 'Admin' },
   ]
   const router = useRouter();
+  const isRangeXv = (pathname || '').includes('/range-xv-graph');
   const pair = useMemo(() => {
     let pairId: any = pathname.split('/')[2];
     pairId = pairId ? parseInt(pairId) : null;
@@ -109,7 +107,7 @@ export default function Header() {
     return pages.find(item => item.url === pageUrl);
   }, [pathname]);
   const ts = searchParams.get('ts');
-  const showChartSettingsButton = page?.url === 'dhm-graph' || page?.url === 'dzm-graph';
+  const showChartSettingsButton = ['dhm-graph', 'dhm3-graph', 'dzm-graph', 'range-xv-graph'].includes(page?.url ?? '');
 
   const rawPairId = pathname.split('/')[2] || null;
   const rawTf = pathname.split('/')[3] || null;
@@ -188,6 +186,8 @@ export default function Header() {
                 {(pages || []).map((item: any) => (
                   item.url === 'tda' || item.url === 'admin' ? (
                     <MenuItem key={item.url} onClick={() => router.replace(`/${item.url}`)}>{item.label}</MenuItem>
+                  ) : item.url === 'range-xv-graph' ? (
+                    <MenuItem key={item.url} onClick={() => router.replace(`/${item.url}/${pair?.id || pairs?.[0]?.id}`)}>{item.label}</MenuItem>
                   ) : (
                     <MenuItem key={item.url} onClick={() => router.replace(`/${item.url}/${pair?.id || pairs?.[0]?.id}/${tf?.id || tfs?.[0]?.id}`)}>{item.label}</MenuItem>
                   )
@@ -224,42 +224,46 @@ export default function Header() {
                     '&:hover': {
                       backgroundColor: item.isDhm ? theme.palette.primary.main : 'white',
                     }
-                  }} key={item.id} onClick={() => router.replace(`/${page.url}/${item.id}/${tf.id}`)}>
+                  }} key={item.id} onClick={() => router.replace(isRangeXv ? `/${page?.url}/${item.id}` : `/${page.url}/${item.id}/${tf.id}`)}>
                     {item.name}
                   </MenuItem>
                 ))}
               </Menu>
-              <Button
-                variant="text"
-                sx={{
-                  '&:hover': {
-                    background: 'none',
-                  },
-                }}
-                aria-controls={openTf ? 'basic-menu' : undefined}
-                aria-haspopup="true"
-                aria-expanded={openTf ? 'true' : undefined}
-                onClick={handleTfClick}
-              >
-                {mounted ? tf?.label : ''}
-              </Button>
-              <Menu
-                anchorEl={anchorTfEl}
-                open={openTf}
-                onClose={handleTfClose}
-                MenuListProps={{
-                  'aria-labelledby': 'basic-button',
-                }}
-              >
-                {tfs.map((item: any) => (
-                  <MenuItem
-                    key={item.id}
-                    onClick={() => router.replace(`/${page?.url}/${pair.id}/${item.id}${ts ? `?ts=${ts}` : ''}`)}
+              {!isRangeXv && (
+                <>
+                  <Button
+                    variant="text"
+                    sx={{
+                      '&:hover': {
+                        background: 'none',
+                      },
+                    }}
+                    aria-controls={openTf ? 'basic-menu' : undefined}
+                    aria-haspopup="true"
+                    aria-expanded={openTf ? 'true' : undefined}
+                    onClick={handleTfClick}
                   >
-                    {item.label}
-                  </MenuItem>
-                ))}
-              </Menu>
+                    {mounted ? tf?.label : ''}
+                  </Button>
+                  <Menu
+                    anchorEl={anchorTfEl}
+                    open={openTf}
+                    onClose={handleTfClose}
+                    MenuListProps={{
+                      'aria-labelledby': 'basic-button',
+                    }}
+                  >
+                    {tfs.map((item: any) => (
+                      <MenuItem
+                        key={item.id}
+                        onClick={() => router.replace(`/${page?.url}/${pair.id}/${item.id}${ts ? `?ts=${ts}` : ''}`)}
+                      >
+                        {item.label}
+                      </MenuItem>
+                    ))}
+                  </Menu>
+                </>
+              )}
 
             </Box>
           </Box>
