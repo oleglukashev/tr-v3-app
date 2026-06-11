@@ -83,6 +83,11 @@ export default function RangeXvGraphView({ pairId }: any) {
   // callback (there's no public updateData in v10). We capture it here and push
   // bars from our own XV websocket into it.
   const barCallbackRef = useRef<((bar: any) => void) | null>(null);
+  // Display ts of the last *finalized* live brick. The forming brick is shown one
+  // slot ahead (lastFinalTs + 1); on close it replaces that slot and we advance.
+  // klinecharts spaces bars by index, so using +1 sequential ts keeps the live
+  // brick updating in place (replace on equal ts) without disturbing layout.
+  const lastFinalTsRef = useRef<number>(0);
 
   const [r, setR] = useState<string>('');           // range size R, set in settings
   const rRef = useRef<string>('');
@@ -139,7 +144,14 @@ export default function RangeXvGraphView({ pairId }: any) {
     }
     setLoading(true);
     fetchXv(rv, startTs, endTs)
-      .then((bars) => { mergeBars(bars); d.callback(bars, bars.length > 0); })
+      .then((bars) => {
+        mergeBars(bars);
+        // Anchor the live-brick slot to the newest loaded bar.
+        for (const b of bars) {
+          if (b.timestamp > lastFinalTsRef.current) { lastFinalTsRef.current = b.timestamp; }
+        }
+        d.callback(bars, bars.length > 0);
+      })
       .catch((e) => { console.error('xv load failed:', e?.message); d.callback([], false); })
       .finally(() => setLoading(false));
   }, [fetchXv, mergeBars]);
@@ -177,6 +189,7 @@ export default function RangeXvGraphView({ pairId }: any) {
     const chart = chartRef.current;
     if (!chart) return;
     allBarsRef.current.clear();
+    lastFinalTsRef.current = 0;
     chart.setDataLoader({
       getBars,
       subscribeBar: (params: any) => { barCallbackRef.current = params.callback; },
@@ -212,20 +225,29 @@ export default function RangeXvGraphView({ pairId }: any) {
       socket.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data);
-          if (msg.type !== 'xv' || !Array.isArray(msg.data)) { return; }
+          const isFinal = msg.type === 'xv';
+          const isForming = msg.type === 'xvForming';
+          if ((!isFinal && !isForming) || !Array.isArray(msg.data)) { return; }
           for (const it of msg.data) {
             if (Number(it.pairId) !== Number(pairId) || String(it.r) !== String(r)) { continue; }
-            const bar = {
-              timestamp: parseInt(it.ts, 10),
-              open: parseFloat(it.open),
-              high: parseFloat(it.high),
-              low: parseFloat(it.low),
-              close: parseFloat(it.close),
-              volume: parseFloat(it.volume),
-            };
-            if (!Number.isFinite(bar.timestamp) || !Number.isFinite(bar.open)) { continue; }
+            const o = parseFloat(it.open);
+            const h = parseFloat(it.high);
+            const l = parseFloat(it.low);
+            const c = parseFloat(it.close);
+            const v = parseFloat(it.volume);
+            if (![o, h, l, c].every(Number.isFinite)) { continue; }
+            // Anchor the live slot to real time on the first bar if no history loaded.
+            if (lastFinalTsRef.current <= 0) {
+              const realTs = parseInt(it.ts, 10);
+              lastFinalTsRef.current = Number.isFinite(realTs) && realTs > 0 ? realTs : 1;
+            }
+            // Forming brick sits in the next slot; the final brick replaces that
+            // same slot (equal ts → klinecharts replaces in place) and advances.
+            const slotTs = lastFinalTsRef.current + 1;
+            const bar = { timestamp: slotTs, open: o, high: h, low: l, close: c, volume: v };
             mergeBars([bar]);
             barCallbackRef.current?.(bar);
+            if (isFinal) { lastFinalTsRef.current = slotTs; }
           }
         } catch {
           /* ignore */
