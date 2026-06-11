@@ -25,6 +25,7 @@ export default function PairForm({ defaultValues, isLoading, onSubmit }) {
       isUsedToBidasks: boolean(),
       tickerAnswerSymbol: zodStringSchema(),
       clusterPrecision: zodStringSchema(),
+      xvR: zodStringSchema().optional(),
     })),
   });
 
@@ -128,6 +129,14 @@ export default function PairForm({ defaultValues, isLoading, onSubmit }) {
             label='Сluster precision'
             size='small'
             rows={7}
+            sx={{ mt: 2 }}
+            fullWidth
+          />
+
+          <TextFieldElement
+            name='xvR'
+            label='Range XV размеры (через запятую, напр. 100,200)'
+            size='small'
             sx={{ mt: 2 }}
             fullWidth
           />

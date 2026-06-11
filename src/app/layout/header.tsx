@@ -61,6 +61,14 @@ export default function Header() {
   const handleTfClose = () => {
     setAnchorTfEl(null);
   };
+  const [anchorREl, setAnchorREl] = React.useState<null | HTMLElement>(null);
+  const openR = Boolean(anchorREl);
+  const handleRClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    setAnchorREl(event.currentTarget);
+  };
+  const handleRClose = () => {
+    setAnchorREl(null);
+  };
   const [anchorSessionsEl, setAnchorSessionsEl] = React.useState<null | HTMLElement>(null);
   const [sessionsTab, setSessionsTab] = React.useState<string>('all');
   const openSessions = Boolean(anchorSessionsEl);
@@ -107,6 +115,14 @@ export default function Header() {
     return pages.find(item => item.url === pageUrl);
   }, [pathname]);
   const ts = searchParams.get('ts');
+  const r = searchParams.get('r');
+  // Range XV sizes available for the current pair (the comma-separated `xvR` column).
+  const rOptions = useMemo(() => {
+    const raw = (pair as any)?.xvR;
+    return typeof raw === 'string'
+      ? raw.split(',').map((s: string) => s.trim()).filter(Boolean)
+      : [];
+  }, [pair]);
   const showChartSettingsButton = ['dhm-graph', 'dhm3-graph', 'dzm-graph', 'range-xv-graph'].includes(page?.url ?? '');
 
   const rawPairId = pathname.split('/')[2] || null;
@@ -259,6 +275,44 @@ export default function Header() {
                         onClick={() => router.replace(`/${page?.url}/${pair.id}/${item.id}${ts ? `?ts=${ts}` : ''}`)}
                       >
                         {item.label}
+                      </MenuItem>
+                    ))}
+                  </Menu>
+                </>
+              )}
+              {isRangeXv && pair && rOptions.length > 0 && (
+                <>
+                  <Button
+                    variant="text"
+                    sx={{
+                      '&:hover': {
+                        background: 'none',
+                      },
+                    }}
+                    aria-haspopup="true"
+                    aria-expanded={openR ? 'true' : undefined}
+                    onClick={handleRClick}
+                  >
+                    {mounted ? `R: ${r ?? rOptions[0]}` : ''}
+                  </Button>
+                  <Menu
+                    anchorEl={anchorREl}
+                    open={openR}
+                    onClose={handleRClose}
+                    MenuListProps={{
+                      'aria-labelledby': 'basic-button',
+                    }}
+                  >
+                    {rOptions.map((item: string) => (
+                      <MenuItem
+                        key={item}
+                        selected={String(r) === item}
+                        onClick={() => {
+                          handleRClose();
+                          router.replace(`/${page?.url}/${pair.id}?r=${item}`);
+                        }}
+                      >
+                        {item}
                       </MenuItem>
                     ))}
                   </Menu>
