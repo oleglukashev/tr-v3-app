@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { init, dispose, registerIndicator } from "klinecharts";
 import {
-  Box, IconButton, FormControlLabel, Switch, Typography, Button, CircularProgress,
+  Box, IconButton, FormControlLabel, Switch, Button, CircularProgress,
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import SettingsIcon from "@mui/icons-material/Settings";
@@ -88,8 +88,6 @@ export default function RangeXvGraphView({ pairId }: any) {
 
   const [volumeWidth, setVolumeWidth] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-  const [barsCount, setBarsCount] = useState<number>(0);
   const [openChartSettings, setOpenChartSettings] = useState<boolean>(false);
 
   const fetchXv = useCallback(async (r: string, startTs: number, endTs: number) => {
@@ -115,7 +113,6 @@ export default function RangeXvGraphView({ pairId }: any) {
     xvConfig.volP5 = pct(vols, 5);
     xvConfig.volP95 = pct(vols, 95);
     if (xvConfig.volP95 <= xvConfig.volP5) xvConfig.volP95 = xvConfig.volP5 + 1;
-    setBarsCount(allBarsRef.current.size);
   }, []);
 
   // setDataLoader getBars: paginated XV by ts window (init / forward=older / backward=newer).
@@ -139,10 +136,9 @@ export default function RangeXvGraphView({ pairId }: any) {
       startTs = last + 1; endTs = Math.min(last + WINDOW_MS, now);
     }
     setLoading(true);
-    setError(null);
     fetchXv(r, startTs, endTs)
       .then((bars) => { mergeBars(bars); d.callback(bars, bars.length > 0); })
-      .catch((e) => { setError(e?.message || 'load failed'); d.callback([], false); })
+      .catch((e) => { console.error('xv load failed:', e?.message); d.callback([], false); })
       .finally(() => setLoading(false));
   }, [fetchXv, mergeBars]);
 
@@ -167,7 +163,6 @@ export default function RangeXvGraphView({ pairId }: any) {
     const chart = chartRef.current;
     if (!chart) return;
     allBarsRef.current.clear();
-    setBarsCount(0);
     chart.setDataLoader({ getBars });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlR]);
@@ -212,7 +207,6 @@ export default function RangeXvGraphView({ pairId }: any) {
     const chart = chartRef.current;
     if (!chart) return;
     allBarsRef.current.clear();
-    setBarsCount(0);
     chart.setDataLoader({ getBars });
   }, [getBars]);
 
@@ -228,27 +222,13 @@ export default function RangeXvGraphView({ pairId }: any) {
           position: 'absolute',
           zIndex: 1,
           left: '18px',
-          top: '18px',
+          top: `${112}px`,
           background: theme.palette.grey[200],
           '&:hover': { background: theme.palette.grey[300] },
         }}
       >
         <SettingsIcon />
       </IconButton>
-
-      <Typography
-        variant="caption"
-        color="text.secondary"
-        sx={{ position: 'absolute', zIndex: 1, left: '66px', top: '24px' }}
-      >
-        {!urlR
-          ? 'Задай R в шапке'
-          : error
-            ? `Ошибка: ${error}`
-            : loading
-              ? 'Загрузка…'
-              : `${barsCount} баров (R=${urlR})`}
-      </Typography>
 
       <CustomDialog
         open={openChartSettings}
