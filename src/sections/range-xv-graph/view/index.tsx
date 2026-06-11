@@ -6,6 +6,7 @@ import { Box } from "@mui/material";
 import CustomDialog from "src/components/custom-dialog/custom-dialog";
 import { resizeChart } from "@/src/helpers/klinecharts.helper";
 import { RangeXvSettingsForm } from "@/src/sections/range-xv-graph/range-xv-settings-form";
+import { getBidasksWebSocketUrl } from "@/src/utils/bidasksWebSocket";
 
 // XV is served by the bidasks service (NEXT_PUBLIC_TR_CLUSTERS_DOMAIN), type=xv, by r (range size).
 const KLINES_API_BASE =
@@ -78,6 +79,10 @@ export default function RangeXvGraphView({ pairId }: any) {
   const chartRef = useRef<any>(null);
   const xvIndicatorOnRef = useRef<boolean>(false);
   const allBarsRef = useRef<Map<number, any>>(new Map());
+  // klinecharts feeds realtime bars only through the data loader's subscribeBar
+  // callback (there's no public updateData in v10). We capture it here and push
+  // bars from our own XV websocket into it.
+  const barCallbackRef = useRef<((bar: any) => void) | null>(null);
 
   const [r, setR] = useState<string>('');           // range size R, set in settings
   const rRef = useRef<string>('');
@@ -151,7 +156,11 @@ export default function RangeXvGraphView({ pairId }: any) {
     // the period is a placeholder — bars carry their own real timestamps.
     chart?.setSymbol({ ticker: String(pairId), pricePrecision: 5 } as any);
     chart?.setPeriod({ span: 1, type: 'minute' } as any);
-    chart?.setDataLoader({ getBars });
+    chart?.setDataLoader({
+      getBars,
+      subscribeBar: (params: any) => { barCallbackRef.current = params.callback; },
+      unsubscribeBar: () => { barCallbackRef.current = null; },
+    } as any);
     // Adapt to window resize (same as dhm Map).
     const resizeCleanup = resizeChart(chart);
     return () => {
@@ -168,9 +177,80 @@ export default function RangeXvGraphView({ pairId }: any) {
     const chart = chartRef.current;
     if (!chart) return;
     allBarsRef.current.clear();
-    chart.setDataLoader({ getBars });
+    chart.setDataLoader({
+      getBars,
+      subscribeBar: (params: any) => { barCallbackRef.current = params.callback; },
+      unsubscribeBar: () => { barCallbackRef.current = null; },
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [r]);
+
+  // Live XV bars: subscribe to the bidasks WS for (pairId, r) and feed freshly
+  // closed bars into klinecharts via the captured subscribeBar callback.
+  useEffect(() => {
+    if (!pairId || !r) { return; }
+    const wsUrl = getBidasksWebSocketUrl();
+    let socket: WebSocket | null = null;
+    let cancelled = false;
+    let reconnectTimer: number | undefined;
+
+    const connect = () => {
+      if (cancelled) { return; }
+      try {
+        socket = new WebSocket(wsUrl);
+      } catch {
+        reconnectTimer = window.setTimeout(connect, 3000);
+        return;
+      }
+      socket.onopen = () => {
+        socket?.send(JSON.stringify({
+          type: 'subscribeXvByPairIdAndR',
+          pairId: Number(pairId),
+          r: String(r),
+        }));
+      };
+      socket.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data);
+          if (msg.type !== 'xv' || !Array.isArray(msg.data)) { return; }
+          for (const it of msg.data) {
+            if (Number(it.pairId) !== Number(pairId) || String(it.r) !== String(r)) { continue; }
+            const bar = {
+              timestamp: parseInt(it.ts, 10),
+              open: parseFloat(it.open),
+              high: parseFloat(it.high),
+              low: parseFloat(it.low),
+              close: parseFloat(it.close),
+              volume: parseFloat(it.volume),
+            };
+            if (!Number.isFinite(bar.timestamp) || !Number.isFinite(bar.open)) { continue; }
+            mergeBars([bar]);
+            barCallbackRef.current?.(bar);
+          }
+        } catch {
+          /* ignore */
+        }
+      };
+      socket.onclose = () => {
+        if (!cancelled) {
+          reconnectTimer = window.setTimeout(connect, 3000);
+        }
+      };
+      socket.onerror = () => {
+        socket?.close();
+      };
+    };
+
+    connect();
+
+    return () => {
+      cancelled = true;
+      if (reconnectTimer !== undefined) {
+        window.clearTimeout(reconnectTimer);
+      }
+      socket?.close();
+    };
+  }, [pairId, r, mergeBars]);
 
   // Render mode: OFF = native candles (always render); ON = custom variable-width draw.
   useEffect(() => {
