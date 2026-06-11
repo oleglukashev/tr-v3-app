@@ -8,6 +8,7 @@ import {
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { useRouter } from "next/navigation";
+import { getBidasksWebSocketUrl } from "@/src/utils/bidasksWebSocket";
 
 // Our 1s klines API lives on the bidasks service (NEXT_PUBLIC_TR_CLUSTERS_DOMAIN).
 // interval convention: tf = -1 means 1-second candles.
@@ -162,9 +163,12 @@ export default function RangeXvGraphView({ pairId }: any) {
   const [R, setR] = useState<number>(100);
   const [hours, setHours] = useState<number>(3);
   const [volumeWidth, setVolumeWidth] = useState<boolean>(true);
+  const [live, setLive] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [barsCount, setBarsCount] = useState<number>(0);
+
+  const applyBarsRef = useRef<() => void>(() => {});
 
   // Recompute Range XV from cached 1s klines and (re)apply to the chart.
   const applyBars = useCallback(() => {
@@ -257,6 +261,63 @@ export default function RangeXvGraphView({ pairId }: any) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [volumeWidth]);
 
+  // Keep a stable ref to the latest applyBars for the WS handler.
+  useEffect(() => {
+    applyBarsRef.current = applyBars;
+  }, [applyBars]);
+
+  // Live: stream closed 1s candles via the bidasks WS (subscribeKlines) and rebuild XV.
+  useEffect(() => {
+    if (!live || !pairId) return;
+    let ws: WebSocket | null = null;
+    let applyTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleApply = () => {
+      if (applyTimer) return;
+      applyTimer = setTimeout(() => {
+        applyTimer = null;
+        applyBarsRef.current();
+      }, 700);
+    };
+    try {
+      ws = new WebSocket(getBidasksWebSocketUrl());
+      ws.onopen = () => {
+        ws?.send(
+          JSON.stringify({ type: 'subscribeKlines', pairId: Number(pairId), interval: SECOND_TF }),
+        );
+      };
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data);
+          if (msg?.type !== 'klines' || !Array.isArray(msg.data)) return;
+          const byTs = new globalThis.Map<number, any>();
+          for (const k of klinesRef.current) byTs.set(k.timestamp, k);
+          for (const k of msg.data) {
+            const ts = Number(k.ts);
+            if (!Number.isFinite(ts)) continue;
+            byTs.set(ts, {
+              timestamp: ts,
+              open: parseFloat(k.open),
+              high: parseFloat(k.high),
+              low: parseFloat(k.low),
+              close: parseFloat(k.close),
+              volume: parseFloat(k.volume),
+            });
+          }
+          klinesRef.current = Array.from(byTs.values()).sort((a, b) => a.timestamp - b.timestamp);
+          scheduleApply();
+        } catch {
+          /* ignore malformed frames */
+        }
+      };
+    } catch {
+      /* WS unavailable */
+    }
+    return () => {
+      if (applyTimer) clearTimeout(applyTimer);
+      try { ws?.close(); } catch { /* noop */ }
+    };
+  }, [pairId, live]);
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
       <Stack
@@ -296,6 +357,15 @@ export default function RangeXvGraphView({ pairId }: any) {
             />
           }
           label="Ширина по объёму"
+        />
+        <FormControlLabel
+          control={
+            <Switch
+              checked={live}
+              onChange={(e) => setLive(e.target.checked)}
+            />
+          }
+          label="Live"
         />
         <Button
           variant="contained"
