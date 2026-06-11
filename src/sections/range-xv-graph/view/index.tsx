@@ -3,12 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { init, dispose, registerIndicator } from "klinecharts";
 import {
-  Box, IconButton, FormControlLabel, Switch, Button, CircularProgress,
+  Box, IconButton, FormControlLabel, Switch, Button, CircularProgress, TextField,
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import SettingsIcon from "@mui/icons-material/Settings";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import { useSearchParams } from "next/navigation";
 import CustomDialog from "src/components/custom-dialog/custom-dialog";
 import { resizeChart } from "@/src/helpers/klinecharts.helper";
 
@@ -77,15 +76,15 @@ function registerRangeXvIndicator() {
 
 export default function RangeXvGraphView({ pairId }: any) {
   const theme = useTheme();
-  const searchParams = useSearchParams();
-  const urlR = searchParams?.get('r') ?? '';
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<any>(null);
   const xvIndicatorOnRef = useRef<boolean>(false);
   const allBarsRef = useRef<Map<number, any>>(new Map());
-  const urlRRef = useRef<string>(urlR);
-  urlRRef.current = urlR;
+
+  const [r, setR] = useState<string>('');           // range size R, set in settings
+  const rRef = useRef<string>('');
+  rRef.current = r;
 
   const [volumeWidth, setVolumeWidth] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
@@ -119,8 +118,8 @@ export default function RangeXvGraphView({ pairId }: any) {
   // setDataLoader getBars: paginated XV by ts window (init / forward=older / backward=newer).
   const getBars = useCallback((d: any) => {
     const chart = chartRef.current;
-    const r = urlRRef.current;
-    if (!chart || !r) { d.callback([], false); return; }
+    const rv = rRef.current;
+    if (!chart || !rv) { d.callback([], false); return; }
     const now = Date.now();
     const dl = chart.getDataList();
     let startTs: number;
@@ -137,7 +136,7 @@ export default function RangeXvGraphView({ pairId }: any) {
       startTs = last + 1; endTs = Math.min(last + WINDOW_MS, now);
     }
     setLoading(true);
-    fetchXv(r, startTs, endTs)
+    fetchXv(rv, startTs, endTs)
       .then((bars) => { mergeBars(bars); d.callback(bars, bars.length > 0); })
       .catch((e) => { console.error('xv load failed:', e?.message); d.callback([], false); })
       .finally(() => setLoading(false));
@@ -162,14 +161,14 @@ export default function RangeXvGraphView({ pairId }: any) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Reload when R (?r=) changes.
+  // Reload when R changes (set in settings).
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
     allBarsRef.current.clear();
     chart.setDataLoader({ getBars });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlR]);
+  }, [r]);
 
   // Render mode: OFF = native candles (always render); ON = custom variable-width draw.
   useEffect(() => {
@@ -241,7 +240,15 @@ export default function RangeXvGraphView({ pairId }: any) {
         actions={null}
         maxWidth="sm"
         content={(
-          <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            <TextField
+              label="R (размер бара)"
+              size="small"
+              value={r}
+              onChange={(e) => setR(e.target.value)}
+              helperText="например 0.0005 для KAS, 100 для BTC"
+              sx={{ width: 220 }}
+            />
             <FormControlLabel
               control={
                 <Switch
