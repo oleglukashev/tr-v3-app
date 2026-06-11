@@ -32,6 +32,25 @@ function pct(arr: number[], p: number): number {
   return s[Math.max(0, Math.min(s.length - 1, Math.floor((p / 100) * (s.length - 1))))];
 }
 
+// Pick a sensible default R for the instrument's price scale, so a chart isn't
+// blank (e.g. R=100 is fine for BTC but absurd for KAS ~0.01). ~25x the median
+// 1s range, rounded to a tidy value.
+function computeDefaultR(klines: any[]): number {
+  if (!klines.length) return 100;
+  const ranges = klines
+    .map((k) => Number(k.high) - Number(k.low))
+    .filter((x) => x > 0)
+    .sort((a, b) => a - b);
+  let r = ranges.length ? ranges[Math.floor(ranges.length / 2)] * 25 : 0;
+  if (!(r > 0)) {
+    const px = Number(klines[klines.length - 1]?.close) || 0;
+    r = px * 0.0015;
+  }
+  if (!(r > 0)) return 100;
+  const mag = Math.pow(10, Math.floor(Math.log10(r)));
+  return Math.max(mag, Math.round(r / mag) * mag);
+}
+
 // Renko-style Range XV with reversal (body 2R) and wicks, built from 1s klines.
 // Same logic as range_xv_renko_v10.html.
 function buildRangeXvBars(klines: any[], R: number): any[] {
@@ -162,19 +181,22 @@ export default function RangeXvGraphView({ pairId }: any) {
 
   const [R, setR] = useState<number>(100);
   const [hours, setHours] = useState<number>(3);
-  const [volumeWidth, setVolumeWidth] = useState<boolean>(true);
+  const [volumeWidth, setVolumeWidth] = useState<boolean>(false);
   const [live, setLive] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [barsCount, setBarsCount] = useState<number>(0);
 
   const applyBarsRef = useRef<() => void>(() => {});
+  const rRef = useRef<number>(100);          // active R (read by the builder)
+  const autoRRef = useRef<boolean>(true);    // auto-pick R until the user edits it
+  const xvIndicatorOnRef = useRef<boolean>(false);
 
   // Recompute Range XV from cached 1s klines and (re)apply to the chart.
   const applyBars = useCallback(() => {
     const chart = chartRef.current;
     if (!chart) return;
-    const bars = buildRangeXvBars(klinesRef.current, Math.max(1, R));
+    const bars = buildRangeXvBars(klinesRef.current, Math.max(0, rRef.current));
     const vols = bars.map((b) => Number(b.volume));
     xvConfig.volP5 = pct(vols, 5);
     xvConfig.volP95 = pct(vols, 95);
@@ -186,7 +208,7 @@ export default function RangeXvGraphView({ pairId }: any) {
         d.callback(d.type === 'init' ? barsRef.current : [], false);
       },
     });
-  }, [R]);
+  }, []);
 
   // Fetch the recent 1s window from the API.
   const loadKlines = useCallback(async () => {
@@ -214,6 +236,12 @@ export default function RangeXvGraphView({ pairId }: any) {
       const byTs = new globalThis.Map<number, any>();
       for (const it of mapped) byTs.set(it.timestamp, it);
       klinesRef.current = Array.from(byTs.values()).sort((a, b) => a.timestamp - b.timestamp);
+      // Auto-pick R for the instrument scale on first load (until user edits R).
+      if (autoRRef.current && klinesRef.current.length) {
+        const defR = computeDefaultR(klinesRef.current);
+        rRef.current = defR;
+        setR(defR);
+      }
       applyBars();
     } catch (e: any) {
       setError(e?.message || 'Failed to load klines');
@@ -228,36 +256,53 @@ export default function RangeXvGraphView({ pairId }: any) {
     registerRangeXvIndicator();
     const chart = init(containerRef.current);
     chartRef.current = chart;
-    // hide native candles (we draw our own), keep crosshair/tooltip
-    chart?.setStyles({
-      candle: {
-        bar: {
-          upColor: 'rgba(0,0,0,0)', downColor: 'rgba(0,0,0,0)', noChangeColor: 'rgba(0,0,0,0)',
-          upBorderColor: 'rgba(0,0,0,0)', downBorderColor: 'rgba(0,0,0,0)', noChangeBorderColor: 'rgba(0,0,0,0)',
-          upWickColor: 'rgba(0,0,0,0)', downWickColor: 'rgba(0,0,0,0)', noChangeWickColor: 'rgba(0,0,0,0)',
-        },
-      },
-      indicator: { tooltip: { show: false } },
-    } as any);
-    chart?.createIndicator('RANGE_XV', true, { id: 'candle_pane' });
+    chart?.setStyles({ indicator: { tooltip: { show: false } } } as any);
     loadKlines();
     return () => {
       if (containerRef.current) dispose(containerRef.current);
       chartRef.current = null;
+      xvIndicatorOnRef.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Rebuild when R changes.
+  // Render mode:
+  //  - OFF: native klinecharts candles (uniform width) — always renders.
+  //  - ON:  hide native candles + custom variable-width-by-volume draw (EquiVolume).
   useEffect(() => {
-    if (chartRef.current && klinesRef.current.length) applyBars();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [R]);
-
-  // Toggle volume-width: update config + force redraw via re-apply.
-  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
     xvConfig.volumeWidth = volumeWidth;
-    if (chartRef.current && barsRef.current.length) applyBars();
+    if (volumeWidth) {
+      chart.setStyles({
+        candle: {
+          bar: {
+            upColor: 'rgba(0,0,0,0)', downColor: 'rgba(0,0,0,0)', noChangeColor: 'rgba(0,0,0,0)',
+            upBorderColor: 'rgba(0,0,0,0)', downBorderColor: 'rgba(0,0,0,0)', noChangeBorderColor: 'rgba(0,0,0,0)',
+            upWickColor: 'rgba(0,0,0,0)', downWickColor: 'rgba(0,0,0,0)', noChangeWickColor: 'rgba(0,0,0,0)',
+          },
+        },
+      } as any);
+      if (!xvIndicatorOnRef.current) {
+        chart.createIndicator('RANGE_XV', true, { id: 'candle_pane' });
+        xvIndicatorOnRef.current = true;
+      }
+    } else {
+      if (xvIndicatorOnRef.current) {
+        chart.removeIndicator?.('candle_pane', 'RANGE_XV');
+        xvIndicatorOnRef.current = false;
+      }
+      chart.setStyles({
+        candle: {
+          bar: {
+            upColor: UP, downColor: DOWN, noChangeColor: '#888888',
+            upBorderColor: UP, downBorderColor: DOWN, noChangeBorderColor: '#888888',
+            upWickColor: UP, downWickColor: DOWN, noChangeWickColor: '#888888',
+          },
+        },
+      } as any);
+    }
+    if (barsRef.current.length) applyBars();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [volumeWidth]);
 
@@ -329,16 +374,19 @@ export default function RangeXvGraphView({ pairId }: any) {
         <IconButton size="small" onClick={() => router.back()}>
           <ArrowBackIcon />
         </IconButton>
-        <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-          Range XV — pair {pairId}
-        </Typography>
 
         <TextField
           label="R (пунктов)"
           type="number"
           size="small"
           value={R}
-          onChange={(e) => setR(Math.max(1, Number(e.target.value) || 1))}
+          onChange={(e) => {
+            const v = Math.max(0, Number(e.target.value) || 0);
+            rRef.current = v;
+            autoRRef.current = false;
+            setR(v);
+            if (chartRef.current && klinesRef.current.length) applyBars();
+          }}
           sx={{ width: 130 }}
         />
         <TextField
@@ -378,7 +426,11 @@ export default function RangeXvGraphView({ pairId }: any) {
         </Button>
 
         <Typography variant="caption" color="text.secondary">
-          {error ? `Ошибка: ${error}` : `${barsCount} баров (тело R, разворот 2R)`}
+          {error
+            ? `Ошибка: ${error}`
+            : barsCount === 0
+              ? `0 баров — R слишком велик для цены инструмента, уменьши R`
+              : `${barsCount} баров (тело R, разворот 2R)`}
         </Typography>
       </Stack>
 
