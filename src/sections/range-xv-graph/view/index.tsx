@@ -8,6 +8,8 @@ import CustomDialog from "src/components/custom-dialog/custom-dialog";
 import { resizeChart } from "@/src/helpers/klinecharts.helper";
 import { RangeXvSettingsForm } from "@/src/sections/range-xv-graph/range-xv-settings-form";
 import { getBidasksWebSocketUrl } from "@/src/utils/bidasksWebSocket";
+import MapTools from "@/src/components/map-tools/map-tools";
+import { useMapDrawingOverlayRef } from "@/src/components/map-tools/use-map-drawing-overlay-ref";
 
 // XV is served by the bidasks service (NEXT_PUBLIC_TR_CLUSTERS_DOMAIN), type=xv, by r (range size).
 const KLINES_API_BASE =
@@ -100,6 +102,12 @@ export default function RangeXvGraphView({ pairId }: any) {
   const [loading, setLoading] = useState<boolean>(false);
   const [openChartSettings, setOpenChartSettings] = useState<boolean>(false);
 
+  // MapTools needs the chart as a reactive value (the ref above does not re-render),
+  // plus a "first bars loaded" gate before it creates/restores drawing overlays.
+  const [chart, setChart] = useState<any>(null);
+  const [chartReady, setChartReady] = useState<boolean>(false);
+  const { onDrawingInteractionChange } = useMapDrawingOverlayRef();
+
   const fetchXv = useCallback(async (r: string, startTs: number, endTs: number) => {
     const url = `${KLINES_API_BASE}/klines?type=xv&pairId=${pairId}&r=${r}&startTs=${startTs}&endTs=${endTs}`;
     const res = await fetch(url);
@@ -118,6 +126,7 @@ export default function RangeXvGraphView({ pairId }: any) {
   }, [pairId]);
 
   const mergeBars = useCallback((bars: any[]) => {
+    if (bars.length) setChartReady(true);
     for (const b of bars) allBarsRef.current.set(b.timestamp, b);
     const vols = Array.from(allBarsRef.current.values()).map((b) => Number(b.volume));
     xvConfig.volP5 = pct(vols, 5);
@@ -165,6 +174,7 @@ export default function RangeXvGraphView({ pairId }: any) {
     registerRangeXvIndicator();
     const chart = init(containerRef.current);
     chartRef.current = chart;
+    setChart(chart);
     chart?.setStyles({ indicator: { tooltip: { show: false } } } as any);
     // klinecharts only invokes the data loader once symbol+period are set
     // (see StoreImp._processDataLoad). XV is range-based, not time-based, so
@@ -182,6 +192,8 @@ export default function RangeXvGraphView({ pairId }: any) {
       if (resizeCleanup) resizeCleanup();
       if (containerRef.current) dispose(containerRef.current);
       chartRef.current = null;
+      setChart(null);
+      setChartReady(false);
       xvIndicatorOnRef.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -370,6 +382,14 @@ export default function RangeXvGraphView({ pairId }: any) {
   return (
     <main style={{ position: 'relative' }}>
       <Box ref={containerRef} sx={{ width: '100%' }} />
+
+      <MapTools
+        chart={chart}
+        pairId={pairId}
+        showDrawingElements
+        chartReady={chartReady}
+        onDrawingInteractionChange={onDrawingInteractionChange}
+      />
 
       <CustomDialog
         open={openChartSettings}
