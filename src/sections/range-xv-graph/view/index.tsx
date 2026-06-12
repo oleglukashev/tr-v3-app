@@ -159,8 +159,23 @@ export default function RangeXvGraphView({ pairId }: any) {
       .then((bars) => {
         mergeBars(bars);
         // Anchor the live-brick slot to the newest loaded bar.
+        let newest: any = null;
         for (const b of bars) {
           if (b.timestamp > lastFinalTsRef.current) { lastFinalTsRef.current = b.timestamp; }
+          if (!newest || b.timestamp > newest.timestamp) { newest = b; }
+        }
+        // REST only has *closed* bricks; the current forming brick is WS-only and
+        // may lag until the next tick. Seed a flat placeholder at the forming slot
+        // (lastFinal + 1) from the newest close so a "current" bar shows immediately.
+        // The WS forming/final update reuses the same slot and replaces it in place.
+        if (d.type === 'init' && newest) {
+          const seed = {
+            timestamp: lastFinalTsRef.current + 1,
+            open: newest.close, high: newest.close, low: newest.close, close: newest.close,
+            volume: 0,
+          };
+          d.callback([...bars, seed], bars.length > 0);
+          return;
         }
         d.callback(bars, bars.length > 0);
       })
