@@ -1451,6 +1451,42 @@ function getColorIndex(min, max, current) {
 }
 
 
+export const strongLevel: any = {
+  name: 'strongLevel',
+  totalStep: 1,
+  lock: true,
+  needDefaultPointFigure: false,
+  createPointFigures: ({ overlay, bounding, yAxis }: any) => {
+    const levels: any[] = overlay?.extendData?.levels ?? [];
+    if (!levels.length || !yAxis) return [];
+
+    const figures: any[] = [];
+    for (const level of levels) {
+      const topY = yAxis.convertToPixel(level.topPrice);
+      const bottomY = yAxis.convertToPixel(level.bottomPrice);
+      const minY = Math.min(topY, bottomY);
+      const maxY = Math.max(topY, bottomY);
+      const height = Math.max(maxY - minY, 2);
+      const midY = (minY + maxY) / 2;
+
+      const touches: number = level.touches ?? 1;
+      const fillAlpha = Math.min(0.08 + (touches - 1) * 0.06, 0.50);
+      const strokeAlpha = Math.min(0.45 + (touches - 1) * 0.08, 0.90);
+      const fillColor = level.type === 'resistance'
+        ? `rgba(244, 67, 54, ${fillAlpha})`
+        : `rgba(76, 175, 80, ${fillAlpha})`;
+      const strokeColor = level.type === 'resistance'
+        ? `rgba(244, 67, 54, ${strokeAlpha})`
+        : `rgba(76, 175, 80, ${strokeAlpha})`;
+
+      figures.push({ type: 'rect', ignoreEvent: true, attrs: { x: 0, y: minY, width: bounding.width, height }, styles: { style: 'fill', color: fillColor } });
+      figures.push({ type: 'line', ignoreEvent: true, attrs: { coordinates: [{ x: 0, y: midY }, { x: bounding.width, y: midY }] }, styles: { color: strokeColor, size: 1, style: 'solid' } });
+      figures.push({ type: 'text', ignoreEvent: true, attrs: { x: bounding.width - 4, y: midY, text: `${touches}×`, align: 'right', baseline: 'middle' }, styles: { color: strokeColor, size: 11, weight: 'bold', backgroundColor: 'transparent' } });
+    }
+    return figures;
+  },
+};
+
 export const zigzag = {
   name: 'ZIGZAG',
   shortName: 'ZigZag',

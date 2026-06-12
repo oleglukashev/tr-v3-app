@@ -173,6 +173,91 @@ export function direction(kline: any) {
   return parseFloat(kline.close) > parseFloat(kline.open) ? 'up' : 'down';
 }
 
+export interface StrongLevelsSettings {
+  lookback?: number;
+  tolerance?: number;
+  minTouches?: number;
+  maxCount?: number;
+}
+
+export function computeStrongLevels(
+  klines: any[],
+  settings: StrongLevelsSettings = {},
+): Array<{ price: number; touches: number; type: 'resistance' | 'support' }> {
+  const lookback = settings.lookback ?? 5;
+  const tolerance = settings.tolerance ?? 0.2;
+  const minTouches = settings.minTouches ?? 2;
+  const maxCount = settings.maxCount ?? 20;
+
+  if (!klines?.length || klines.length < lookback * 2 + 1) return [];
+
+  const swings: Array<{ price: number; type: 'high' | 'low' }> = [];
+
+  for (let i = lookback; i < klines.length - lookback; i++) {
+    const high = parseFloat(klines[i].high);
+    const low = parseFloat(klines[i].low);
+    let isHigh = true;
+    let isLow = true;
+    for (let j = 1; j <= lookback; j++) {
+      if (parseFloat(klines[i - j].high) >= high) isHigh = false;
+      if (parseFloat(klines[i + j].high) >= high) isHigh = false;
+      if (parseFloat(klines[i - j].low) <= low) isLow = false;
+      if (parseFloat(klines[i + j].low) <= low) isLow = false;
+    }
+    if (isHigh) swings.push({ price: high, type: 'high' });
+    if (isLow) swings.push({ price: low, type: 'low' });
+  }
+
+  if (!swings.length) return [];
+
+  const clusters: Array<{ price: number; touches: number; type: 'resistance' | 'support' }> = [];
+
+  for (const swing of swings) {
+    const tolAbs = (swing.price * tolerance) / 100;
+    const existing = clusters.find((c) => Math.abs(c.price - swing.price) <= tolAbs);
+    if (existing) {
+      existing.price = (existing.price * existing.touches + swing.price) / (existing.touches + 1);
+      existing.touches += 1;
+    } else {
+      clusters.push({
+        price: swing.price,
+        touches: 1,
+        type: swing.type === 'high' ? 'resistance' : 'support',
+      });
+    }
+  }
+
+  return clusters
+    .filter((c) => c.touches >= minTouches)
+    .sort((a, b) => b.touches - a.touches)
+    .slice(0, maxCount);
+}
+
+export function drawStrongLevels(chart: any, klines: any[], settings: StrongLevelsSettings = {}): void {
+  chart.removeOverlay({ name: 'strongLevel' });
+  if (!chart || !klines?.length) return;
+
+  const tolerance = settings.tolerance ?? 0.2;
+  const levels = computeStrongLevels(klines, settings);
+  if (!levels.length) return;
+
+  const halfBandRatio = tolerance / 100 / 2;
+  const levelsData = levels.map((level) => ({
+    topPrice: level.price * (1 + halfBandRatio),
+    bottomPrice: level.price * (1 - halfBandRatio),
+    type: level.type,
+    touches: level.touches,
+  }));
+
+  const midKline = klines[Math.floor(klines.length / 2)];
+  chart.createOverlay({
+    name: 'strongLevel',
+    lock: true,
+    extendData: { levels: levelsData },
+    points: [{ timestamp: midKline.timestamp, value: midKline.close }],
+  });
+}
+
 export function clearFppPatterns(chart: any) {
   for (const item of [1,2,3,4,5,6,7]) {
     chart.removeOverlay({ name: `up${item}Circle` });
