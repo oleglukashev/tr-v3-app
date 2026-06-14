@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { init, dispose, registerIndicator } from "klinecharts";
 import { Box } from "@mui/material";
 import CustomDialog from "src/components/custom-dialog/custom-dialog";
@@ -78,12 +77,10 @@ function registerRangeXvIndicator() {
   } as any);
 }
 
-export default function RangeXvGraphView({ pairId }: any) {
+export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   // Persist chart settings per pair (R is price-scale specific to each pair),
   // mirroring how the dhm graph stores its global settings in localStorage.
   const SETTINGS_STORAGE_KEY = `rangeXvGraphSettings_${pairId}`;
-  const searchParams = useSearchParams();
-  const rFromUrl = searchParams.get('r');
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<any>(null);
   const xvIndicatorOnRef = useRef<boolean>(false);
@@ -374,11 +371,11 @@ export default function RangeXvGraphView({ pairId }: any) {
     }
   }, [volumeWidth]);
 
-  // The header's R selector drives `r` through the ?r= query param. When present
-  // it wins over the saved value; selecting a different R re-runs this and
-  // retriggers the reload effect below.
+  // The header's R selector drives `r` through the /{pairId}/{r} path segment.
+  // When present it wins over the saved value; selecting a different R re-runs
+  // this and retriggers the reload effect below.
   useEffect(() => {
-    if (rFromUrl != null && rFromUrl !== '') { setR(rFromUrl); }
+    if (rFromUrl != null && rFromUrl !== '') { setR(String(rFromUrl)); }
   }, [rFromUrl]);
 
   // Restore saved settings on mount / pair change. Setting `r` retriggers the

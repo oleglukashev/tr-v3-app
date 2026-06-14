@@ -115,7 +115,8 @@ export default function Header() {
     return pages.find(item => item.url === pageUrl);
   }, [pathname]);
   const ts = searchParams.get('ts');
-  const r = searchParams.get('r');
+  // Range XV carries R in the path (/range-xv-graph/{pairId}/{r}); other pages use ?r=.
+  const r = isRangeXv ? (pathname.split('/')[3] || null) : searchParams.get('r');
   // Range XV sizes available for the current pair (the comma-separated `xvR` column).
   const rOptions = useMemo(() => {
     const raw = (pair as any)?.xvR;
@@ -309,7 +310,7 @@ export default function Header() {
                         selected={String(r) === item}
                         onClick={() => {
                           handleRClose();
-                          router.replace(`/${page?.url}/${pair.id}?r=${item}`);
+                          router.replace(`/${page?.url}/${pair.id}/${item}`);
                         }}
                       >
                         {item}
