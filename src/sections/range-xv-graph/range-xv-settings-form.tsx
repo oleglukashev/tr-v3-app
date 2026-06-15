@@ -19,6 +19,39 @@ export function RangeXvSettingsForm({ defaultValues, onSubmit }: any) {
               fullWidth
             />
             <CheckboxElement name='volumeWidth' label='Ширина по объёму' />
+            <CheckboxElement name='showStrongLevels' label='Показывать сильные уровни (S/R)?' />
+            <TextFieldElement
+              name='strongLevelsLookback'
+              label='S/R: Lookback (баров для свинга)'
+              type='number'
+              inputProps={{ min: 1, step: 1 }}
+              size='small'
+              fullWidth
+            />
+            <TextFieldElement
+              name='strongLevelsTolerance'
+              label='S/R: Допуск кластеризации (%)'
+              type='number'
+              inputProps={{ min: 0.01, step: 0.05 }}
+              size='small'
+              fullWidth
+            />
+            <TextFieldElement
+              name='strongLevelsMinTouches'
+              label='S/R: Минимум касаний'
+              type='number'
+              inputProps={{ min: 1, step: 1 }}
+              size='small'
+              fullWidth
+            />
+            <TextFieldElement
+              name='strongLevelsMaxCount'
+              label='S/R: Макс. количество уровней'
+              type='number'
+              inputProps={{ min: 1, step: 1 }}
+              size='small'
+              fullWidth
+            />
           </Box>
           <CustomFormButton />
         </Container>

@@ -1,14 +1,27 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { init, dispose, registerIndicator } from "klinecharts";
+import { init, dispose, registerIndicator, registerOverlay } from "klinecharts";
 import { Box } from "@mui/material";
 import CustomDialog from "src/components/custom-dialog/custom-dialog";
-import { resizeChart } from "@/src/helpers/klinecharts.helper";
+import { resizeChart, strongLevel } from "@/src/helpers/klinecharts.helper";
+import { drawStrongLevels } from "@/src/utils/klinecharts";
 import { RangeXvSettingsForm } from "@/src/sections/range-xv-graph/range-xv-settings-form";
 import { getBidasksWebSocketUrl } from "@/src/utils/bidasksWebSocket";
 import MapTools from "@/src/components/map-tools/map-tools";
 import { useMapDrawingOverlayRef } from "@/src/components/map-tools/use-map-drawing-overlay-ref";
+
+// Strong levels (S/R) overlay — reused as-is from the dhm graph.
+registerOverlay(strongLevel);
+
+// Strong-levels (S/R) defaults, mirroring the dhm graph.
+const DEFAULT_STRONG_LEVELS = {
+  showStrongLevels: true,
+  strongLevelsLookback: 5,
+  strongLevelsTolerance: 0.2,
+  strongLevelsMinTouches: 2,
+  strongLevelsMaxCount: 20,
+};
 
 // XV is served by the bidasks service (NEXT_PUBLIC_TR_CLUSTERS_DOMAIN), type=xv, by r (range size).
 const KLINES_API_BASE =
@@ -103,6 +116,16 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   const [loading, setLoading] = useState<boolean>(false);
   const [openChartSettings, setOpenChartSettings] = useState<boolean>(false);
 
+  // Strong levels (S/R) — same feature/settings as the dhm graph.
+  const [showStrongLevels, setShowStrongLevels] = useState<boolean>(DEFAULT_STRONG_LEVELS.showStrongLevels);
+  const [strongLevelsLookback, setStrongLevelsLookback] = useState<number>(DEFAULT_STRONG_LEVELS.strongLevelsLookback);
+  const [strongLevelsTolerance, setStrongLevelsTolerance] = useState<number>(DEFAULT_STRONG_LEVELS.strongLevelsTolerance);
+  const [strongLevelsMinTouches, setStrongLevelsMinTouches] = useState<number>(DEFAULT_STRONG_LEVELS.strongLevelsMinTouches);
+  const [strongLevelsMaxCount, setStrongLevelsMaxCount] = useState<number>(DEFAULT_STRONG_LEVELS.strongLevelsMaxCount);
+  // Bumped when the dataset changes (batch load / closed brick) so derived
+  // overlays like strong levels recompute — but not on every forming tick.
+  const [klinesVersion, setKlinesVersion] = useState<number>(0);
+
   // MapTools needs the chart as a reactive value (the ref above does not re-render),
   // plus a "first bars loaded" gate before it creates/restores drawing overlays.
   const [chart, setChart] = useState<any>(null);
@@ -156,6 +179,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
           for (const b of bars) {
             if (b.timestamp > lastFinalTsRef.current) { lastFinalTsRef.current = b.timestamp; }
           }
+          if (bars.length) { setKlinesVersion((v) => v + 1); }
           d.callback(bars, bars.length > 0);
         })
         .catch((e) => { console.error('xv load failed:', e?.message); d.callback([], false); })
@@ -186,6 +210,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
         end = start;
       }
       mergeBars(bars);
+      if (bars.length) { setKlinesVersion((v) => v + 1); }
       // Anchor the live-brick slot to the newest loaded bar.
       let newest: any = null;
       for (const b of bars) {
@@ -308,7 +333,9 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
             const bar = { timestamp: slotTs, open: o, high: h, low: l, close: c, volume: v };
             mergeBars([bar]);
             barCallbackRef.current?.(bar);
-            if (isFinal) { lastFinalTsRef.current = slotTs; }
+            // A closed brick can add a new swing → recompute strong levels.
+            // Forming ticks don't (they reuse the same slot), so skip those.
+            if (isFinal) { lastFinalTsRef.current = slotTs; setKlinesVersion((v2) => v2 + 1); }
           }
         } catch {
           /* ignore */
@@ -392,6 +419,11 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
           setR(parsed.r != null ? String(parsed.r) : '');
         }
         setVolumeWidth(!!parsed.volumeWidth);
+        setShowStrongLevels(parsed.showStrongLevels !== false);
+        setStrongLevelsLookback(Number(parsed.strongLevelsLookback) || DEFAULT_STRONG_LEVELS.strongLevelsLookback);
+        setStrongLevelsTolerance(Number(parsed.strongLevelsTolerance) || DEFAULT_STRONG_LEVELS.strongLevelsTolerance);
+        setStrongLevelsMinTouches(Number(parsed.strongLevelsMinTouches) || DEFAULT_STRONG_LEVELS.strongLevelsMinTouches);
+        setStrongLevelsMaxCount(Number(parsed.strongLevelsMaxCount) || DEFAULT_STRONG_LEVELS.strongLevelsMaxCount);
       }
     } catch {}
   }, [SETTINGS_STORAGE_KEY, rFromUrl]);
@@ -409,17 +441,61 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     };
   }, []);
 
+  // Draw strong levels (S/R) — reuses drawStrongLevels from the dhm graph.
+  // Recomputes on settings change and whenever the dataset version bumps.
+  useEffect(() => {
+    if (!chart) { return; }
+    if (!showStrongLevels) {
+      chart.removeOverlay({ name: 'strongLevel' });
+      return;
+    }
+    const klines = chart.getDataList();
+    if (!klines?.length) { return; }
+    drawStrongLevels(chart, klines, {
+      lookback: strongLevelsLookback,
+      tolerance: strongLevelsTolerance,
+      minTouches: strongLevelsMinTouches,
+      maxCount: strongLevelsMaxCount,
+    });
+  }, [
+    chart,
+    klinesVersion,
+    showStrongLevels,
+    strongLevelsLookback,
+    strongLevelsTolerance,
+    strongLevelsMinTouches,
+    strongLevelsMaxCount,
+  ]);
+
   const onSaveChartSettings = useCallback((values: any) => {
     const nextVolumeWidth = !!values.volumeWidth;
     const nextR = values.r != null ? String(values.r) : '';
+    const nextShowStrongLevels = values.showStrongLevels !== false;
+    const nextLookback = Number(values.strongLevelsLookback) || DEFAULT_STRONG_LEVELS.strongLevelsLookback;
+    const nextTolerance = Number(values.strongLevelsTolerance) || DEFAULT_STRONG_LEVELS.strongLevelsTolerance;
+    const nextMinTouches = Number(values.strongLevelsMinTouches) || DEFAULT_STRONG_LEVELS.strongLevelsMinTouches;
+    const nextMaxCount = Number(values.strongLevelsMaxCount) || DEFAULT_STRONG_LEVELS.strongLevelsMaxCount;
     setVolumeWidth(nextVolumeWidth);
     setR(nextR);
+    setShowStrongLevels(nextShowStrongLevels);
+    setStrongLevelsLookback(nextLookback);
+    setStrongLevelsTolerance(nextTolerance);
+    setStrongLevelsMinTouches(nextMinTouches);
+    setStrongLevelsMaxCount(nextMaxCount);
     setOpenChartSettings(false);
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem(
           SETTINGS_STORAGE_KEY,
-          JSON.stringify({ r: nextR, volumeWidth: nextVolumeWidth }),
+          JSON.stringify({
+            r: nextR,
+            volumeWidth: nextVolumeWidth,
+            showStrongLevels: nextShowStrongLevels,
+            strongLevelsLookback: nextLookback,
+            strongLevelsTolerance: nextTolerance,
+            strongLevelsMinTouches: nextMinTouches,
+            strongLevelsMaxCount: nextMaxCount,
+          }),
         );
       } catch {}
     }
@@ -445,7 +521,15 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
         maxWidth="sm"
         content={(
           <RangeXvSettingsForm
-            defaultValues={{ r, volumeWidth }}
+            defaultValues={{
+              r,
+              volumeWidth,
+              showStrongLevels,
+              strongLevelsLookback,
+              strongLevelsTolerance,
+              strongLevelsMinTouches,
+              strongLevelsMaxCount,
+            }}
             onSubmit={onSaveChartSettings}
           />
         )}
