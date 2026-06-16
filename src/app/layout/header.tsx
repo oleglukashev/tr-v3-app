@@ -177,7 +177,7 @@ export default function Header() {
         <StyledToolbar variant="dense" disableGutters>
           <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', px: 0 }}>
             <Box sx={{ display: 'flex' }}>
-              <Avatar sx={{ mr: 1 }} alt="Traken" src="/images/logo.png" />
+              <Avatar sx={{ mr: 1, display: { xs: 'none', sm: 'flex' } }} alt="Traken" src="/images/logo.png" />
               <Button
                 variant="text"
                 aria-controls={openPage ? 'basic-menu' : undefined}
