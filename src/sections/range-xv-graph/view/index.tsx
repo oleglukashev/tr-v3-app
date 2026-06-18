@@ -4,15 +4,28 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { init, dispose, registerIndicator, registerOverlay } from "klinecharts";
 import { Box } from "@mui/material";
 import CustomDialog from "src/components/custom-dialog/custom-dialog";
-import { resizeChart, strongLevel } from "@/src/helpers/klinecharts.helper";
-import { drawStrongLevels } from "@/src/utils/klinecharts";
+import { resizeChart, strongLevel, clusterKline } from "@/src/helpers/klinecharts.helper";
+import { drawStrongLevels, drawClusterKlinesForVisible } from "@/src/utils/klinecharts";
 import { RangeXvSettingsForm } from "@/src/sections/range-xv-graph/range-xv-settings-form";
 import { getBidasksWebSocketUrl } from "@/src/utils/bidasksWebSocket";
 import MapTools from "@/src/components/map-tools/map-tools";
 import { useMapDrawingOverlayRef } from "@/src/components/map-tools/use-map-drawing-overlay-ref";
 
-// Strong levels (S/R) overlay — reused as-is from the dhm graph.
+// Strong levels (S/R) + cluster footprint overlays — reused as-is from the dhm graph.
 registerOverlay(strongLevel);
+registerOverlay(clusterKline());
+
+// Cluster (volume-by-price footprint) defaults, mirroring the dhm graph.
+const DEFAULT_CLUSTERS = {
+  showClusters: false,
+  showClusterSpike: false,
+  clusterSpikeMultiplier: 3,
+};
+
+function xvClusterHasLevels(it: any): boolean {
+  const d = it?.data;
+  return d != null && typeof d === 'object' && Object.keys(d).length > 0;
+}
 
 // Strong-levels (S/R) defaults, mirroring the dhm graph.
 const DEFAULT_STRONG_LEVELS = {
@@ -126,6 +139,19 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   // overlays like strong levels recompute — but not on every forming tick.
   const [klinesVersion, setKlinesVersion] = useState<number>(0);
 
+  // Cluster footprints (volume-by-price per brick) — same feature/render as dhm.
+  const [showClusters, setShowClusters] = useState<boolean>(DEFAULT_CLUSTERS.showClusters);
+  const [showClusterSpike, setShowClusterSpike] = useState<boolean>(DEFAULT_CLUSTERS.showClusterSpike);
+  const [clusterSpikeMultiplier, setClusterSpikeMultiplier] = useState<number>(DEFAULT_CLUSTERS.clusterSpikeMultiplier);
+  // Footprint per brick, keyed by the *bar timestamp* the chart uses (real ts for
+  // REST bricks, synthetic slot ts for live WS bricks). Redraw is index-based via
+  // drawClusterKlinesForVisible, so this key matches each visible candle.
+  const [clustersByTs, setClustersByTs] = useState<Record<string, any>>({});
+  const [clustersTick, setClustersTick] = useState<number>(0);
+  // Live WS delivers brick and footprint as separate messages; correlate them by
+  // the brick's position so the footprint lands on the same slot ts as its bar.
+  const slotByPositionRef = useRef<Record<number, number>>({});
+
   // MapTools needs the chart as a reactive value (the ref above does not re-render),
   // plus a "first bars loaded" gate before it creates/restores drawing overlays.
   const [chart, setChart] = useState<any>(null);
@@ -156,6 +182,33 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     xvConfig.volP5 = pct(vols, 5);
     xvConfig.volP95 = pct(vols, 95);
     if (xvConfig.volP95 <= xvConfig.volP5) xvConfig.volP95 = xvConfig.volP5 + 1;
+  }, []);
+
+  // Per-brick footprints from the bidasks service (same host/auth as XV klines).
+  const fetchXvClusters = useCallback(async (rv: string, startTs: number, endTs: number) => {
+    const url = `${KLINES_API_BASE}/clusters?type=xv&pairId=${pairId}&r=${rv}&startTs=${startTs}&endTs=${endTs}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const raw = await res.json();
+    return Array.isArray(raw) ? raw : [];
+  }, [pairId]);
+
+  // Merge footprints into clustersByTs under a caller-provided key, preserving a
+  // good footprint when a later/overlapping payload arrives empty (mirrors dhm).
+  const mergeClusters = useCallback((items: any[], keyOf: (it: any) => string) => {
+    if (!items.length) return;
+    setClustersByTs((prev) => {
+      const next = { ...prev };
+      for (const it of items) {
+        const key = keyOf(it);
+        if (!key) continue;
+        const merged = { ...it, ts: key };
+        if (!xvClusterHasLevels(merged) && xvClusterHasLevels(prev[key])) continue;
+        next[key] = merged;
+      }
+      return next;
+    });
+    setClustersTick((t) => t + 1);
   }, []);
 
   // setDataLoader getBars: paginated XV by ts window (init / forward=older / backward=newer).
@@ -276,6 +329,9 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     if (!chart) return;
     allBarsRef.current.clear();
     lastFinalTsRef.current = 0;
+    // Footprints are per (pair, r); drop them so a new R starts clean.
+    setClustersByTs({});
+    slotByPositionRef.current = {};
     chart.setDataLoader({
       getBars,
       subscribeBar: (params: any) => { barCallbackRef.current = params.callback; },
@@ -307,13 +363,32 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
           pairId: Number(pairId),
           r: String(r),
         }));
+        socket?.send(JSON.stringify({
+          type: 'subscribeXvClustersByPairIdAndR',
+          pairId: Number(pairId),
+          r: String(r),
+        }));
       };
       socket.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data);
           const isFinal = msg.type === 'xv';
           const isForming = msg.type === 'xvForming';
-          if ((!isFinal && !isForming) || !Array.isArray(msg.data)) { return; }
+          const isCluster = msg.type === 'xvCluster' || msg.type === 'xvClusterForming';
+          if ((!isFinal && !isForming && !isCluster) || !Array.isArray(msg.data)) { return; }
+          // Footprints arrive after their brick (backend emits brick then cluster),
+          // so the position→slot map is already set; key the footprint to that slot.
+          if (isCluster) {
+            const out: any[] = [];
+            for (const it of msg.data) {
+              if (Number(it.pairId) !== Number(pairId) || String(it.r) !== String(r)) { continue; }
+              const slot = slotByPositionRef.current[Number(it.position)];
+              if (slot == null) { continue; }
+              out.push({ data: it.data, ts: String(slot) });
+            }
+            mergeClusters(out, (it) => it.ts);
+            return;
+          }
           for (const it of msg.data) {
             if (Number(it.pairId) !== Number(pairId) || String(it.r) !== String(r)) { continue; }
             const o = parseFloat(it.open);
@@ -333,6 +408,10 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
             const bar = { timestamp: slotTs, open: o, high: h, low: l, close: c, volume: v };
             mergeBars([bar]);
             barCallbackRef.current?.(bar);
+            // Correlate this brick's position with its slot ts so the matching
+            // footprint (separate xvCluster* message) lands on the same bar.
+            const pos = Number(it.position);
+            if (Number.isFinite(pos)) { slotByPositionRef.current[pos] = slotTs; }
             // A closed brick can add a new swing → recompute strong levels.
             // Forming ticks don't (they reuse the same slot), so skip those.
             if (isFinal) { lastFinalTsRef.current = slotTs; setKlinesVersion((v2) => v2 + 1); }
@@ -360,7 +439,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
       }
       socket?.close();
     };
-  }, [pairId, r, mergeBars]);
+  }, [pairId, r, mergeBars, mergeClusters]);
 
   // Render mode: OFF = native candles (always render); ON = custom variable-width draw.
   useEffect(() => {
@@ -424,6 +503,9 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
         setStrongLevelsTolerance(Number(parsed.strongLevelsTolerance) || DEFAULT_STRONG_LEVELS.strongLevelsTolerance);
         setStrongLevelsMinTouches(Number(parsed.strongLevelsMinTouches) || DEFAULT_STRONG_LEVELS.strongLevelsMinTouches);
         setStrongLevelsMaxCount(Number(parsed.strongLevelsMaxCount) || DEFAULT_STRONG_LEVELS.strongLevelsMaxCount);
+        setShowClusters(!!parsed.showClusters);
+        setShowClusterSpike(!!parsed.showClusterSpike);
+        setClusterSpikeMultiplier(Number(parsed.clusterSpikeMultiplier) || DEFAULT_CLUSTERS.clusterSpikeMultiplier);
       }
     } catch {}
   }, [SETTINGS_STORAGE_KEY, rFromUrl]);
@@ -467,6 +549,54 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     strongLevelsMaxCount,
   ]);
 
+  // Fetch footprints for the currently loaded brick range whenever the dataset
+  // changes or clusters are toggled on. REST footprints share the brick ts, so
+  // they key straight into clustersByTs; live updates arrive via the WS stream.
+  useEffect(() => {
+    if (!chart || !showClusters || !r) { return; }
+    const dl = chart.getDataList?.();
+    if (!dl?.length) { return; }
+    const minTs = Number(dl[0].timestamp);
+    const maxTs = Number(dl[dl.length - 1].timestamp);
+    if (!Number.isFinite(minTs) || !Number.isFinite(maxTs)) { return; }
+    fetchXvClusters(r, minTs, maxTs + 1)
+      .then((items) => mergeClusters(items, (it) => String(it.ts)))
+      .catch((e) => console.error('xv clusters load failed:', e?.message));
+  }, [chart, showClusters, klinesVersion, r, fetchXvClusters, mergeClusters]);
+
+  // Cluster overlays are per visible candle, so redraw on zoom/scroll too.
+  useEffect(() => {
+    if (!chart) { return; }
+    const bump = () => setClustersTick((t) => t + 1);
+    chart.subscribeAction?.('onZoom', bump);
+    chart.subscribeAction?.('onScroll', bump);
+    return () => {
+      chart.unsubscribeAction?.('onZoom', bump);
+      chart.unsubscribeAction?.('onScroll', bump);
+    };
+  }, [chart]);
+
+  // Draw cluster footprints — reuses drawClusterKlinesForVisible from the dhm graph.
+  useEffect(() => {
+    if (!chart) { return; }
+    if (!showClusters) {
+      chart.removeOverlay({ name: 'clusterKline' });
+      return;
+    }
+    drawClusterKlinesForVisible(chart, clustersByTs, {
+      showSpike: showClusterSpike,
+      spikeMultiplier: clusterSpikeMultiplier,
+    });
+  }, [
+    chart,
+    clustersByTs,
+    clustersTick,
+    klinesVersion,
+    showClusters,
+    showClusterSpike,
+    clusterSpikeMultiplier,
+  ]);
+
   const onSaveChartSettings = useCallback((values: any) => {
     const nextVolumeWidth = !!values.volumeWidth;
     const nextR = values.r != null ? String(values.r) : '';
@@ -475,6 +605,9 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     const nextTolerance = Number(values.strongLevelsTolerance) || DEFAULT_STRONG_LEVELS.strongLevelsTolerance;
     const nextMinTouches = Number(values.strongLevelsMinTouches) || DEFAULT_STRONG_LEVELS.strongLevelsMinTouches;
     const nextMaxCount = Number(values.strongLevelsMaxCount) || DEFAULT_STRONG_LEVELS.strongLevelsMaxCount;
+    const nextShowClusters = !!values.showClusters;
+    const nextShowClusterSpike = !!values.showClusterSpike;
+    const nextClusterSpikeMultiplier = Number(values.clusterSpikeMultiplier) || DEFAULT_CLUSTERS.clusterSpikeMultiplier;
     setVolumeWidth(nextVolumeWidth);
     setR(nextR);
     setShowStrongLevels(nextShowStrongLevels);
@@ -482,6 +615,9 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     setStrongLevelsTolerance(nextTolerance);
     setStrongLevelsMinTouches(nextMinTouches);
     setStrongLevelsMaxCount(nextMaxCount);
+    setShowClusters(nextShowClusters);
+    setShowClusterSpike(nextShowClusterSpike);
+    setClusterSpikeMultiplier(nextClusterSpikeMultiplier);
     setOpenChartSettings(false);
     if (typeof window !== 'undefined') {
       try {
@@ -495,6 +631,9 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
             strongLevelsTolerance: nextTolerance,
             strongLevelsMinTouches: nextMinTouches,
             strongLevelsMaxCount: nextMaxCount,
+            showClusters: nextShowClusters,
+            showClusterSpike: nextShowClusterSpike,
+            clusterSpikeMultiplier: nextClusterSpikeMultiplier,
           }),
         );
       } catch {}
@@ -529,6 +668,9 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
               strongLevelsTolerance,
               strongLevelsMinTouches,
               strongLevelsMaxCount,
+              showClusters,
+              showClusterSpike,
+              clusterSpikeMultiplier,
             }}
             onSubmit={onSaveChartSettings}
           />

@@ -52,6 +52,16 @@ export function RangeXvSettingsForm({ defaultValues, onSubmit }: any) {
               size='small'
               fullWidth
             />
+            <CheckboxElement name='showClusters' label='Показывать кластеры (footprint)?' />
+            <CheckboxElement name='showClusterSpike' label='Кластеры: подсветка спайков' />
+            <TextFieldElement
+              name='clusterSpikeMultiplier'
+              label='Кластеры: множитель спайка'
+              type='number'
+              inputProps={{ min: 1, step: 0.5 }}
+              size='small'
+              fullWidth
+            />
           </Box>
           <CustomFormButton />
         </Container>
