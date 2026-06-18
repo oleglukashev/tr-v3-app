@@ -133,6 +133,11 @@ export default function AdminHeader() {
               >
                 Stats
               </Button>
+              <Button
+                href="/admin/data"
+              >
+                Data
+              </Button>
             </Box>
           </Box>
         </StyledToolbar>
