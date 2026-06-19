@@ -46,6 +46,7 @@ function keyLabel(row: DatasetRow): string {
 
 export default function AdminDataView() {
   const [tab, setTab] = useState(0);
+  const [pairFilter, setPairFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<"all" | "general" | "xv">("all");
   const [datasetFilter, setDatasetFilter] = useState<string>("all");
   const [pending, setPending] = useState<DatasetRow | null>(null);
@@ -58,6 +59,17 @@ export default function AdminDataView() {
     () => (Array.isArray(data) ? data.filter((r: DatasetRow) => r.kind === kind) : []),
     [data, kind],
   );
+
+  // Distinct pairs available in this tab, for the Pair selectbox.
+  const pairOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const r of tabRows) {
+      seen.set(String(r.pairId), r.pairName);
+    }
+    return Array.from(seen, ([value, label]) => ({ value, label })).sort((a, b) =>
+      a.label.localeCompare(b.label),
+    );
+  }, [tabRows]);
 
   // Distinct datasets available in this tab, for the Dataset selectbox.
   const datasetOptions = useMemo(() => {
@@ -74,15 +86,17 @@ export default function AdminDataView() {
     () =>
       tabRows.filter(
         (r) =>
+          (pairFilter === "all" || String(r.pairId) === pairFilter) &&
           (typeFilter === "all" || r.type === typeFilter) &&
           (datasetFilter === "all" || `${r.keyField}:${r.key}` === datasetFilter),
       ),
-    [tabRows, typeFilter, datasetFilter],
+    [tabRows, pairFilter, typeFilter, datasetFilter],
   );
 
   const onTabChange = (v: number) => {
     setTab(v);
-    setDatasetFilter("all"); // datasets differ per tab
+    setPairFilter("all"); // available pairs/datasets differ per tab
+    setDatasetFilter("all");
   };
 
   const onConfirmDelete = async () => {
@@ -110,6 +124,22 @@ export default function AdminDataView() {
         <CardContent>
           <Box role="tabpanel">
             <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+              <FormControl size="small" sx={{ minWidth: 180 }}>
+                <InputLabel id="data-pair-filter-label">Pair</InputLabel>
+                <Select
+                  labelId="data-pair-filter-label"
+                  label="Pair"
+                  value={pairFilter}
+                  onChange={(e) => setPairFilter(e.target.value as string)}
+                >
+                  <MenuItem value="all">All pairs</MenuItem>
+                  {pairOptions.map((o) => (
+                    <MenuItem key={o.value} value={o.value}>
+                      {o.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
               <FormControl size="small" sx={{ minWidth: 160 }}>
                 <InputLabel id="data-type-filter-label">Type</InputLabel>
                 <Select
