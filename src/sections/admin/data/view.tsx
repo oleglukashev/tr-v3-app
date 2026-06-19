@@ -20,6 +20,10 @@ import {
   DialogContentText,
   DialogActions,
   Button,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import Label from "src/components/label";
@@ -42,15 +46,44 @@ function keyLabel(row: DatasetRow): string {
 
 export default function AdminDataView() {
   const [tab, setTab] = useState(0);
+  const [typeFilter, setTypeFilter] = useState<"all" | "general" | "xv">("all");
+  const [datasetFilter, setDatasetFilter] = useState<string>("all");
   const [pending, setPending] = useState<DatasetRow | null>(null);
   const { data } = useGetDatasetsQuery();
   const [deleteDataset, { isLoading: isDeleting }] = useDeleteDatasetMutation();
 
   const kind = TABS[tab].kind;
-  const rows: DatasetRow[] = useMemo(
+  // Rows for the active tab, before the type/dataset selectbox filters.
+  const tabRows: DatasetRow[] = useMemo(
     () => (Array.isArray(data) ? data.filter((r: DatasetRow) => r.kind === kind) : []),
     [data, kind],
   );
+
+  // Distinct datasets available in this tab, for the Dataset selectbox.
+  const datasetOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const r of tabRows) {
+      seen.set(`${r.keyField}:${r.key}`, keyLabel(r));
+    }
+    return Array.from(seen, ([value, label]) => ({ value, label })).sort((a, b) =>
+      a.label.localeCompare(b.label),
+    );
+  }, [tabRows]);
+
+  const rows: DatasetRow[] = useMemo(
+    () =>
+      tabRows.filter(
+        (r) =>
+          (typeFilter === "all" || r.type === typeFilter) &&
+          (datasetFilter === "all" || `${r.keyField}:${r.key}` === datasetFilter),
+      ),
+    [tabRows, typeFilter, datasetFilter],
+  );
+
+  const onTabChange = (v: number) => {
+    setTab(v);
+    setDatasetFilter("all"); // datasets differ per tab
+  };
 
   const onConfirmDelete = async () => {
     if (!pending) return;
@@ -69,13 +102,44 @@ export default function AdminDataView() {
   return (
     <Container sx={{ pt: 2 }}>
       <Card>
-        <Tabs value={tab} onChange={(_, v) => setTab(v)}>
+        <Tabs value={tab} onChange={(_, v) => onTabChange(v)}>
           {TABS.map((t) => (
             <Tab key={t.kind} label={t.label} />
           ))}
         </Tabs>
         <CardContent>
           <Box role="tabpanel">
+            <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+              <FormControl size="small" sx={{ minWidth: 160 }}>
+                <InputLabel id="data-type-filter-label">Type</InputLabel>
+                <Select
+                  labelId="data-type-filter-label"
+                  label="Type"
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value as any)}
+                >
+                  <MenuItem value="all">All types</MenuItem>
+                  <MenuItem value="general">General</MenuItem>
+                  <MenuItem value="xv">XV</MenuItem>
+                </Select>
+              </FormControl>
+              <FormControl size="small" sx={{ minWidth: 200 }}>
+                <InputLabel id="data-dataset-filter-label">Dataset</InputLabel>
+                <Select
+                  labelId="data-dataset-filter-label"
+                  label="Dataset"
+                  value={datasetFilter}
+                  onChange={(e) => setDatasetFilter(e.target.value as string)}
+                >
+                  <MenuItem value="all">All datasets</MenuItem>
+                  {datasetOptions.map((o) => (
+                    <MenuItem key={o.value} value={o.value}>
+                      {o.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
             <Table>
               <TableHead>
                 <TableRow>
