@@ -1,9 +1,11 @@
 'use client'
 
 import { useMemo, useState } from "react";
+import Container from "@mui/material/Container";
 import {
   Box,
-  Container,
+  Card,
+  CardContent,
   Tabs,
   Tab,
   Table,
@@ -12,9 +14,6 @@ import {
   TableRow,
   TableCell,
   IconButton,
-  Chip,
-  Typography,
-  CircularProgress,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -23,6 +22,7 @@ import {
   Button,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
+import Label from "src/components/label";
 import {
   useGetDatasetsQuery,
   useDeleteDatasetMutation,
@@ -43,7 +43,7 @@ function keyLabel(row: DatasetRow): string {
 export default function AdminDataView() {
   const [tab, setTab] = useState(0);
   const [pending, setPending] = useState<DatasetRow | null>(null);
-  const { data, isLoading, isFetching } = useGetDatasetsQuery();
+  const { data } = useGetDatasetsQuery();
   const [deleteDataset, { isLoading: isDeleting }] = useDeleteDatasetMutation();
 
   const kind = TABS[tab].kind;
@@ -67,72 +67,67 @@ export default function AdminDataView() {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ py: 3 }}>
-      <Typography variant="h5" sx={{ mb: 2 }}>
-        Data
-      </Typography>
-
-      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
-        {TABS.map((t) => (
-          <Tab key={t.kind} label={t.label} />
-        ))}
-      </Tabs>
-
-      {(isLoading || isFetching) && (
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, py: 2 }}>
-          <CircularProgress size={18} />
-          <Typography variant="body2">Loading…</Typography>
-        </Box>
-      )}
-
-      <Table size="small">
-        <TableHead>
-          <TableRow>
-            <TableCell>Pair</TableCell>
-            <TableCell>Type</TableCell>
-            <TableCell>Dataset</TableCell>
-            <TableCell align="right">Rows</TableCell>
-            <TableCell align="right">Actions</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {rows.map((row) => (
-            <TableRow key={`${row.table}:${row.pairId}:${row.key}`} hover>
-              <TableCell>{row.pairName}</TableCell>
-              <TableCell>
-                <Chip
-                  size="small"
-                  label={row.type === "xv" ? "XV" : "General"}
-                  color={row.type === "xv" ? "primary" : "default"}
-                  variant="outlined"
-                />
-              </TableCell>
-              <TableCell>{keyLabel(row)}</TableCell>
-              <TableCell align="right">{row.count.toLocaleString()}</TableCell>
-              <TableCell align="right">
-                <IconButton
-                  aria-label="delete"
-                  size="small"
-                  color="error"
-                  disabled={isDeleting}
-                  onClick={() => setPending(row)}
-                >
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </TableCell>
-            </TableRow>
+    <Container sx={{ pt: 2 }}>
+      <Card>
+        <Tabs value={tab} onChange={(_, v) => setTab(v)}>
+          {TABS.map((t) => (
+            <Tab key={t.kind} label={t.label} />
           ))}
-          {!isLoading && rows.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={5}>
-                <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-                  No datasets.
-                </Typography>
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+        </Tabs>
+        <CardContent>
+          <Box role="tabpanel">
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Pair</TableCell>
+                  <TableCell>Type</TableCell>
+                  <TableCell>Dataset</TableCell>
+                  <TableCell sx={{ textAlign: 'right' }}>Rows</TableCell>
+                  <TableCell sx={{ textAlign: 'right' }}>Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {rows.map((row) => (
+                  <TableRow key={`${row.table}:${row.pairId}:${row.key}`}>
+                    <TableCell>
+                      <Label color="success">{row.pairName}</Label>
+                    </TableCell>
+                    <TableCell>
+                      <Label color={row.type === "xv" ? "primary" : "default"}>
+                        {row.type === "xv" ? "XV" : "General"}
+                      </Label>
+                    </TableCell>
+                    <TableCell>
+                      <Label color="info">{keyLabel(row)}</Label>
+                    </TableCell>
+                    <TableCell sx={{ textAlign: 'right' }}>
+                      <Label color="warning">{row.count.toLocaleString()}</Label>
+                    </TableCell>
+                    <TableCell sx={{ textAlign: 'right' }}>
+                      <IconButton
+                        aria-label="delete"
+                        size="small"
+                        color="error"
+                        disabled={isDeleting}
+                        onClick={() => setPending(row)}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {rows.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} sx={{ color: 'text.secondary' }}>
+                      No datasets.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </Box>
+        </CardContent>
+      </Card>
 
       <Dialog open={!!pending} onClose={() => setPending(null)}>
         <DialogTitle>Delete dataset?</DialogTitle>
