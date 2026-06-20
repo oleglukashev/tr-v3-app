@@ -32,6 +32,8 @@ export const DEFAULT_XV_BACKTEST_VALUES = {
   minTrendCandles: 2,
   riskReward: 2,
   breakEvenAfterBars: 0,
+  entryFeePct: 0,
+  exitFeePct: 0,
   direction: '',
   maxBarsToHold: 50,
   startTs: Date.UTC(2026, 0, 1),
@@ -97,6 +99,22 @@ export function XvBacktestForm({ defaultValues, onSubmit, isRunning }: any) {
           label="Безубыток после N баров по тренду (0 = выкл)"
           type="number"
           inputProps={{ step: 1, min: 0 }}
+          size="small"
+          fullWidth
+        />
+        <TextFieldElement
+          name="entryFeePct"
+          label="Комиссия входа (% от цены)"
+          type="number"
+          inputProps={{ step: 'any', min: 0 }}
+          size="small"
+          fullWidth
+        />
+        <TextFieldElement
+          name="exitFeePct"
+          label="Комиссия выхода (% от цены)"
+          type="number"
+          inputProps={{ step: 'any', min: 0 }}
           size="small"
           fullWidth
         />

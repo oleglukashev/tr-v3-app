@@ -39,6 +39,10 @@ export type XvBacktestSettings = {
   /** Move the stop to entry (break-even) once price runs this many bars (×R) in
    *  the position's favour after entry. 0 disables it. */
   breakEvenAfterBars: number;
+  /** Entry fee as a percent of the entry price. */
+  entryFeePct: number;
+  /** Exit fee as a percent of the exit price. */
+  exitFeePct: number;
   /** '' = both, 'long' = bullish reversals only, 'short' = bearish only. */
   direction?: '' | 'long' | 'short';
   /** Bricks to wait for take/stop before marking the trade unresolved. */
@@ -63,6 +67,8 @@ export type XvTrade = {
   rr: number;
   exitTs: number | null;
   exitPrice: number | null;
+  /** Realised PnL in R units, net of entry+exit fees. null while unresolved. */
+  pnlR: number | null;
   // Mirrors the dhm session shape enough for the shared UI/overlays.
   data: { kline1: XvKline; high: number; low: number };
 };
@@ -74,6 +80,8 @@ const DEFAULTS: XvBacktestSettings = {
   minTrendCandles: 2,
   riskReward: 2,
   breakEvenAfterBars: 0,
+  entryFeePct: 0,
+  exitFeePct: 0,
   direction: '',
   maxBarsToHold: 50,
 };
@@ -163,6 +171,14 @@ export function runXvBacktest(
       }
     }
 
+    // Realised PnL in R, net of fees (only for closed trades; length stays null).
+    let pnlR: number | null = null;
+    if (exitPrice != null) {
+      const gross = direction === 'up' ? exitPrice - entry : entry - exitPrice;
+      const fees = entry * (s.entryFeePct / 100) + exitPrice * (s.exitFeePct / 100);
+      pnlR = (gross - fees) / risk;
+    }
+
     trades.push({
       id: id++,
       direction,
@@ -175,6 +191,7 @@ export function runXvBacktest(
       rr: s.riskReward,
       exitTs,
       exitPrice,
+      pnlR,
       data: {
         kline1: b,
         high: Math.max(entry, stop, take),

@@ -716,6 +716,8 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
           minTrendCandles: Number(values.minTrendCandles),
           riskReward: Number(values.riskReward),
           breakEvenAfterBars: Number(values.breakEvenAfterBars),
+          entryFeePct: Number(values.entryFeePct),
+          exitFeePct: Number(values.exitFeePct),
           direction: values.direction || '',
           maxBarsToHold: Number(values.maxBarsToHold),
         },
@@ -755,8 +757,9 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   const wins = testSessions.filter((t) => t.status === 'finished').length;
   const losses = testSessions.filter((t) => t.status === 'finished_by_lose').length;
   const winRate = wins + losses ? Math.round((wins / (wins + losses)) * 100) : 0;
+  // ΣR uses the realised, fee-net PnL per trade (null while unresolved).
   const totalR = testSessions.reduce(
-    (a, t) => a + (t.status === 'finished' ? Number(t.rr) || 0 : t.status === 'finished_by_lose' ? -1 : 0),
+    (a, t) => a + (Number.isFinite(t.pnlR) ? Number(t.pnlR) : 0),
     0,
   );
   const uniqueStatuses = Array.from(new Set(testSessions.map((t) => t.status)));
