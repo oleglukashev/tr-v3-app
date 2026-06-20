@@ -80,8 +80,8 @@ const DEFAULTS: XvBacktestSettings = {
   minTrendCandles: 2,
   riskReward: 2,
   breakEvenAfterBars: 0,
-  entryFeePct: 0,
-  exitFeePct: 0,
+  entryFeePct: 0.055,
+  exitFeePct: 0.02,
   direction: '',
   maxBarsToHold: 50,
 };
