@@ -1,14 +1,13 @@
 /**
  * Range-XV reversal backtest.
  *
- * Strategy: a 2-brick reversal pattern.
- *  - The brick BEFORE the reversal ("prior") must be quiet — its volume below a
+ * Strategy: a 2-brick reversal pattern (candle A then candle B).
+ *  - Candle A (the brick before the reversal) must be quiet — its volume below a
  *    fraction of the rolling-average volume.
- *  - The reversal brick flips direction and must be heavy — its volume above a
- *    multiple of the rolling-average volume.
- *  - Enter at the reversal brick's CLOSE, in the reversal's direction
- *    (bullish reversal → long, bearish reversal → short).
- *  - Stop behind the reversal brick: low (long) / high (short).
+ *  - Candle B (the reversal brick) flips direction and must be heavy — its volume
+ *    above a multiple of the rolling-average volume.
+ *  - Enter at B's CLOSE, in B's direction (bullish reversal → long, bearish → short).
+ *  - Stop behind B: low (long) / high (short).
  *  - Take at a configurable R:R from entry.
  */
 
@@ -22,18 +21,18 @@ export type XvKline = {
 };
 
 export type XvBacktestSettings = {
-  /** Prior brick qualifies if its volume <= this * rolling-average volume. */
-  priorVolumeMaxRatio: number;
-  /** Prior brick max wick as a fraction of its high-low range (0..1). The total
+  /** Candle A qualifies if its volume <= this * rolling-average volume. */
+  aVolumeMaxRatio: number;
+  /** Candle A max wick as a fraction of its high-low range (0..1). The total
    *  wick is (range - body); 1 disables the filter, lower requires a cleaner
    *  (smaller-wicked) quiet brick. */
-  priorMaxWickRatio: number;
-  /** Prior brick max wick in ABSOLUTE price on the trade side (high-close for a
+  aMaxWickRatio: number;
+  /** Candle A max wick in ABSOLUTE price on the trade side (high-close for a
    *  long, close-low for a short). 0 disables this filter. */
-  priorMaxWickPrice: number;
-  /** Reversal brick qualifies if its volume >= this * rolling-average volume. */
-  reversalVolumeMinRatio: number;
-  /** Bricks used for the rolling-average volume (excludes the reversal brick). */
+  aMaxWickPrice: number;
+  /** Candle B qualifies if its volume >= this * rolling-average volume. */
+  bVolumeMinRatio: number;
+  /** Bricks used for the rolling-average volume (excludes candle B). */
   volumeLookback: number;
   /** Take distance as a multiple of risk (R:R). */
   riskReward: number;
@@ -49,7 +48,7 @@ export type XvTrade = {
   id: number;
   direction: 'up' | 'down'; // up = long, down = short
   status: XvTradeStatus;
-  startTs: number; // reversal brick ts (entry bar)
+  startTs: number; // candle B ts (entry bar)
   entry: number;
   stop: number;
   take: number;
@@ -62,10 +61,10 @@ export type XvTrade = {
 };
 
 const DEFAULTS: XvBacktestSettings = {
-  priorVolumeMaxRatio: 0.8,
-  priorMaxWickRatio: 1,
-  priorMaxWickPrice: 0,
-  reversalVolumeMinRatio: 1.5,
+  aVolumeMaxRatio: 0.8,
+  aMaxWickRatio: 1,
+  aMaxWickPrice: 0,
+  bVolumeMinRatio: 1.5,
   volumeLookback: 20,
   riskReward: 2,
   direction: '',
@@ -81,56 +80,53 @@ export function runXvBacktest(klines: XvKline[], settings: Partial<XvBacktestSet
   let id = 1;
 
   for (let i = 1; i < klines.length; i += 1) {
-    const prior = klines[i - 1];
-    const rev = klines[i];
-    if (!prior || !rev) continue;
+    const a = klines[i - 1]; // candle A — the quiet brick before the reversal
+    const b = klines[i]; // candle B — the reversal brick
+    if (!a || !b) continue;
 
-    const priorUp = prior.close >= prior.open;
-    const revUp = rev.close >= rev.open;
-    if (priorUp === revUp) continue; // not a reversal
+    const aUp = a.close >= a.open;
+    const bUp = b.close >= b.open;
+    if (aUp === bUp) continue; // B must reverse A's direction
 
-    // Rolling-average volume over the bricks before the reversal.
+    // Rolling-average volume over the bricks before candle B.
     const from = Math.max(0, i - lookback);
     const window = klines.slice(from, i);
     if (window.length === 0) continue;
-    const avgVol = window.reduce((a, k) => a + (Number(k.volume) || 0), 0) / window.length;
+    const avgVol = window.reduce((acc, k) => acc + (Number(k.volume) || 0), 0) / window.length;
     if (!(avgVol > 0)) continue;
 
-    if (!(prior.volume <= s.priorVolumeMaxRatio * avgVol)) continue; // prior must be quiet
-    if (!(rev.volume >= s.reversalVolumeMinRatio * avgVol)) continue; // reversal must be heavy
+    if (!(a.volume <= s.aVolumeMaxRatio * avgVol)) continue; // A must be quiet
+    if (!(b.volume >= s.bVolumeMinRatio * avgVol)) continue; // B must be heavy
 
-    // Prior (quiet) brick wick filter: total wick (range - body) as a fraction
-    // of its range must not exceed the configured cap.
-    const priorRange = prior.high - prior.low;
-    if (priorRange > 0) {
-      const priorBody = Math.abs(prior.close - prior.open);
-      const priorWickRatio = (priorRange - priorBody) / priorRange;
-      if (priorWickRatio > s.priorMaxWickRatio) continue;
+    // Candle A wick filter: total wick (range - body) as a fraction of its range.
+    const aRange = a.high - a.low;
+    if (aRange > 0) {
+      const aBody = Math.abs(a.close - a.open);
+      const aWickRatio = (aRange - aBody) / aRange;
+      if (aWickRatio > s.aMaxWickRatio) continue;
     }
 
-    const direction: 'up' | 'down' = revUp ? 'up' : 'down';
+    const direction: 'up' | 'down' = bUp ? 'up' : 'down';
     if (s.direction === 'long' && direction !== 'up') continue;
     if (s.direction === 'short' && direction !== 'down') continue;
 
-    // Prior (quiet) brick wick in ABSOLUTE price on the trade side: high-close
-    // for a long, close-low for a short. 0 disables this filter.
-    if (s.priorMaxWickPrice > 0) {
-      const priorSideWick = direction === 'up'
-        ? prior.high - prior.close
-        : prior.close - prior.low;
-      if (priorSideWick > s.priorMaxWickPrice) continue;
+    // Candle A wick in ABSOLUTE price on the trade side: high-close for a long,
+    // close-low for a short. 0 disables this filter.
+    if (s.aMaxWickPrice > 0) {
+      const aSideWick = direction === 'up' ? a.high - a.close : a.close - a.low;
+      if (aSideWick > s.aMaxWickPrice) continue;
     }
 
-    const entry = rev.close;
+    const entry = b.close;
     let stop: number;
     let risk: number;
     let take: number;
     if (direction === 'up') {
-      stop = rev.low;
+      stop = b.low;
       risk = entry - stop;
       take = entry + s.riskReward * risk;
     } else {
-      stop = rev.high;
+      stop = b.high;
       risk = stop - entry;
       take = entry - s.riskReward * risk;
     }
@@ -155,7 +151,7 @@ export function runXvBacktest(klines: XvKline[], settings: Partial<XvBacktestSet
       id: id++,
       direction,
       status,
-      startTs: rev.ts,
+      startTs: b.ts,
       entry,
       stop,
       take,
@@ -164,7 +160,7 @@ export function runXvBacktest(klines: XvKline[], settings: Partial<XvBacktestSet
       exitTs,
       exitPrice,
       data: {
-        kline1: rev,
+        kline1: b,
         high: Math.max(entry, stop, take),
         low: Math.min(entry, stop, take),
       },
