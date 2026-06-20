@@ -711,6 +711,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
           aVolumeMax: Number(values.aVolumeMax),
           aMaxWickBodyPct: Number(values.aMaxWickBodyPct),
           bVolumeMin: Number(values.bVolumeMin),
+          minTrendCandles: Number(values.minTrendCandles),
           riskReward: Number(values.riskReward),
           direction: values.direction || '',
           maxBarsToHold: Number(values.maxBarsToHold),

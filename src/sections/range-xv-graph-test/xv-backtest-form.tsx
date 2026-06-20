@@ -29,6 +29,7 @@ export const DEFAULT_XV_BACKTEST_VALUES = {
   aVolumeMax: 0,
   aMaxWickBodyPct: 0,
   bVolumeMin: 0,
+  minTrendCandles: 2,
   riskReward: 2,
   direction: '',
   maxBarsToHold: 50,
@@ -71,6 +72,14 @@ export function XvBacktestForm({ defaultValues, onSubmit, isRunning }: any) {
           label="Свеча B (разворотная): объём ≥ (0 = выкл)"
           type="number"
           inputProps={{ step: 'any', min: 0 }}
+          size="small"
+          fullWidth
+        />
+        <TextFieldElement
+          name="minTrendCandles"
+          label="Мин. трендовых свечей перед разворотной (≥2)"
+          type="number"
+          inputProps={{ step: 1, min: 2 }}
           size="small"
           fullWidth
         />

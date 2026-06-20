@@ -2,8 +2,8 @@
  * Range-XV reversal backtest.
  *
  * Strategy: a 2-brick reversal pattern (candle A then candle B).
- *  - Candle A (the brick before the reversal) must itself NOT be a reversal — it
- *    continues the direction of the brick before it.
+ *  - There must be a trend of >= minTrendCandles same-direction bricks ending at
+ *    candle A (so A continues the trend and is never itself a reversal).
  *  - Candle A must be quiet — its volume at or below an absolute threshold.
  *  - Candle B (the reversal brick) flips direction and must be heavy — its volume
  *    at or above an absolute threshold.
@@ -30,6 +30,9 @@ export type XvBacktestSettings = {
   aMaxWickBodyPct: number;
   /** Candle B qualifies if its (absolute) volume >= this. 0 disables it. */
   bVolumeMin: number;
+  /** Minimum consecutive same-direction bricks ending at A (the trend before B;
+   *  A itself counts). >= 2, so A is always a continuation, never a reversal. */
+  minTrendCandles: number;
   /** Take distance as a multiple of risk (R:R). */
   riskReward: number;
   /** '' = both, 'long' = bullish reversals only, 'short' = bearish only. */
@@ -60,6 +63,7 @@ const DEFAULTS: XvBacktestSettings = {
   aVolumeMax: 0,
   aMaxWickBodyPct: 0,
   bVolumeMin: 0,
+  minTrendCandles: 2,
   riskReward: 2,
   direction: '',
   maxBarsToHold: 50,
@@ -69,20 +73,27 @@ const DEFAULTS: XvBacktestSettings = {
 export function runXvBacktest(klines: XvKline[], settings: Partial<XvBacktestSettings>): XvTrade[] {
   const s: XvBacktestSettings = { ...DEFAULTS, ...settings };
   const maxBars = Math.max(1, Math.floor(s.maxBarsToHold) || 1);
+  const minTrend = Math.max(2, Math.floor(s.minTrendCandles) || 2);
   const trades: XvTrade[] = [];
   let id = 1;
 
-  for (let i = 2; i < klines.length; i += 1) {
-    const beforeA = klines[i - 2]; // brick before A — to confirm A is not a reversal
-    const a = klines[i - 1]; // candle A — the quiet brick before the reversal
+  for (let i = 1; i < klines.length; i += 1) {
+    const a = klines[i - 1]; // candle A — the last trend brick before the reversal
     const b = klines[i]; // candle B — the reversal brick
-    if (!beforeA || !a || !b) continue;
+    if (!a || !b) continue;
 
-    const beforeAUp = beforeA.close >= beforeA.open;
     const aUp = a.close >= a.open;
     const bUp = b.close >= b.open;
-    if (beforeAUp !== aUp) continue; // A must continue the prior brick (A is NOT a reversal)
     if (aUp === bUp) continue; // B must reverse A's direction
+
+    // Trend length: consecutive same-direction bricks ending at A (A counts).
+    // Requiring >= minTrend (>= 2) also makes A a continuation, never a reversal.
+    let trendLen = 1;
+    for (let t = i - 2; t >= 0; t -= 1) {
+      if ((klines[t].close >= klines[t].open) !== aUp) break;
+      trendLen += 1;
+    }
+    if (trendLen < minTrend) continue;
 
     // Absolute volume filters (0 = off).
     if (s.aVolumeMax > 0 && a.volume > s.aVolumeMax) continue; // A must be quiet
