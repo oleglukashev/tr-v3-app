@@ -2,11 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { init, dispose, registerIndicator, registerOverlay } from "klinecharts";
-import { Box } from "@mui/material";
+import { Box, Drawer, Button, Tabs, Tab, Chip, Typography, Divider } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
+import moment from "moment";
 import CustomDialog from "src/components/custom-dialog/custom-dialog";
-import { resizeChart, strongLevel, clusterKline } from "@/src/helpers/klinecharts.helper";
+import { resizeChart, strongLevel, clusterKline, testDhmUp, testDhmDown } from "@/src/helpers/klinecharts.helper";
 import { drawStrongLevels, drawClusterKlinesForVisible } from "@/src/utils/klinecharts";
 import { RangeXvSettingsForm } from "@/src/sections/range-xv-graph/range-xv-settings-form";
+import { XvBacktestForm, DEFAULT_XV_BACKTEST_VALUES } from "@/src/sections/range-xv-graph-test/xv-backtest-form";
+import { runXvBacktestForUI } from "@/src/utils/xv-backtest";
 import { getBidasksWebSocketUrl } from "@/src/utils/bidasksWebSocket";
 import MapTools from "@/src/components/map-tools/map-tools";
 import { useMapDrawingOverlayRef } from "@/src/components/map-tools/use-map-drawing-overlay-ref";
@@ -14,6 +18,22 @@ import { useMapDrawingOverlayRef } from "@/src/components/map-tools/use-map-draw
 // Strong levels (S/R) + cluster footprint overlays — reused as-is from the dhm graph.
 registerOverlay(strongLevel);
 registerOverlay(clusterKline());
+// Backtest entry markers — reused from the dhm graph.
+registerOverlay(testDhmUp);
+registerOverlay(testDhmDown);
+
+/** Backtest status → MUI chip/Label color. */
+function xvStatusColor(status: string): 'success' | 'error' | 'info' {
+  if (status === 'finished') return 'success';
+  if (status === 'finished_by_lose') return 'error';
+  return 'info';
+}
+
+const XV_STATUS_LABEL: Record<string, string> = {
+  finished: 'Тейк',
+  finished_by_lose: 'Стоп',
+  finished_by_length: 'Не закрыта',
+};
 
 // Cluster (volume-by-price footprint) defaults, mirroring the dhm graph.
 const DEFAULT_CLUSTERS = {
@@ -156,6 +176,18 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   const [chart, setChart] = useState<any>(null);
   const [chartReady, setChartReady] = useState<boolean>(false);
   const { onDrawingInteractionChange } = useMapDrawingOverlayRef();
+
+  // --- Backtest (Test) panel — reversal strategy on XV bricks ---
+  const theme = useTheme();
+  const BACKTEST_STORAGE_KEY = `rangeXvBacktest_${pairId}`;
+  const [isTestPanelOpen, setIsTestPanelOpen] = useState<boolean>(false);
+  const [panelHeight, setPanelHeight] = useState<number>(340);
+  const [isRunningTest, setIsRunningTest] = useState<boolean>(false);
+  const [testSessions, setTestSessions] = useState<any[]>([]);
+  const [testSessionsTab, setTestSessionsTab] = useState<string>('all');
+  const [backtestDefaults, setBacktestDefaults] = useState<any>(DEFAULT_XV_BACKTEST_VALUES);
+  const dragStartY = useRef<number | null>(null);
+  const dragStartHeight = useRef<number>(340);
 
   // One XV klines page. With `limit` it's cursor pagination (newest `limit`
   // bricks before `endTs`, chronological); without it, a plain ts-range fetch.
@@ -637,6 +669,97 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     }
   }, [SETTINGS_STORAGE_KEY]);
 
+  // Restore saved backtest settings (per pair).
+  useEffect(() => {
+    if (typeof window === 'undefined') { return; }
+    try {
+      const saved = localStorage.getItem(BACKTEST_STORAGE_KEY);
+      if (saved) { setBacktestDefaults({ ...DEFAULT_XV_BACKTEST_VALUES, ...JSON.parse(saved) }); }
+    } catch {}
+  }, [BACKTEST_STORAGE_KEY]);
+
+  // Resize the bottom Test drawer by dragging its handle.
+  const onDragHandleMouseDown = useCallback((e: React.MouseEvent) => {
+    dragStartY.current = e.clientY;
+    dragStartHeight.current = panelHeight;
+    const onMove = (ev: MouseEvent) => {
+      if (dragStartY.current === null) { return; }
+      const delta = dragStartY.current - ev.clientY;
+      setPanelHeight(Math.max(160, Math.min(window.innerHeight * 0.85, dragStartHeight.current + delta)));
+    };
+    const onUp = () => {
+      dragStartY.current = null;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [panelHeight]);
+
+  // Run the reversal backtest over the (pair, r) XV series.
+  const onRunTestSubmit = useCallback(async (values: any) => {
+    if (!r) { return; }
+    try { localStorage.setItem(BACKTEST_STORAGE_KEY, JSON.stringify(values)); } catch {}
+    setIsRunningTest(true);
+    try {
+      const trades = await runXvBacktestForUI({
+        pairId: Number(pairId),
+        r: String(r),
+        startTs: Number(values.startTs),
+        finishTs: values.finishTs ? Number(values.finishTs) : null,
+        settings: {
+          priorVolumeMaxRatio: Number(values.priorVolumeMaxRatio),
+          reversalVolumeMinRatio: Number(values.reversalVolumeMinRatio),
+          volumeLookback: Number(values.volumeLookback),
+          riskReward: Number(values.riskReward),
+          direction: values.direction || '',
+          maxBarsToHold: Number(values.maxBarsToHold),
+        },
+        klinesApiBase: KLINES_API_BASE,
+      });
+      setTestSessions(trades);
+      setTestSessionsTab('all');
+    } catch (e: any) {
+      console.error('xv backtest failed:', e?.message);
+    } finally {
+      setIsRunningTest(false);
+    }
+  }, [pairId, r, BACKTEST_STORAGE_KEY]);
+
+  // Draw entry markers for the (filtered) backtest trades on the chart.
+  useEffect(() => {
+    if (!chart) { return; }
+    chart.removeOverlay({ name: 'testDhmUp' });
+    chart.removeOverlay({ name: 'testDhmDown' });
+    if (!isTestPanelOpen || !testSessions.length) { return; }
+    const visible = testSessionsTab === 'all'
+      ? testSessions
+      : testSessions.filter((t) => t.status === testSessionsTab);
+    for (const t of visible) {
+      const k = t.data?.kline1;
+      if (!k) { continue; }
+      const anchor = t.direction === 'up' ? k.low : k.high;
+      chart.createOverlay({
+        name: t.direction === 'up' ? 'testDhmUp' : 'testDhmDown',
+        extendData: { ts: k.ts, tf: r, status: t.status },
+        points: [{ timestamp: Number(k.ts), value: Number(anchor) }],
+      });
+    }
+  }, [chart, r, isTestPanelOpen, testSessions, testSessionsTab]);
+
+  // Derived backtest stats for the results panel.
+  const wins = testSessions.filter((t) => t.status === 'finished').length;
+  const losses = testSessions.filter((t) => t.status === 'finished_by_lose').length;
+  const winRate = wins + losses ? Math.round((wins / (wins + losses)) * 100) : 0;
+  const totalR = testSessions.reduce(
+    (a, t) => a + (t.status === 'finished' ? Number(t.rr) || 0 : t.status === 'finished_by_lose' ? -1 : 0),
+    0,
+  );
+  const uniqueStatuses = Array.from(new Set(testSessions.map((t) => t.status)));
+  const visibleSessions = testSessionsTab === 'all'
+    ? testSessions
+    : testSessions.filter((t) => t.status === testSessionsTab);
+
   return (
     <main style={{ position: 'relative' }}>
       <Box ref={containerRef} sx={{ width: '100%' }} />
@@ -673,6 +796,150 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
           />
         )}
       />
+
+      {!isTestPanelOpen && (
+        <Button
+          variant="contained"
+          size="small"
+          onClick={() => setIsTestPanelOpen(true)}
+          sx={{
+            position: 'fixed',
+            zIndex: 2,
+            bottom: 0,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            borderBottomLeftRadius: 0,
+            borderBottomRightRadius: 0,
+            minWidth: 80,
+            px: 2,
+          }}
+        >
+          Test
+        </Button>
+      )}
+
+      <Drawer
+        variant="persistent"
+        anchor="bottom"
+        open={isTestPanelOpen}
+        sx={{
+          '& .MuiDrawer-paper': {
+            height: panelHeight,
+            left: 0,
+            right: 0,
+            marginLeft: 'auto',
+            marginRight: 'auto',
+            maxWidth: 'lg',
+            p: 2,
+            pt: 0,
+            borderTop: `1px solid ${theme.palette.divider}`,
+            borderLeft: `1px solid ${theme.palette.divider}`,
+            borderRight: `1px solid ${theme.palette.divider}`,
+            borderTopLeftRadius: 8,
+            borderTopRightRadius: 8,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          },
+        }}
+      >
+        <Box
+          onMouseDown={onDragHandleMouseDown}
+          sx={{ height: 20, cursor: 'ns-resize', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, mb: 0.5, userSelect: 'none' }}
+        >
+          <Box sx={{ width: 40, height: 4, borderRadius: 2, backgroundColor: theme.palette.divider }} />
+        </Box>
+
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, flexShrink: 0 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+            Test — разворотная стратегия (R: {r || '—'})
+          </Typography>
+          <Button size="small" onClick={() => setIsTestPanelOpen(false)}>Скрыть</Button>
+        </Box>
+
+        <Box sx={{ display: 'flex', gap: 2, flex: 1, overflow: 'hidden' }}>
+          {/* left: settings form */}
+          <Box sx={{ width: 320, flexShrink: 0, overflowY: 'auto', pr: 1 }}>
+            <XvBacktestForm
+              defaultValues={backtestDefaults}
+              onSubmit={onRunTestSubmit}
+              isRunning={isRunningTest}
+            />
+          </Box>
+
+          <Divider orientation="vertical" flexItem />
+
+          {/* right: positions */}
+          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, mb: 1, flexShrink: 0 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+                Позиции ({testSessions.length})
+              </Typography>
+              <Chip size="small" color="success" variant="outlined" label={`Тейк: ${wins}`} />
+              <Chip size="small" color="error" variant="outlined" label={`Стоп: ${losses}`} />
+              <Chip size="small" variant="outlined" label={`Winrate: ${winRate}%`} />
+              <Chip
+                size="small"
+                color={totalR >= 0 ? 'success' : 'error'}
+                variant="outlined"
+                label={`Σ R: ${totalR.toFixed(2)}`}
+              />
+            </Box>
+
+            <Tabs
+              value={testSessionsTab}
+              onChange={(_, v) => setTestSessionsTab(v)}
+              variant="scrollable"
+              scrollButtons="auto"
+              sx={{ minHeight: 32, mb: 0.5, flexShrink: 0 }}
+            >
+              <Tab label={`Все (${testSessions.length})`} value="all" sx={{ minHeight: 32, py: 0, fontSize: 12 }} />
+              {uniqueStatuses.map((status) => (
+                <Tab
+                  key={status}
+                  value={status}
+                  sx={{ minHeight: 32, py: 0, fontSize: 12 }}
+                  label={`${XV_STATUS_LABEL[status] ?? status} (${testSessions.filter((t) => t.status === status).length})`}
+                />
+              ))}
+            </Tabs>
+
+            <Box sx={{ overflowY: 'auto', flex: 1 }}>
+              {visibleSessions.map((t) => (
+                <Box
+                  key={t.id}
+                  onClick={() => chart?.scrollToTimestamp?.(Number(t.startTs))}
+                  sx={{
+                    px: 1, py: 0.75,
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    borderBottom: `1px solid ${theme.palette.divider}`,
+                    cursor: 'pointer',
+                    '&:hover': { bgcolor: theme.palette.action.hover },
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, bgcolor: t.direction === 'up' ? '#4caf50' : '#f44336' }} />
+                    <Typography variant="caption" sx={{ color: theme.palette.text.disabled, minWidth: 28 }}>#{t.id}</Typography>
+                    <Chip size="small" color={xvStatusColor(t.status)} variant="outlined" label={XV_STATUS_LABEL[t.status] ?? t.status} sx={{ fontSize: 11 }} />
+                    <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
+                      {t.direction === 'up' ? 'Long' : 'Short'}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>R:R {Number(t.rr).toFixed(1)}</Typography>
+                    <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>{moment(Number(t.startTs)).format('MM-DD HH:mm')}</Typography>
+                  </Box>
+                </Box>
+              ))}
+              {testSessions.length === 0 && (
+                <Typography variant="body2" sx={{ color: theme.palette.text.secondary, py: 2 }}>
+                  Нет позиций. Настройте параметры слева и запустите тест.
+                </Typography>
+              )}
+            </Box>
+          </Box>
+        </Box>
+      </Drawer>
     </main>
   );
 }
