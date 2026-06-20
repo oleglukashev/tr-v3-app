@@ -24,6 +24,10 @@ export type XvKline = {
 export type XvBacktestSettings = {
   /** Prior brick qualifies if its volume <= this * rolling-average volume. */
   priorVolumeMaxRatio: number;
+  /** Prior brick max wick as a fraction of its high-low range (0..1). The total
+   *  wick is (range - body); 1 disables the filter, lower requires a cleaner
+   *  (smaller-wicked) quiet brick. */
+  priorMaxWickRatio: number;
   /** Reversal brick qualifies if its volume >= this * rolling-average volume. */
   reversalVolumeMinRatio: number;
   /** Bricks used for the rolling-average volume (excludes the reversal brick). */
@@ -56,6 +60,7 @@ export type XvTrade = {
 
 const DEFAULTS: XvBacktestSettings = {
   priorVolumeMaxRatio: 0.8,
+  priorMaxWickRatio: 1,
   reversalVolumeMinRatio: 1.5,
   volumeLookback: 20,
   riskReward: 2,
@@ -89,6 +94,15 @@ export function runXvBacktest(klines: XvKline[], settings: Partial<XvBacktestSet
 
     if (!(prior.volume <= s.priorVolumeMaxRatio * avgVol)) continue; // prior must be quiet
     if (!(rev.volume >= s.reversalVolumeMinRatio * avgVol)) continue; // reversal must be heavy
+
+    // Prior (quiet) brick wick filter: total wick (range - body) as a fraction
+    // of its range must not exceed the configured cap.
+    const priorRange = prior.high - prior.low;
+    if (priorRange > 0) {
+      const priorBody = Math.abs(prior.close - prior.open);
+      const priorWickRatio = (priorRange - priorBody) / priorRange;
+      if (priorWickRatio > s.priorMaxWickRatio) continue;
+    }
 
     const direction: 'up' | 'down' = revUp ? 'up' : 'down';
     if (s.direction === 'long' && direction !== 'up') continue;

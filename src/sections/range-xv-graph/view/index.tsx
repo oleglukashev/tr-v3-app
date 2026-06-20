@@ -709,6 +709,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
         finishTs: values.finishTs ? Number(values.finishTs) : null,
         settings: {
           priorVolumeMaxRatio: Number(values.priorVolumeMaxRatio),
+          priorMaxWickRatio: Number(values.priorMaxWickRatio),
           reversalVolumeMinRatio: Number(values.reversalVolumeMinRatio),
           volumeLookback: Number(values.volumeLookback),
           riskReward: Number(values.riskReward),

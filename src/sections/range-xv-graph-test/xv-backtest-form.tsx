@@ -27,6 +27,7 @@ function DateTsField({ name, label }: { name: string; label: string }) {
 
 export const DEFAULT_XV_BACKTEST_VALUES = {
   priorVolumeMaxRatio: 0.8,
+  priorMaxWickRatio: 1,
   reversalVolumeMinRatio: 1.5,
   volumeLookback: 20,
   riskReward: 2,
@@ -55,6 +56,14 @@ export function XvBacktestForm({ defaultValues, onSubmit, isRunning }: any) {
           label="Объём свечи перед разворотной ≤ (× средн.)"
           type="number"
           inputProps={{ step: 0.1, min: 0 }}
+          size="small"
+          fullWidth
+        />
+        <TextFieldElement
+          name="priorMaxWickRatio"
+          label="Макс. фитиль свечи с малым объёмом (доля 0–1)"
+          type="number"
+          inputProps={{ step: 0.05, min: 0, max: 1 }}
           size="small"
           fullWidth
         />
