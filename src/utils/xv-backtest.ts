@@ -2,8 +2,9 @@
  * Range-XV reversal backtest.
  *
  * Strategy: a 2-brick reversal pattern (candle A then candle B).
- *  - Candle A (the brick before the reversal) must be quiet — its volume at or
- *    below an absolute threshold.
+ *  - Candle A (the brick before the reversal) must itself NOT be a reversal — it
+ *    continues the direction of the brick before it.
+ *  - Candle A must be quiet — its volume at or below an absolute threshold.
  *  - Candle B (the reversal brick) flips direction and must be heavy — its volume
  *    at or above an absolute threshold.
  *  - Enter at B's CLOSE, in B's direction (bullish reversal → long, bearish → short).
@@ -23,8 +24,9 @@ export type XvKline = {
 export type XvBacktestSettings = {
   /** Candle A qualifies if its (absolute) volume <= this. 0 disables it. */
   aVolumeMax: number;
-  /** Candle A max wick in ABSOLUTE price on the trade side (high-close for a
-   *  long, close-low for a short). 0 disables this filter. */
+  /** Candle A max wick in ABSOLUTE price on A's own direction side (high-close if
+   *  A is up, close-low if A is down). 0 means A must close at its extreme — no
+   *  wick. Always applied. */
   aMaxWickPrice: number;
   /** Candle B qualifies if its (absolute) volume >= this. 0 disables it. */
   bVolumeMin: number;
@@ -70,29 +72,30 @@ export function runXvBacktest(klines: XvKline[], settings: Partial<XvBacktestSet
   const trades: XvTrade[] = [];
   let id = 1;
 
-  for (let i = 1; i < klines.length; i += 1) {
+  for (let i = 2; i < klines.length; i += 1) {
+    const beforeA = klines[i - 2]; // brick before A — to confirm A is not a reversal
     const a = klines[i - 1]; // candle A — the quiet brick before the reversal
     const b = klines[i]; // candle B — the reversal brick
-    if (!a || !b) continue;
+    if (!beforeA || !a || !b) continue;
 
+    const beforeAUp = beforeA.close >= beforeA.open;
     const aUp = a.close >= a.open;
     const bUp = b.close >= b.open;
+    if (beforeAUp !== aUp) continue; // A must continue the prior brick (A is NOT a reversal)
     if (aUp === bUp) continue; // B must reverse A's direction
 
     // Absolute volume filters (0 = off).
     if (s.aVolumeMax > 0 && a.volume > s.aVolumeMax) continue; // A must be quiet
     if (s.bVolumeMin > 0 && b.volume < s.bVolumeMin) continue; // B must be heavy
 
+    // Candle A wick on its own direction side (high-close if A is up, close-low if
+    // A is down) must not exceed the cap. 0 = A must close at its extreme (no wick).
+    const aWick = aUp ? a.high - a.close : a.close - a.low;
+    if (aWick > s.aMaxWickPrice) continue;
+
     const direction: 'up' | 'down' = bUp ? 'up' : 'down';
     if (s.direction === 'long' && direction !== 'up') continue;
     if (s.direction === 'short' && direction !== 'down') continue;
-
-    // Candle A wick in ABSOLUTE price on the trade side: high-close for a long,
-    // close-low for a short. 0 disables this filter.
-    if (s.aMaxWickPrice > 0) {
-      const aSideWick = direction === 'up' ? a.high - a.close : a.close - a.low;
-      if (aSideWick > s.aMaxWickPrice) continue;
-    }
 
     const entry = b.close;
     let stop: number;

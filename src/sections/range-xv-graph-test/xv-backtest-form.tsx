@@ -60,7 +60,7 @@ export function XvBacktestForm({ defaultValues, onSubmit, isRunning }: any) {
         />
         <TextFieldElement
           name="aMaxWickPrice"
-          label="Свеча A: макс. фитиль (цена, 0 = выкл)"
+          label="Свеча A: макс. фитиль (цена; 0 = без фитиля)"
           type="number"
           inputProps={{ step: 'any', min: 0 }}
           size="small"
