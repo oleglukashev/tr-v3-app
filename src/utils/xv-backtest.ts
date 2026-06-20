@@ -24,9 +24,10 @@ export type XvKline = {
 export type XvBacktestSettings = {
   /** Candle A qualifies if its (absolute) volume <= this. 0 disables it. */
   aVolumeMax: number;
-  /** Candle A max wick (on A's own direction side: high-close if A is up,
-   *  close-low if A is down) as a PERCENT of A's body |close-open|. 0 means A
-   *  must close at its extreme — no wick. Always applied. */
+  /** Candle A max wick — the tail against the move, (high-low) - body — as a
+   *  PERCENT of A's body |close-open|. 0 = a clean marubozu (no wick). Always
+   *  applied. (XV bricks always close at their direction extreme, so this tail
+   *  is the only non-zero wick.) */
   aMaxWickBodyPct: number;
   /** Candle B qualifies if its (absolute) volume >= this. 0 disables it. */
   bVolumeMin: number;
@@ -99,10 +100,12 @@ export function runXvBacktest(klines: XvKline[], settings: Partial<XvBacktestSet
     if (s.aVolumeMax > 0 && a.volume > s.aVolumeMax) continue; // A must be quiet
     if (s.bVolumeMin > 0 && b.volume < s.bVolumeMin) continue; // B must be heavy
 
-    // Candle A wick on its own direction side (high-close if A is up, close-low if
-    // A is down) must not exceed aMaxWickBodyPct% of A's body. 0 = no wick allowed.
+    // Candle A wick must not exceed aMaxWickBodyPct% of A's body. XV bricks close
+    // exactly at their direction extreme (high==close up / low==close down), so
+    // the only real wick is the tail against the move = (high-low) - body. 0 = a
+    // clean marubozu (no wick).
     const aBody = Math.abs(a.close - a.open);
-    const aWick = aUp ? a.high - a.close : a.close - a.low;
+    const aWick = a.high - a.low - aBody;
     if (aWick > (s.aMaxWickBodyPct / 100) * aBody) continue;
 
     const direction: 'up' | 'down' = bUp ? 'up' : 'down';
