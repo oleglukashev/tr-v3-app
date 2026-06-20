@@ -36,8 +36,9 @@ export type XvBacktestSettings = {
   minTrendCandles: number;
   /** Take distance as a multiple of risk (R:R). */
   riskReward: number;
-  /** Move the stop to entry (break-even) once price runs this many bars (×R) in
-   *  the position's favour after entry. 0 disables it. */
+  /** Move the stop to break-even — a level that nets zero after entry+exit fees,
+   *  not raw entry — once price runs this many bars (×R) in the position's favour
+   *  after entry. 0 disables it. */
   breakEvenAfterBars: number;
   /** Entry fee as a percent of the entry price. */
   entryFeePct: number;
@@ -150,9 +151,17 @@ export function runXvBacktest(
     }
     if (!(risk > 0)) continue; // degenerate (entry == extreme)
 
+    // Break-even stop is placed so that exiting there nets ZERO after both fees
+    // (not at raw entry): long  beStop = entry·(1+ef)/(1-xf); short the mirror.
+    const ef = s.entryFeePct / 100;
+    const xf = s.exitFeePct / 100;
+    const beStop = direction === 'up'
+      ? (entry * (1 + ef)) / (1 - xf)
+      : (entry * (1 - ef)) / (1 + xf);
+
     // Walk forward; stop is checked first within a brick (conservative). The
-    // break-even rule moves the live stop (curStop) to entry once price has run
-    // beDist in favour — a later touch of entry then exits flat ('finished_by_be').
+    // break-even rule moves the live stop (curStop) to beStop once price has run
+    // beDist in favour — a later touch then exits net-flat ('finished_by_be').
     let status: XvTradeStatus = 'finished_by_length';
     let exitTs: number | null = null;
     let exitPrice: number | null = null;
@@ -163,11 +172,11 @@ export function runXvBacktest(
       if (direction === 'up') {
         if (k.low <= curStop) { status = movedToBE ? 'finished_by_be' : 'finished_by_lose'; exitTs = k.ts; exitPrice = curStop; break; }
         if (k.high >= take) { status = 'finished'; exitTs = k.ts; exitPrice = take; break; }
-        if (beDist && !movedToBE && k.high >= entry + beDist) { curStop = entry; movedToBE = true; }
+        if (beDist && !movedToBE && k.high >= entry + beDist) { curStop = beStop; movedToBE = true; }
       } else {
         if (k.high >= curStop) { status = movedToBE ? 'finished_by_be' : 'finished_by_lose'; exitTs = k.ts; exitPrice = curStop; break; }
         if (k.low <= take) { status = 'finished'; exitTs = k.ts; exitPrice = take; break; }
-        if (beDist && !movedToBE && k.low <= entry - beDist) { curStop = entry; movedToBE = true; }
+        if (beDist && !movedToBE && k.low <= entry - beDist) { curStop = beStop; movedToBE = true; }
       }
     }
 
