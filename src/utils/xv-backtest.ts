@@ -28,6 +28,9 @@ export type XvBacktestSettings = {
    *  wick is (range - body); 1 disables the filter, lower requires a cleaner
    *  (smaller-wicked) quiet brick. */
   priorMaxWickRatio: number;
+  /** Prior brick max wick in ABSOLUTE price on the trade side (high-close for a
+   *  long, close-low for a short). 0 disables this filter. */
+  priorMaxWickPrice: number;
   /** Reversal brick qualifies if its volume >= this * rolling-average volume. */
   reversalVolumeMinRatio: number;
   /** Bricks used for the rolling-average volume (excludes the reversal brick). */
@@ -61,6 +64,7 @@ export type XvTrade = {
 const DEFAULTS: XvBacktestSettings = {
   priorVolumeMaxRatio: 0.8,
   priorMaxWickRatio: 1,
+  priorMaxWickPrice: 0,
   reversalVolumeMinRatio: 1.5,
   volumeLookback: 20,
   riskReward: 2,
@@ -107,6 +111,15 @@ export function runXvBacktest(klines: XvKline[], settings: Partial<XvBacktestSet
     const direction: 'up' | 'down' = revUp ? 'up' : 'down';
     if (s.direction === 'long' && direction !== 'up') continue;
     if (s.direction === 'short' && direction !== 'down') continue;
+
+    // Prior (quiet) brick wick in ABSOLUTE price on the trade side: high-close
+    // for a long, close-low for a short. 0 disables this filter.
+    if (s.priorMaxWickPrice > 0) {
+      const priorSideWick = direction === 'up'
+        ? prior.high - prior.close
+        : prior.close - prior.low;
+      if (priorSideWick > s.priorMaxWickPrice) continue;
+    }
 
     const entry = rev.close;
     let stop: number;
