@@ -2,10 +2,10 @@
  * Range-XV reversal backtest.
  *
  * Strategy: a 2-brick reversal pattern (candle A then candle B).
- *  - Candle A (the brick before the reversal) must be quiet — its volume below a
- *    fraction of the rolling-average volume.
+ *  - Candle A (the brick before the reversal) must be quiet — its volume at or
+ *    below an absolute threshold.
  *  - Candle B (the reversal brick) flips direction and must be heavy — its volume
- *    above a multiple of the rolling-average volume.
+ *    at or above an absolute threshold.
  *  - Enter at B's CLOSE, in B's direction (bullish reversal → long, bearish → short).
  *  - Stop behind B: low (long) / high (short).
  *  - Take at a configurable R:R from entry.
@@ -21,15 +21,13 @@ export type XvKline = {
 };
 
 export type XvBacktestSettings = {
-  /** Candle A qualifies if its volume <= this * rolling-average volume. */
-  aVolumeMaxRatio: number;
+  /** Candle A qualifies if its (absolute) volume <= this. 0 disables it. */
+  aVolumeMax: number;
   /** Candle A max wick in ABSOLUTE price on the trade side (high-close for a
    *  long, close-low for a short). 0 disables this filter. */
   aMaxWickPrice: number;
-  /** Candle B qualifies if its volume >= this * rolling-average volume. */
-  bVolumeMinRatio: number;
-  /** Bricks used for the rolling-average volume (excludes candle B). */
-  volumeLookback: number;
+  /** Candle B qualifies if its (absolute) volume >= this. 0 disables it. */
+  bVolumeMin: number;
   /** Take distance as a multiple of risk (R:R). */
   riskReward: number;
   /** '' = both, 'long' = bullish reversals only, 'short' = bearish only. */
@@ -57,10 +55,9 @@ export type XvTrade = {
 };
 
 const DEFAULTS: XvBacktestSettings = {
-  aVolumeMaxRatio: 0.8,
+  aVolumeMax: 0,
   aMaxWickPrice: 0,
-  bVolumeMinRatio: 1.5,
-  volumeLookback: 20,
+  bVolumeMin: 0,
   riskReward: 2,
   direction: '',
   maxBarsToHold: 50,
@@ -69,7 +66,6 @@ const DEFAULTS: XvBacktestSettings = {
 /** Run the reversal backtest over an ascending series of XV bricks. */
 export function runXvBacktest(klines: XvKline[], settings: Partial<XvBacktestSettings>): XvTrade[] {
   const s: XvBacktestSettings = { ...DEFAULTS, ...settings };
-  const lookback = Math.max(1, Math.floor(s.volumeLookback) || 1);
   const maxBars = Math.max(1, Math.floor(s.maxBarsToHold) || 1);
   const trades: XvTrade[] = [];
   let id = 1;
@@ -83,15 +79,9 @@ export function runXvBacktest(klines: XvKline[], settings: Partial<XvBacktestSet
     const bUp = b.close >= b.open;
     if (aUp === bUp) continue; // B must reverse A's direction
 
-    // Rolling-average volume over the bricks before candle B.
-    const from = Math.max(0, i - lookback);
-    const window = klines.slice(from, i);
-    if (window.length === 0) continue;
-    const avgVol = window.reduce((acc, k) => acc + (Number(k.volume) || 0), 0) / window.length;
-    if (!(avgVol > 0)) continue;
-
-    if (!(a.volume <= s.aVolumeMaxRatio * avgVol)) continue; // A must be quiet
-    if (!(b.volume >= s.bVolumeMinRatio * avgVol)) continue; // B must be heavy
+    // Absolute volume filters (0 = off).
+    if (s.aVolumeMax > 0 && a.volume > s.aVolumeMax) continue; // A must be quiet
+    if (s.bVolumeMin > 0 && b.volume < s.bVolumeMin) continue; // B must be heavy
 
     const direction: 'up' | 'down' = bUp ? 'up' : 'down';
     if (s.direction === 'long' && direction !== 'up') continue;

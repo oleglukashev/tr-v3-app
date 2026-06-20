@@ -708,10 +708,9 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
         startTs: Number(values.startTs),
         finishTs: values.finishTs ? Number(values.finishTs) : null,
         settings: {
-          aVolumeMaxRatio: Number(values.aVolumeMaxRatio),
+          aVolumeMax: Number(values.aVolumeMax),
           aMaxWickPrice: Number(values.aMaxWickPrice),
-          bVolumeMinRatio: Number(values.bVolumeMinRatio),
-          volumeLookback: Number(values.volumeLookback),
+          bVolumeMin: Number(values.bVolumeMin),
           riskReward: Number(values.riskReward),
           direction: values.direction || '',
           maxBarsToHold: Number(values.maxBarsToHold),

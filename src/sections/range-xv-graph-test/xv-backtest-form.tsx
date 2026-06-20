@@ -26,10 +26,9 @@ function DateTsField({ name, label }: { name: string; label: string }) {
 }
 
 export const DEFAULT_XV_BACKTEST_VALUES = {
-  aVolumeMaxRatio: 0.8,
+  aVolumeMax: 0,
   aMaxWickPrice: 0,
-  bVolumeMinRatio: 1.5,
-  volumeLookback: 20,
+  bVolumeMin: 0,
   riskReward: 2,
   direction: '',
   maxBarsToHold: 50,
@@ -52,10 +51,10 @@ export function XvBacktestForm({ defaultValues, onSubmit, isRunning }: any) {
           ]}
         />
         <TextFieldElement
-          name="aVolumeMaxRatio"
-          label="Свеча A: объём ≤ (× средн.)"
+          name="aVolumeMax"
+          label="Свеча A: объём ≤ (0 = выкл)"
           type="number"
-          inputProps={{ step: 0.1, min: 0 }}
+          inputProps={{ step: 'any', min: 0 }}
           size="small"
           fullWidth
         />
@@ -68,18 +67,10 @@ export function XvBacktestForm({ defaultValues, onSubmit, isRunning }: any) {
           fullWidth
         />
         <TextFieldElement
-          name="bVolumeMinRatio"
-          label="Свеча B (разворотная): объём ≥ (× средн.)"
+          name="bVolumeMin"
+          label="Свеча B (разворотная): объём ≥ (0 = выкл)"
           type="number"
-          inputProps={{ step: 0.1, min: 0 }}
-          size="small"
-          fullWidth
-        />
-        <TextFieldElement
-          name="volumeLookback"
-          label="Окно среднего объёма (баров)"
-          type="number"
-          inputProps={{ step: 1, min: 1 }}
+          inputProps={{ step: 'any', min: 0 }}
           size="small"
           fullWidth
         />
