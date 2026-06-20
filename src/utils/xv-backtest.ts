@@ -23,10 +23,6 @@ export type XvKline = {
 export type XvBacktestSettings = {
   /** Candle A qualifies if its volume <= this * rolling-average volume. */
   aVolumeMaxRatio: number;
-  /** Candle A max wick as a fraction of its high-low range (0..1). The total
-   *  wick is (range - body); 1 disables the filter, lower requires a cleaner
-   *  (smaller-wicked) quiet brick. */
-  aMaxWickRatio: number;
   /** Candle A max wick in ABSOLUTE price on the trade side (high-close for a
    *  long, close-low for a short). 0 disables this filter. */
   aMaxWickPrice: number;
@@ -62,7 +58,6 @@ export type XvTrade = {
 
 const DEFAULTS: XvBacktestSettings = {
   aVolumeMaxRatio: 0.8,
-  aMaxWickRatio: 1,
   aMaxWickPrice: 0,
   bVolumeMinRatio: 1.5,
   volumeLookback: 20,
@@ -97,14 +92,6 @@ export function runXvBacktest(klines: XvKline[], settings: Partial<XvBacktestSet
 
     if (!(a.volume <= s.aVolumeMaxRatio * avgVol)) continue; // A must be quiet
     if (!(b.volume >= s.bVolumeMinRatio * avgVol)) continue; // B must be heavy
-
-    // Candle A wick filter: total wick (range - body) as a fraction of its range.
-    const aRange = a.high - a.low;
-    if (aRange > 0) {
-      const aBody = Math.abs(a.close - a.open);
-      const aWickRatio = (aRange - aBody) / aRange;
-      if (aWickRatio > s.aMaxWickRatio) continue;
-    }
 
     const direction: 'up' | 'down' = bUp ? 'up' : 'down';
     if (s.direction === 'long' && direction !== 'up') continue;
