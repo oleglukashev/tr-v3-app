@@ -39,11 +39,10 @@ const DEFAULT_STRONG_LEVELS = {
 // XV is served by the bidasks service (NEXT_PUBLIC_TR_CLUSTERS_DOMAIN), type=xv, by r (range size).
 const KLINES_API_BASE =
   (process.env.NEXT_PUBLIC_TR_CLUSTERS_DOMAIN as string) || 'http://bidasks.traken-trade.ru/api/v1';
-const WINDOW_MS = 30 * 24 * 3600 * 1000; // ts window per page (XV is sparse)
-// A single empty window does NOT mean history ended (sparse XV has brick-less
-// gaps). Keep walking older windows until bricks appear or this much empty span
-// has been crossed — only then is it genuinely the start of the series.
-const MAX_EMPTY_WALK_MS = 180 * 24 * 3600 * 1000;
+// XV is sparse, so page by COUNT (cursor over ts) instead of fixed time windows:
+// each page is the newest PAGE_SIZE bricks before the cursor. No empty-window
+// scanning, bounded payloads, fewer requests.
+const PAGE_SIZE = 500;
 const UP = '#26a69a';
 const DOWN = '#ef5350';
 
@@ -158,9 +157,17 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   const [chartReady, setChartReady] = useState<boolean>(false);
   const { onDrawingInteractionChange } = useMapDrawingOverlayRef();
 
-  const fetchXv = useCallback(async (r: string, startTs: number, endTs: number) => {
-    const url = `${KLINES_API_BASE}/klines?type=xv&pairId=${pairId}&r=${r}&startTs=${startTs}&endTs=${endTs}`;
-    const res = await fetch(url);
+  // One XV klines page. With `limit` it's cursor pagination (newest `limit`
+  // bricks before `endTs`, chronological); without it, a plain ts-range fetch.
+  const fetchXvPage = useCallback(async (
+    rv: string,
+    opts: { startTs?: number; endTs?: number; limit?: number },
+  ) => {
+    const params = new URLSearchParams({ type: 'xv', pairId: String(pairId), r: String(rv) });
+    if (opts.startTs != null) params.set('startTs', String(opts.startTs));
+    if (opts.endTs != null) params.set('endTs', String(opts.endTs));
+    if (opts.limit != null) params.set('limit', String(opts.limit));
+    const res = await fetch(`${KLINES_API_BASE}/klines?${params.toString()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const raw: any[] = await res.json();
     return raw
@@ -211,7 +218,9 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     setClustersTick((t) => t + 1);
   }, []);
 
-  // setDataLoader getBars: paginated XV by ts window (init / forward=older / backward=newer).
+  // setDataLoader getBars: cursor pagination by COUNT (init/forward = older,
+  // backward = newer). Each older page is the newest PAGE_SIZE bricks before the
+  // oldest loaded bar — sparse XV pages cleanly, no empty-window scanning.
   const getBars = useCallback((d: any) => {
     const chart = chartRef.current;
     const rv = rRef.current;
@@ -223,74 +232,62 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     if (d.type === 'backward') {
       const last = Number(dl?.[dl.length - 1]?.timestamp);
       if (!Number.isFinite(last) || last >= now) { d.callback([], false); return; }
-      const startTs = last + 1;
-      const endTs = Math.min(last + WINDOW_MS, now);
       setLoading(true);
-      fetchXv(rv, startTs, endTs)
+      fetchXvPage(rv, { startTs: last + 1, endTs: now })
         .then((bars) => {
           mergeBars(bars);
           for (const b of bars) {
             if (b.timestamp > lastFinalTsRef.current) { lastFinalTsRef.current = b.timestamp; }
           }
           if (bars.length) { setKlinesVersion((v) => v + 1); }
-          d.callback(bars, bars.length > 0);
+          d.callback(bars, false);
         })
         .catch((e) => { console.error('xv load failed:', e?.message); d.callback([], false); })
         .finally(() => setLoading(false));
       return;
     }
 
-    // 'init' and 'forward' both load *older* bricks ending at a cursor. XV is sparse,
-    // so a single empty window does not mean history ended — walk back window-by-window
-    // until bricks appear or the empty-walk floor is crossed (then there is no more).
-    let cursorEnd: number;
+    // 'init' = latest page; 'forward' = the page strictly older than the oldest
+    // loaded bar (ts cursor). A short page means we reached the series start.
+    let cursorEnd: number | undefined;
     if (d.type === 'init') {
-      cursorEnd = now;
+      cursorEnd = undefined;
     } else {
       const first = Number(dl?.[0]?.timestamp);
       if (!Number.isFinite(first)) { d.callback([], false); return; }
       cursorEnd = first;
     }
-    const floor = cursorEnd - MAX_EMPTY_WALK_MS;
     setLoading(true);
-    (async () => {
-      let bars: any[] = [];
-      let end = cursorEnd;
-      while (end > floor) {
-        const start = end - WINDOW_MS;
-        const page = await fetchXv(rv, start, end);
-        if (page.length) { bars = page; break; }
-        end = start;
-      }
-      mergeBars(bars);
-      if (bars.length) { setKlinesVersion((v) => v + 1); }
-      // Anchor the live-brick slot to the newest loaded bar.
-      let newest: any = null;
-      for (const b of bars) {
-        if (b.timestamp > lastFinalTsRef.current) { lastFinalTsRef.current = b.timestamp; }
-        if (!newest || b.timestamp > newest.timestamp) { newest = b; }
-      }
-      // More older data is likely whenever this page found bricks; only the
-      // floor-crossing empty walk reports the genuine start (more=false).
-      const more = bars.length > 0;
-      // REST only has *closed* bricks; the current forming brick is WS-only and
-      // may lag until the next tick. Seed a flat placeholder at the forming slot
-      // (lastFinal + 1) from the newest close so a "current" bar shows immediately.
-      // The WS forming/final update reuses the same slot and replaces it in place.
-      if (d.type === 'init' && newest) {
-        const seed = {
-          timestamp: lastFinalTsRef.current + 1,
-          open: newest.close, high: newest.close, low: newest.close, close: newest.close,
-          volume: 0,
-        };
-        d.callback([...bars, seed], more);
-        return;
-      }
-      d.callback(bars, more);
-    })()
+    fetchXvPage(rv, { endTs: cursorEnd, limit: PAGE_SIZE })
+      .then((bars) => {
+        mergeBars(bars);
+        if (bars.length) { setKlinesVersion((v) => v + 1); }
+        // Anchor the live-brick slot to the newest loaded bar.
+        let newest: any = null;
+        for (const b of bars) {
+          if (b.timestamp > lastFinalTsRef.current) { lastFinalTsRef.current = b.timestamp; }
+          if (!newest || b.timestamp > newest.timestamp) { newest = b; }
+        }
+        // A full page implies more older bricks remain; a short page is the start.
+        const more = bars.length >= PAGE_SIZE;
+        // REST only has *closed* bricks; the current forming brick is WS-only and
+        // may lag until the next tick. Seed a flat placeholder at the forming slot
+        // (lastFinal + 1) from the newest close so a "current" bar shows immediately.
+        // The WS forming/final update reuses the same slot and replaces it in place.
+        if (d.type === 'init' && newest) {
+          const seed = {
+            timestamp: lastFinalTsRef.current + 1,
+            open: newest.close, high: newest.close, low: newest.close, close: newest.close,
+            volume: 0,
+          };
+          d.callback([...bars, seed], more);
+          return;
+        }
+        d.callback(bars, more);
+      })
       .catch((e) => { console.error('xv load failed:', e?.message); d.callback([], false); })
       .finally(() => setLoading(false));
-  }, [fetchXv, mergeBars]);
+  }, [fetchXvPage, mergeBars]);
 
   // Init chart once.
   useEffect(() => {
