@@ -756,6 +756,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   // Derived backtest stats for the results panel.
   const wins = testSessions.filter((t) => t.status === 'finished').length;
   const losses = testSessions.filter((t) => t.status === 'finished_by_lose').length;
+  const breakEvens = testSessions.filter((t) => t.status === 'finished_by_be').length;
   const winRate = wins + losses ? Math.round((wins / (wins + losses)) * 100) : 0;
   // ΣR uses the realised, fee-net PnL per trade (null while unresolved).
   const totalR = testSessions.reduce(
@@ -884,6 +885,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
               </Typography>
               <Chip size="small" color="success" variant="outlined" label={`Тейк: ${wins}`} />
               <Chip size="small" color="error" variant="outlined" label={`Стоп: ${losses}`} />
+              <Chip size="small" color="default" variant="outlined" label={`Безубыток: ${breakEvens}`} />
               <Chip size="small" variant="outlined" label={`Winrate: ${winRate}%`} />
               <Chip
                 size="small"
