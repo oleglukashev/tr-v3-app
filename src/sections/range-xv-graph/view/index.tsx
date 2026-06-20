@@ -23,15 +23,17 @@ registerOverlay(testDhmUp);
 registerOverlay(testDhmDown);
 
 /** Backtest status → MUI chip/Label color. */
-function xvStatusColor(status: string): 'success' | 'error' | 'info' {
+function xvStatusColor(status: string): 'success' | 'error' | 'info' | 'default' {
   if (status === 'finished') return 'success';
   if (status === 'finished_by_lose') return 'error';
+  if (status === 'finished_by_be') return 'default';
   return 'info';
 }
 
 const XV_STATUS_LABEL: Record<string, string> = {
   finished: 'Тейк',
   finished_by_lose: 'Стоп',
+  finished_by_be: 'Безубыток',
   finished_by_length: 'Не закрыта',
 };
 
@@ -713,6 +715,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
           bVolumeMin: Number(values.bVolumeMin),
           minTrendCandles: Number(values.minTrendCandles),
           riskReward: Number(values.riskReward),
+          breakEvenAfterBars: Number(values.breakEvenAfterBars),
           direction: values.direction || '',
           maxBarsToHold: Number(values.maxBarsToHold),
         },

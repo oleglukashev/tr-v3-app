@@ -36,13 +36,20 @@ export type XvBacktestSettings = {
   minTrendCandles: number;
   /** Take distance as a multiple of risk (R:R). */
   riskReward: number;
+  /** Move the stop to entry (break-even) once price runs this many bars (×R) in
+   *  the position's favour after entry. 0 disables it. */
+  breakEvenAfterBars: number;
   /** '' = both, 'long' = bullish reversals only, 'short' = bearish only. */
   direction?: '' | 'long' | 'short';
   /** Bricks to wait for take/stop before marking the trade unresolved. */
   maxBarsToHold: number;
 };
 
-export type XvTradeStatus = 'finished' | 'finished_by_lose' | 'finished_by_length';
+export type XvTradeStatus =
+  | 'finished'
+  | 'finished_by_lose'
+  | 'finished_by_be'
+  | 'finished_by_length';
 
 export type XvTrade = {
   id: number;
@@ -66,14 +73,22 @@ const DEFAULTS: XvBacktestSettings = {
   bVolumeMin: 0,
   minTrendCandles: 2,
   riskReward: 2,
+  breakEvenAfterBars: 0,
   direction: '',
   maxBarsToHold: 50,
 };
 
-/** Run the reversal backtest over an ascending series of XV bricks. */
-export function runXvBacktest(klines: XvKline[], settings: Partial<XvBacktestSettings>): XvTrade[] {
+/** Run the reversal backtest over an ascending series of XV bricks. `r` (the
+ *  range size) is only needed for the break-even-after-N-bars rule. */
+export function runXvBacktest(
+  klines: XvKline[],
+  settings: Partial<XvBacktestSettings>,
+  r = 0,
+): XvTrade[] {
   const s: XvBacktestSettings = { ...DEFAULTS, ...settings };
   const maxBars = Math.max(1, Math.floor(s.maxBarsToHold) || 1);
+  // Favourable price distance (in price) that arms the break-even stop.
+  const beDist = s.breakEvenAfterBars > 0 && r > 0 ? s.breakEvenAfterBars * r : 0;
   const minTrend = Math.max(2, Math.floor(s.minTrendCandles) || 2);
   const trades: XvTrade[] = [];
   let id = 1;
@@ -127,18 +142,24 @@ export function runXvBacktest(klines: XvKline[], settings: Partial<XvBacktestSet
     }
     if (!(risk > 0)) continue; // degenerate (entry == extreme)
 
-    // Walk forward; stop is checked first within a brick (conservative).
+    // Walk forward; stop is checked first within a brick (conservative). The
+    // break-even rule moves the live stop (curStop) to entry once price has run
+    // beDist in favour — a later touch of entry then exits flat ('finished_by_be').
     let status: XvTradeStatus = 'finished_by_length';
     let exitTs: number | null = null;
     let exitPrice: number | null = null;
+    let curStop = stop;
+    let movedToBE = false;
     for (let j = i + 1; j < klines.length && j - i <= maxBars; j += 1) {
       const k = klines[j];
       if (direction === 'up') {
-        if (k.low <= stop) { status = 'finished_by_lose'; exitTs = k.ts; exitPrice = stop; break; }
+        if (k.low <= curStop) { status = movedToBE ? 'finished_by_be' : 'finished_by_lose'; exitTs = k.ts; exitPrice = curStop; break; }
         if (k.high >= take) { status = 'finished'; exitTs = k.ts; exitPrice = take; break; }
+        if (beDist && !movedToBE && k.high >= entry + beDist) { curStop = entry; movedToBE = true; }
       } else {
-        if (k.high >= stop) { status = 'finished_by_lose'; exitTs = k.ts; exitPrice = stop; break; }
+        if (k.high >= curStop) { status = movedToBE ? 'finished_by_be' : 'finished_by_lose'; exitTs = k.ts; exitPrice = curStop; break; }
         if (k.low <= take) { status = 'finished'; exitTs = k.ts; exitPrice = take; break; }
+        if (beDist && !movedToBE && k.low <= entry - beDist) { curStop = entry; movedToBE = true; }
       }
     }
 
@@ -196,5 +217,5 @@ export async function runXvBacktestForUI({
       volume: parseFloat(it.volume),
     }))
     .filter((k: XvKline) => Number.isFinite(k.ts) && Number.isFinite(k.open));
-  return runXvBacktest(klines, settings);
+  return runXvBacktest(klines, settings, Number(r) || 0);
 }
