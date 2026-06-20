@@ -709,7 +709,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
         finishTs: values.finishTs ? Number(values.finishTs) : null,
         settings: {
           aVolumeMax: Number(values.aVolumeMax),
-          aMaxWickPrice: Number(values.aMaxWickPrice),
+          aMaxWickBodyPct: Number(values.aMaxWickBodyPct),
           bVolumeMin: Number(values.bVolumeMin),
           riskReward: Number(values.riskReward),
           direction: values.direction || '',

@@ -24,10 +24,10 @@ export type XvKline = {
 export type XvBacktestSettings = {
   /** Candle A qualifies if its (absolute) volume <= this. 0 disables it. */
   aVolumeMax: number;
-  /** Candle A max wick in ABSOLUTE price on A's own direction side (high-close if
-   *  A is up, close-low if A is down). 0 means A must close at its extreme — no
-   *  wick. Always applied. */
-  aMaxWickPrice: number;
+  /** Candle A max wick (on A's own direction side: high-close if A is up,
+   *  close-low if A is down) as a PERCENT of A's body |close-open|. 0 means A
+   *  must close at its extreme — no wick. Always applied. */
+  aMaxWickBodyPct: number;
   /** Candle B qualifies if its (absolute) volume >= this. 0 disables it. */
   bVolumeMin: number;
   /** Take distance as a multiple of risk (R:R). */
@@ -58,7 +58,7 @@ export type XvTrade = {
 
 const DEFAULTS: XvBacktestSettings = {
   aVolumeMax: 0,
-  aMaxWickPrice: 0,
+  aMaxWickBodyPct: 0,
   bVolumeMin: 0,
   riskReward: 2,
   direction: '',
@@ -89,9 +89,10 @@ export function runXvBacktest(klines: XvKline[], settings: Partial<XvBacktestSet
     if (s.bVolumeMin > 0 && b.volume < s.bVolumeMin) continue; // B must be heavy
 
     // Candle A wick on its own direction side (high-close if A is up, close-low if
-    // A is down) must not exceed the cap. 0 = A must close at its extreme (no wick).
+    // A is down) must not exceed aMaxWickBodyPct% of A's body. 0 = no wick allowed.
+    const aBody = Math.abs(a.close - a.open);
     const aWick = aUp ? a.high - a.close : a.close - a.low;
-    if (aWick > s.aMaxWickPrice) continue;
+    if (aWick > (s.aMaxWickBodyPct / 100) * aBody) continue;
 
     const direction: 'up' | 'down' = bUp ? 'up' : 'down';
     if (s.direction === 'long' && direction !== 'up') continue;

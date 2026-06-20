@@ -27,7 +27,7 @@ function DateTsField({ name, label }: { name: string; label: string }) {
 
 export const DEFAULT_XV_BACKTEST_VALUES = {
   aVolumeMax: 0,
-  aMaxWickPrice: 0,
+  aMaxWickBodyPct: 0,
   bVolumeMin: 0,
   riskReward: 2,
   direction: '',
@@ -59,8 +59,8 @@ export function XvBacktestForm({ defaultValues, onSubmit, isRunning }: any) {
           fullWidth
         />
         <TextFieldElement
-          name="aMaxWickPrice"
-          label="Свеча A: макс. фитиль (цена; 0 = без фитиля)"
+          name="aMaxWickBodyPct"
+          label="Свеча A: макс. фитиль (% от тела; 0 = без фитиля)"
           type="number"
           inputProps={{ step: 'any', min: 0 }}
           size="small"
