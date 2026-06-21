@@ -48,6 +48,8 @@ export type XvBacktestSettings = {
   entryFeePct: number;
   /** Exit fee as a percent of the exit price. */
   exitFeePct: number;
+  /** Notional entered per position, in $ (for the $ PnL). */
+  positionSize: number;
   /** '' = both, 'long' = bullish reversals only, 'short' = bearish only. */
   direction?: '' | 'long' | 'short';
   /** Bricks to wait for take/stop before marking the trade unresolved. */
@@ -74,6 +76,8 @@ export type XvTrade = {
   exitPrice: number | null;
   /** Realised PnL in R units, net of entry+exit fees. null while unresolved. */
   pnlR: number | null;
+  /** Realised PnL in $ for the configured position size, net of fees. */
+  pnlUsd: number | null;
   // Mirrors the dhm session shape enough for the shared UI/overlays.
   data: { kline1: XvKline; high: number; low: number };
 };
@@ -87,6 +91,7 @@ const DEFAULTS: XvBacktestSettings = {
   breakEvenAfterBars: 0,
   entryFeePct: 0.055,
   exitFeePct: 0.02,
+  positionSize: 100,
   direction: '',
   maxBarsToHold: 50,
 };
@@ -187,12 +192,15 @@ export function runXvBacktest(
       }
     }
 
-    // Realised PnL in R, net of fees (only for closed trades; length stays null).
+    // Realised PnL net of fees (only for closed trades; length stays null). $ PnL
+    // assumes a fixed `positionSize` notional entered at `entry` (qty = size/entry).
     let pnlR: number | null = null;
+    let pnlUsd: number | null = null;
     if (exitPrice != null) {
       const gross = direction === 'up' ? exitPrice - entry : entry - exitPrice;
       const fees = entry * (s.entryFeePct / 100) + exitPrice * (s.exitFeePct / 100);
       pnlR = (gross - fees) / risk;
+      pnlUsd = (s.positionSize / entry) * (gross - fees);
     }
 
     trades.push({
@@ -208,6 +216,7 @@ export function runXvBacktest(
       exitTs,
       exitPrice,
       pnlR,
+      pnlUsd,
       data: {
         kline1: b,
         high: Math.max(entry, stop, take),

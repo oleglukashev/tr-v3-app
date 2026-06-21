@@ -34,6 +34,7 @@ export const DEFAULT_XV_BACKTEST_VALUES = {
   breakEvenAfterBars: 0,
   entryFeePct: 0.055,
   exitFeePct: 0.02,
+  positionSize: 100,
   direction: '',
   maxBarsToHold: 50,
   startTs: Date.UTC(2026, 0, 1),
@@ -113,6 +114,14 @@ export function XvBacktestForm({ defaultValues, onSubmit, isRunning }: any) {
         <TextFieldElement
           name="exitFeePct"
           label="Комиссия выхода (% от цены)"
+          type="number"
+          inputProps={{ step: 'any', min: 0 }}
+          size="small"
+          fullWidth
+        />
+        <TextFieldElement
+          name="positionSize"
+          label="Размер позиции ($)"
           type="number"
           inputProps={{ step: 'any', min: 0 }}
           size="small"

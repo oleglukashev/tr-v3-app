@@ -718,6 +718,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
           breakEvenAfterBars: Number(values.breakEvenAfterBars),
           entryFeePct: Number(values.entryFeePct),
           exitFeePct: Number(values.exitFeePct),
+          positionSize: Number(values.positionSize),
           direction: values.direction || '',
           maxBarsToHold: Number(values.maxBarsToHold),
         },
@@ -758,9 +759,13 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   const losses = testSessions.filter((t) => t.status === 'finished_by_lose').length;
   const breakEvens = testSessions.filter((t) => t.status === 'finished_by_be').length;
   const winRate = wins + losses ? Math.round((wins / (wins + losses)) * 100) : 0;
-  // ΣR uses the realised, fee-net PnL per trade (null while unresolved).
+  // ΣR / Σ$ use the realised, fee-net PnL per trade (null while unresolved).
   const totalR = testSessions.reduce(
     (a, t) => a + (Number.isFinite(t.pnlR) ? Number(t.pnlR) : 0),
+    0,
+  );
+  const totalUsd = testSessions.reduce(
+    (a, t) => a + (Number.isFinite(t.pnlUsd) ? Number(t.pnlUsd) : 0),
     0,
   );
   const uniqueStatuses = Array.from(new Set(testSessions.map((t) => t.status)));
@@ -892,6 +897,12 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
                 color={totalR >= 0 ? 'success' : 'error'}
                 variant="outlined"
                 label={`Σ R: ${totalR.toFixed(2)}`}
+              />
+              <Chip
+                size="small"
+                color={totalUsd >= 0 ? 'success' : 'error'}
+                variant="outlined"
+                label={`Σ $: ${totalUsd.toFixed(2)}`}
               />
             </Box>
 
