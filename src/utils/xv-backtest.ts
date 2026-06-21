@@ -8,8 +8,10 @@
  *  - Candle B (the reversal brick) flips direction and must be heavy — its volume
  *    at or above an absolute threshold.
  *  - Enter at B's CLOSE, in B's direction (bullish reversal → long, bearish → short).
- *  - Stop behind B: low (long) / high (short).
- *  - Take at a configurable R:R from entry.
+ *  - Stop behind B's wick: low (long) / high (short) — this is the actual risk.
+ *  - Take = riskReward × B's BODY (wick excluded), so the target is whole bricks.
+ *    (PnL/R is still measured against the real risk, so reward:risk < riskReward
+ *    whenever B has a wick.)
  */
 
 export type XvKline = {
@@ -34,7 +36,9 @@ export type XvBacktestSettings = {
   /** Minimum consecutive same-direction bricks ending at A (the trend before B;
    *  A itself counts). >= 2, so A is always a continuation, never a reversal. */
   minTrendCandles: number;
-  /** Take distance as a multiple of risk (R:R). */
+  /** Take distance as a multiple of B's BODY (wick excluded). The stop (and the
+   *  risk used for PnL) is B's full range, so the realised reward:risk is this
+   *  times body/range. */
   riskReward: number;
   /** Move the stop to break-even — a level that nets zero after entry+exit fees,
    *  not raw entry — once price runs this many bars (×R) in the position's favour
@@ -137,19 +141,22 @@ export function runXvBacktest(
     if (s.direction === 'short' && direction !== 'down') continue;
 
     const entry = b.close;
+    // Stop goes behind B's wick (full range = actual risk); the take is measured
+    // from B's BODY only (wick excluded) — whole bricks, no tail.
+    const bodySize = Math.abs(b.close - b.open);
     let stop: number;
     let risk: number;
     let take: number;
     if (direction === 'up') {
       stop = b.low;
       risk = entry - stop;
-      take = entry + s.riskReward * risk;
+      take = entry + s.riskReward * bodySize;
     } else {
       stop = b.high;
       risk = stop - entry;
-      take = entry - s.riskReward * risk;
+      take = entry - s.riskReward * bodySize;
     }
-    if (!(risk > 0)) continue; // degenerate (entry == extreme)
+    if (!(risk > 0) || !(bodySize > 0)) continue; // degenerate
 
     // Break-even stop is placed so that exiting there nets ZERO after both fees
     // (not at raw entry): long  beStop = entry·(1+ef)/(1-xf); short the mirror.
