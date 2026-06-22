@@ -18,6 +18,7 @@ import { orderbookApi } from "./api/orderbookApi";
 import {balanceApi} from "@/lib/redux/api/balanceApi";
 import { drawingElementsApi } from "./api/drawingElementsApi";
 import { datasetApi } from "./api/datasetApi";
+import { xvClusterPrecisionApi } from "./api/xvClusterPrecisionApi";
 
 export const reduxStore = configureStore({
   reducer: {
@@ -40,6 +41,7 @@ export const reduxStore = configureStore({
     [balanceApi.reducerPath]: balanceApi.reducer,
     [drawingElementsApi.reducerPath]: drawingElementsApi.reducer,
     [datasetApi.reducerPath]: datasetApi.reducer,
+    [xvClusterPrecisionApi.reducerPath]: xvClusterPrecisionApi.reducer,
   },
   //devTools: process.env.NEXT_PUBLIC_ENV !== "production",
   middleware: (getDefaultMiddleware) =>
@@ -63,5 +65,6 @@ export const reduxStore = configureStore({
       balanceApi.middleware,
       drawingElementsApi.middleware,
       datasetApi.middleware,
+      xvClusterPrecisionApi.middleware,
     ]),
 });
