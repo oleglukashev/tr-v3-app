@@ -177,7 +177,11 @@ const UP = '#26a69a';
 const DOWN = '#ef5350';
 
 // Mutable config read by the (globally registered) custom indicator draw.
-const xvConfig = { volumeWidth: false, volP5: 0, volP95: 1 };
+// volWidthMin/Max are the body width (as a fraction of the bar slot) at the
+// lowest / highest volume.
+const xvConfig = { volumeWidth: false, volP5: 0, volP95: 1, volWidthMin: 0.14, volWidthMax: 0.96 };
+
+const DEFAULT_VOL_WIDTH = { volWidthMin: 0.14, volWidthMax: 0.96 };
 
 function pct(arr: number[], p: number): number {
   if (arr.length === 0) return 0;
@@ -213,7 +217,8 @@ function registerRangeXvIndicator() {
         const col = up ? UP : DOWN;
         let t = (Number(d.volume) - xvConfig.volP5) / (xvConfig.volP95 - xvConfig.volP5);
         t = Math.max(0, Math.min(1, t));
-        const w = Math.max(1, Math.min(slot * 0.96, slot * (0.14 + 0.84 * Math.sqrt(t))));
+        const frac = xvConfig.volWidthMin + (xvConfig.volWidthMax - xvConfig.volWidthMin) * Math.sqrt(t);
+        const w = Math.max(1, slot * Math.min(0.99, frac));
         ctx.strokeStyle = col;
         ctx.fillStyle = col;
         ctx.lineWidth = 1;
@@ -258,6 +263,8 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   // RSI sub-pane (built-in klinecharts indicator) — toggle + period from settings.
   const [showRsi, setShowRsi] = useState<boolean>(DEFAULT_RSI.showRsi);
   const [rsiPeriod, setRsiPeriod] = useState<number>(DEFAULT_RSI.rsiPeriod);
+  const [volWidthMin, setVolWidthMin] = useState<number>(DEFAULT_VOL_WIDTH.volWidthMin);
+  const [volWidthMax, setVolWidthMax] = useState<number>(DEFAULT_VOL_WIDTH.volWidthMax);
   const [loading, setLoading] = useState<boolean>(false);
   const [openChartSettings, setOpenChartSettings] = useState<boolean>(false);
 
@@ -591,6 +598,9 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     const chart = chartRef.current;
     if (!chart) return;
     xvConfig.volumeWidth = volumeWidth;
+    // Keep min <= max; push into the config the indicator reads.
+    xvConfig.volWidthMin = Math.max(0, Math.min(volWidthMin, volWidthMax));
+    xvConfig.volWidthMax = Math.max(volWidthMin, volWidthMax);
     if (volumeWidth) {
       chart.setStyles({
         candle: {
@@ -601,10 +611,12 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
           },
         },
       } as any);
-      if (!xvIndicatorOnRef.current) {
-        chart.createIndicator('RANGE_XV', true, { id: 'candle_pane' });
-        xvIndicatorOnRef.current = true;
+      // Re-create so width-param changes take effect (forces a redraw).
+      if (xvIndicatorOnRef.current) {
+        chart.removeIndicator?.('candle_pane', 'RANGE_XV');
       }
+      chart.createIndicator('RANGE_XV', true, { id: 'candle_pane' });
+      xvIndicatorOnRef.current = true;
     } else {
       if (xvIndicatorOnRef.current) {
         chart.removeIndicator?.({ paneId: 'candle_pane', name: 'RANGE_XV' });
@@ -620,7 +632,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
         },
       } as any);
     }
-  }, [volumeWidth]);
+  }, [volumeWidth, volWidthMin, volWidthMax]);
 
   // RSI in its own sub-pane. Recreated on period change (calcParams), removed
   // when toggled off. Built-in klinecharts 'RSI' indicator — no registration.
@@ -661,6 +673,8 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
         setVolumeWidth(!!parsed.volumeWidth);
         setShowRsi(parsed.showRsi !== false);
         setRsiPeriod(Number(parsed.rsiPeriod) || DEFAULT_RSI.rsiPeriod);
+        setVolWidthMin(Number.isFinite(Number(parsed.volWidthMin)) ? Number(parsed.volWidthMin) : DEFAULT_VOL_WIDTH.volWidthMin);
+        setVolWidthMax(Number(parsed.volWidthMax) || DEFAULT_VOL_WIDTH.volWidthMax);
         setShowStrongLevels(parsed.showStrongLevels !== false);
         setStrongLevelsLookback(Number(parsed.strongLevelsLookback) || DEFAULT_STRONG_LEVELS.strongLevelsLookback);
         setStrongLevelsTolerance(Number(parsed.strongLevelsTolerance) || DEFAULT_STRONG_LEVELS.strongLevelsTolerance);
@@ -776,6 +790,8 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     const nextVolumeWidth = !!values.volumeWidth;
     const nextShowRsi = !!values.showRsi;
     const nextRsiPeriod = Number(values.rsiPeriod) || DEFAULT_RSI.rsiPeriod;
+    const nextVolWidthMin = Number.isFinite(Number(values.volWidthMin)) ? Number(values.volWidthMin) : DEFAULT_VOL_WIDTH.volWidthMin;
+    const nextVolWidthMax = Number(values.volWidthMax) || DEFAULT_VOL_WIDTH.volWidthMax;
     const nextR = values.r != null ? String(values.r) : '';
     const nextShowStrongLevels = values.showStrongLevels !== false;
     const nextLookback = Number(values.strongLevelsLookback) || DEFAULT_STRONG_LEVELS.strongLevelsLookback;
@@ -790,6 +806,8 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     setVolumeWidth(nextVolumeWidth);
     setShowRsi(nextShowRsi);
     setRsiPeriod(nextRsiPeriod);
+    setVolWidthMin(nextVolWidthMin);
+    setVolWidthMax(nextVolWidthMax);
     setR(nextR);
     setShowStrongLevels(nextShowStrongLevels);
     setStrongLevelsLookback(nextLookback);
@@ -811,6 +829,8 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
             volumeWidth: nextVolumeWidth,
             showRsi: nextShowRsi,
             rsiPeriod: nextRsiPeriod,
+            volWidthMin: nextVolWidthMin,
+            volWidthMax: nextVolWidthMax,
             showStrongLevels: nextShowStrongLevels,
             strongLevelsLookback: nextLookback,
             strongLevelsTolerance: nextTolerance,
@@ -954,6 +974,8 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
               volumeWidth,
               showRsi,
               rsiPeriod,
+              volWidthMin,
+              volWidthMax,
               showStrongLevels,
               strongLevelsLookback,
               strongLevelsTolerance,

@@ -28,6 +28,22 @@ export function RangeXvSettingsForm({ defaultValues, onSubmit }: any) {
               size='small'
               fullWidth
             />
+            <TextFieldElement
+              name='volWidthMin'
+              label='Ширина по объёму: мин. (доля бара 0–1)'
+              type='number'
+              inputProps={{ min: 0, max: 1, step: 0.02 }}
+              size='small'
+              fullWidth
+            />
+            <TextFieldElement
+              name='volWidthMax'
+              label='Ширина по объёму: макс. (доля бара 0–1)'
+              type='number'
+              inputProps={{ min: 0, max: 1, step: 0.02 }}
+              size='small'
+              fullWidth
+            />
             <CheckboxElement name='showStrongLevels' label='Показывать сильные уровни (S/R)?' />
             <TextFieldElement
               name='strongLevelsLookback'
