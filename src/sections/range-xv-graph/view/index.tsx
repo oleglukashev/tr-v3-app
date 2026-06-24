@@ -56,9 +56,12 @@ registerOverlay(xvImbalanceMark);
 
 /**
  * Highlight visible *reversal* bricks whose footprint bid/ask (buy vs sell)
- * volume differs by >= ratioN. `side` restricts to a dominant side:
- *   '' / 'any' — either side; 'bid' — buy dominant; 'ask' — sell dominant.
- * The brick is coloured by the dominant side (blue = bid, orange = ask).
+ * volume differs by >= ratioN. `side` restricts by the imbalance direction
+ * relative to the reversal brick's own trend:
+ *   '' / 'any'  — any trend;
+ *   'trend'     — dominant side agrees with the brick (up→buy, down→sell);
+ *   'counter'   — dominant side opposes the brick (absorption).
+ * The brick is coloured by the dominant side (blue = bid/buy, orange = ask/sell).
  * Reuses the footprints already in clustersByTs.
  */
 function drawXvImbalanceForVisible(
@@ -79,7 +82,8 @@ function drawXvImbalanceForVisible(
     const b = dataList[i];
     const a = dataList[i - 1];
     if (!b || !a) continue;
-    if ((b.close >= b.open) === (a.close >= a.open)) continue; // only reversal bricks
+    const bUp = b.close >= b.open; // reversal brick's own direction
+    if (bUp === (a.close >= a.open)) continue; // only reversal bricks
     const data = clustersByTs[String(b.timestamp)]?.data;
     if (!data || typeof data !== 'object') continue;
     let bid = 0;
@@ -94,8 +98,10 @@ function drawXvImbalanceForVisible(
       ? (ask > 0 ? bid / ask : Infinity)
       : (bid > 0 ? ask / bid : Infinity);
     if (!(ratio >= ratioN)) continue;
-    if (side === 'bid' && dominant !== 'bid') continue;
-    if (side === 'ask' && dominant !== 'ask') continue;
+    // dominant volume agrees with the brick's direction?
+    const withTrend = bUp ? dominant === 'bid' : dominant === 'ask';
+    if (side === 'trend' && !withTrend) continue;
+    if (side === 'counter' && withTrend) continue;
     chart.createOverlay({
       name: 'xvImbalanceMark',
       extendData: { color: dominant === 'bid' ? IMBALANCE_BID_COLOR : IMBALANCE_ASK_COLOR },

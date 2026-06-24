@@ -99,11 +99,11 @@ export function RangeXvSettingsForm({ defaultValues, onSubmit }: any) {
             />
             <SelectElement
               name='imbalanceSide'
-              label='Дисбаланс: сторона перевеса'
+              label='Дисбаланс: относительно тренда разворота'
               options={[
-                { id: '', label: 'Любая' },
-                { id: 'bid', label: 'Перевес покупок (bid)' },
-                { id: 'ask', label: 'Перевес продаж (ask)' },
+                { id: '', label: 'Любой тренд' },
+                { id: 'trend', label: 'По тренду разворотной свечи' },
+                { id: 'counter', label: 'Против тренда разворотной свечи' },
               ]}
               size='small'
               fullWidth
