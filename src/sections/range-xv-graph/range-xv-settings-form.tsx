@@ -104,9 +104,9 @@ export function RangeXvSettingsForm({ defaultValues, onSubmit }: any) {
             />
             <TextFieldElement
               name='stackedRatioM'
-              label='Стопка: перевес на уровне, раз (M)'
+              label='Стопка: мин. разница покупки−продажи на уровне (объём, M)'
               type='number'
-              inputProps={{ min: 1, step: 0.5 }}
+              inputProps={{ min: 0, step: 1 }}
               size='small'
               fullWidth
             />

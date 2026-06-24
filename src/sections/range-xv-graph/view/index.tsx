@@ -87,13 +87,12 @@ function passesImbalanceFilter(
 
 /**
  * Passes the stacked filter: runN consecutive price levels with the imbalance
- * all on the SAME side — each level where buys are >= M times sells (buy side)
- * OR sells are >= M times buys (sell side), M being a ratio. A one-sided level
- * (×0) counts (infinite ratio). The run breaks when a level isn't strong, has
- * no dominant side, or flips side.
+ * all on the SAME side — each level where the absolute bid/ask volume difference
+ * |buys − sells| >= minDiff (M is a volume amount, "greater BY M", not a ratio).
+ * The run breaks when a level isn't strong, has no dominant side, or flips side.
  */
-function passesStackedFilter(data: Record<string, any>, runN: number, ratioM: number): boolean {
-  if (!(runN >= 1) || !(ratioM > 0)) return false;
+function passesStackedFilter(data: Record<string, any>, runN: number, minDiff: number): boolean {
+  if (!(runN >= 1) || !(minDiff > 0)) return false;
   const keys = Object.keys(data)
     .filter((k) => Number.isFinite(parseFloat(k)))
     .sort((x, y) => parseFloat(x) - parseFloat(y));
@@ -103,10 +102,9 @@ function passesStackedFilter(data: Record<string, any>, runN: number, ratioM: nu
     const lvl = data[k];
     const bv = Number(lvl?.bv) || 0;
     const sv = Number(lvl?.sv) || 0;
-    const hi = Math.max(bv, sv);
-    const lo = Math.min(bv, sv);
-    const strong = lo > 0 ? hi / lo >= ratioM : hi > 0;
-    const dir = bv > sv ? 1 : (sv > bv ? -1 : 0);
+    const diff = bv - sv;
+    const strong = Math.abs(diff) >= minDiff;
+    const dir = diff > 0 ? 1 : (diff < 0 ? -1 : 0);
     if (!strong || dir === 0) {
       run = 0;
       runDir = 0;
