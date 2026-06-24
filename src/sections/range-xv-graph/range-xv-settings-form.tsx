@@ -72,7 +72,8 @@ export function RangeXvSettingsForm({ defaultValues, onSubmit }: any) {
               size='small'
               fullWidth
             />
-            <CheckboxElement name='showImbalance' label='Подсвечивать разворотные свечи с дисбалансом bid/ask?' />
+            <CheckboxElement name='showReversal' label='Подсвечивать разворотные свечи (по футпринту)?' />
+            <CheckboxElement name='showImbalance' label='— Фильтр: дисбаланс bid/ask' />
             <TextFieldElement
               name='imbalanceRatio'
               label='Дисбаланс bid/ask: во сколько раз (N)'
@@ -92,7 +93,7 @@ export function RangeXvSettingsForm({ defaultValues, onSubmit }: any) {
               size='small'
               fullWidth
             />
-            <CheckboxElement name='showStacked' label='Подсвечивать разворотные свечи со стопкой дисбалансов?' />
+            <CheckboxElement name='showStacked' label='— Фильтр: стопка дисбалансов' />
             <TextFieldElement
               name='stackedRunN'
               label='Стопка: уровней подряд (N)'

@@ -54,56 +54,78 @@ const xvImbalanceMark: any = {
 };
 registerOverlay(xvImbalanceMark);
 
-// Highlight overlay for reversal bricks with N consecutive strongly-imbalanced
-// footprint levels (stacked imbalance). Same body-recolor as above, own name so
-// the two toggles don't clear each other's overlays.
-const STACKED_COLOR = 'rgba(0,188,212,0.92)'; // cyan
-const xvStackedMark: any = {
-  name: 'xvStackedMark',
-  totalStep: 2,
-  needDefaultPointFigure: false,
-  needDefaultXAxisFigure: false,
-  needDefaultYAxisFigure: false,
-  createPointFigures: ({ chart, coordinates, overlay }: any) => {
-    if (!coordinates || coordinates.length < 2) return [];
-    const x = coordinates[0].x;
-    const yOpen = coordinates[0].y;
-    const yClose = coordinates[1].y;
-    const color = overlay?.extendData?.color || STACKED_COLOR;
-    let w = 6;
-    try { w = Math.max(2, (chart.getBarSpace?.()?.bar || 8) * 0.9); } catch {}
-    const top = Math.min(yOpen, yClose);
-    let h = Math.abs(yOpen - yClose);
-    if (h < 2) h = 2;
-    return [{
-      type: 'rect',
-      ignoreEvent: true,
-      attrs: { x: x - w / 2, y: top, width: w, height: h },
-      styles: { style: 'fill', color },
-    }];
-  },
-};
-registerOverlay(xvStackedMark);
+/** Total buy (bid) vs sell (ask) volume across a footprint's price levels. */
+function footprintSideTotals(data: Record<string, any>): { bid: number; ask: number } {
+  let bid = 0;
+  let ask = 0;
+  for (const k in data) {
+    bid += Number(data[k]?.bv) || 0;
+    ask += Number(data[k]?.sv) || 0;
+  }
+  return { bid, ask };
+}
 
-/**
- * Highlight visible *reversal* bricks whose footprint bid/ask (buy vs sell)
- * volume differs by >= ratioN. `side` restricts by the imbalance direction
- * relative to the reversal brick's own trend:
- *   '' / 'any'  — any trend;
- *   'trend'     — dominant side agrees with the brick (up→buy, down→sell);
- *   'counter'   — dominant side opposes the brick (absorption).
- * The brick is coloured by the dominant side (blue = bid/buy, orange = ask/sell).
- * Reuses the footprints already in clustersByTs.
- */
-function drawXvImbalanceForVisible(
-  chart: any,
-  clustersByTs: Record<string, any>,
+/** Passes the bid/ask imbalance filter: total imbalance >= ratioN, side ok. */
+function passesImbalanceFilter(
+  bid: number,
+  ask: number,
+  bUp: boolean,
   ratioN: number,
   side: string,
+): boolean {
+  if (!(ratioN > 0) || bid === ask) return false;
+  const dominant = bid > ask ? 'bid' : 'ask';
+  const ratio = dominant === 'bid'
+    ? (ask > 0 ? bid / ask : Infinity)
+    : (bid > 0 ? ask / bid : Infinity);
+  if (!(ratio >= ratioN)) return false;
+  const withTrend = bUp ? dominant === 'bid' : dominant === 'ask';
+  if (side === 'trend' && !withTrend) return false;
+  if (side === 'counter' && withTrend) return false;
+  return true;
+}
+
+/** Passes the stacked filter: runN consecutive levels each imbalanced >= ratioM. */
+function passesStackedFilter(data: Record<string, any>, runN: number, ratioM: number): boolean {
+  if (!(runN >= 1) || !(ratioM > 0)) return false;
+  const keys = Object.keys(data)
+    .filter((k) => Number.isFinite(parseFloat(k)))
+    .sort((x, y) => parseFloat(x) - parseFloat(y));
+  let run = 0;
+  for (const k of keys) {
+    const lvl = data[k];
+    const bv = Number(lvl?.bv) || 0;
+    const sv = Number(lvl?.sv) || 0;
+    const hi = Math.max(bv, sv);
+    const lo = Math.min(bv, sv);
+    const strong = lo > 0 ? hi / lo >= ratioM : hi > 0;
+    run = strong ? run + 1 : 0;
+    if (run >= runN) return true;
+  }
+  return false;
+}
+
+/**
+ * Highlight visible *reversal* bricks that pass the enabled footprint filters.
+ * Two independent sub-filters (each toggled via opts.*Enabled); a brick must
+ * pass EVERY enabled filter (AND). The brick is recoloured by its dominant side
+ * (blue = bid/buy, orange = ask/sell), reusing the imbalance marking style.
+ */
+function drawXvReversalHighlight(
+  chart: any,
+  clustersByTs: Record<string, any>,
+  opts: {
+    imbalanceEnabled: boolean;
+    imbalanceRatio: number;
+    imbalanceSide: string;
+    stackedEnabled: boolean;
+    stackedRunN: number;
+    stackedRatioM: number;
+  },
 ) {
   if (!chart) return;
   chart.removeOverlay({ name: 'xvImbalanceMark' });
-  if (!(ratioN > 0)) return;
+  if (!opts.imbalanceEnabled && !opts.stackedEnabled) return; // no active filter
   const dataList = chart.getDataList?.();
   const vr = chart.getVisibleRange?.();
   if (!dataList?.length || !vr) return;
@@ -117,79 +139,14 @@ function drawXvImbalanceForVisible(
     if (bUp === (a.close >= a.open)) continue; // only reversal bricks
     const data = clustersByTs[String(b.timestamp)]?.data;
     if (!data || typeof data !== 'object') continue;
-    let bid = 0;
-    let ask = 0;
-    for (const k in data) {
-      bid += Number(data[k]?.bv) || 0;
-      ask += Number(data[k]?.sv) || 0;
-    }
-    if (bid === ask) continue; // no perceptible imbalance
-    const dominant = bid > ask ? 'bid' : 'ask';
-    const ratio = dominant === 'bid'
-      ? (ask > 0 ? bid / ask : Infinity)
-      : (bid > 0 ? ask / bid : Infinity);
-    if (!(ratio >= ratioN)) continue;
-    // dominant volume agrees with the brick's direction?
-    const withTrend = bUp ? dominant === 'bid' : dominant === 'ask';
-    if (side === 'trend' && !withTrend) continue;
-    if (side === 'counter' && withTrend) continue;
+    const { bid, ask } = footprintSideTotals(data);
+    // Every enabled filter must pass.
+    if (opts.imbalanceEnabled && !passesImbalanceFilter(bid, ask, bUp, opts.imbalanceRatio, opts.imbalanceSide)) continue;
+    if (opts.stackedEnabled && !passesStackedFilter(data, opts.stackedRunN, opts.stackedRatioM)) continue;
+    const color = bid >= ask ? IMBALANCE_BID_COLOR : IMBALANCE_ASK_COLOR;
     chart.createOverlay({
       name: 'xvImbalanceMark',
-      extendData: { color: dominant === 'bid' ? IMBALANCE_BID_COLOR : IMBALANCE_ASK_COLOR },
-      points: [
-        { timestamp: b.timestamp, value: Number(b.open) },
-        { timestamp: b.timestamp, value: Number(b.close) },
-      ],
-    });
-  }
-}
-
-/**
- * Highlight visible *reversal* bricks whose footprint contains a run of `runN`
- * consecutive price levels (sorted by price) each with a bid/ask (buy vs sell)
- * imbalance of >= `ratioM` — i.e. a "stacked imbalance". Reuses clustersByTs.
- */
-function drawXvStackedForVisible(
-  chart: any,
-  clustersByTs: Record<string, any>,
-  runN: number,
-  ratioM: number,
-) {
-  if (!chart) return;
-  chart.removeOverlay({ name: 'xvStackedMark' });
-  if (!(runN >= 1) || !(ratioM > 0)) return;
-  const dataList = chart.getDataList?.();
-  const vr = chart.getVisibleRange?.();
-  if (!dataList?.length || !vr) return;
-  const from = Number.isFinite(vr.realFrom) ? vr.realFrom : vr.from;
-  const to = Number.isFinite(vr.realTo) ? vr.realTo : vr.to;
-  for (let i = Math.max(1, from); i < Math.min(dataList.length, to); i += 1) {
-    const b = dataList[i];
-    const a = dataList[i - 1];
-    if (!b || !a) continue;
-    if ((b.close >= b.open) === (a.close >= a.open)) continue; // only reversal bricks
-    const data = clustersByTs[String(b.timestamp)]?.data;
-    if (!data || typeof data !== 'object') continue;
-    // levels sorted by price; count consecutive ones with per-level imbalance >= M
-    const keys = Object.keys(data)
-      .filter((k) => Number.isFinite(parseFloat(k)))
-      .sort((x, y) => parseFloat(x) - parseFloat(y));
-    let run = 0;
-    let hit = false;
-    for (const k of keys) {
-      const lvl = data[k];
-      const bv = Number(lvl?.bv) || 0;
-      const sv = Number(lvl?.sv) || 0;
-      const hi = Math.max(bv, sv);
-      const lo = Math.min(bv, sv);
-      const strong = lo > 0 ? hi / lo >= ratioM : hi > 0;
-      run = strong ? run + 1 : 0;
-      if (run >= runN) { hit = true; break; }
-    }
-    if (!hit) continue;
-    chart.createOverlay({
-      name: 'xvStackedMark',
-      extendData: { color: STACKED_COLOR },
+      extendData: { color },
       points: [
         { timestamp: b.timestamp, value: Number(b.open) },
         { timestamp: b.timestamp, value: Number(b.close) },
@@ -220,15 +177,17 @@ const DEFAULT_CLUSTERS = {
   clusterSpikeMultiplier: 3,
 };
 
-// Imbalance highlight: reversal bricks where buy/sell footprint volume differs >= N.
+// Reversal-brick footprint highlight: a master toggle (showReversal) over two
+// independent sub-filters — total bid/ask imbalance and stacked per-level
+// imbalance. A brick must pass every enabled sub-filter.
 const DEFAULT_IMBALANCE = {
-  showImbalance: false,
+  showReversal: false, // master on/off for the whole highlight
+  showImbalance: true, // sub-filter: total bid/ask imbalance
   imbalanceRatio: 3,
-  imbalanceSide: '', // '' = any, 'bid' = buy dominant, 'ask' = sell dominant
+  imbalanceSide: '', // '' = any, 'trend' = with reversal, 'counter' = against
 };
 
-// Stacked-imbalance highlight: reversal bricks with N consecutive footprint
-// levels each imbalanced >= M times.
+// Sub-filter: N consecutive footprint levels each imbalanced >= M times.
 const DEFAULT_STACKED = {
   showStacked: false,
   stackedRunN: 3,
@@ -469,7 +428,8 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   const [showClusters, setShowClusters] = useState<boolean>(DEFAULT_CLUSTERS.showClusters);
   const [showClusterSpike, setShowClusterSpike] = useState<boolean>(DEFAULT_CLUSTERS.showClusterSpike);
   const [clusterSpikeMultiplier, setClusterSpikeMultiplier] = useState<number>(DEFAULT_CLUSTERS.clusterSpikeMultiplier);
-  // Highlight reversal bricks with a strong bid/ask imbalance (uses footprints).
+  // Reversal-brick footprint highlight: master toggle + two sub-filters.
+  const [showReversal, setShowReversal] = useState<boolean>(DEFAULT_IMBALANCE.showReversal);
   const [showImbalance, setShowImbalance] = useState<boolean>(DEFAULT_IMBALANCE.showImbalance);
   const [imbalanceRatio, setImbalanceRatio] = useState<number>(DEFAULT_IMBALANCE.imbalanceRatio);
   const [imbalanceSide, setImbalanceSide] = useState<string>(DEFAULT_IMBALANCE.imbalanceSide);
@@ -923,7 +883,8 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
         setShowClusters(!!parsed.showClusters);
         setShowClusterSpike(!!parsed.showClusterSpike);
         setClusterSpikeMultiplier(Number(parsed.clusterSpikeMultiplier) || DEFAULT_CLUSTERS.clusterSpikeMultiplier);
-        setShowImbalance(!!parsed.showImbalance);
+        setShowReversal(!!parsed.showReversal);
+        setShowImbalance(parsed.showImbalance !== false);
         setImbalanceRatio(Number(parsed.imbalanceRatio) || DEFAULT_IMBALANCE.imbalanceRatio);
         setImbalanceSide(typeof parsed.imbalanceSide === 'string' ? parsed.imbalanceSide : DEFAULT_IMBALANCE.imbalanceSide);
         setShowStacked(!!parsed.showStacked);
@@ -976,7 +937,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   // changes or clusters are toggled on. REST footprints share the brick ts, so
   // they key straight into clustersByTs; live updates arrive via the WS stream.
   useEffect(() => {
-    if (!chart || !(showClusters || showImbalance || showDelta || showStacked) || !r) { return; }
+    if (!chart || !(showClusters || showReversal || showDelta) || !r) { return; }
     const dl = chart.getDataList?.();
     if (!dl?.length) { return; }
     const minTs = Number(dl[0].timestamp);
@@ -985,7 +946,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     fetchXvClusters(r, minTs, maxTs + 1)
       .then((items) => mergeClusters(items, (it) => String(it.ts)))
       .catch((e) => console.error('xv clusters load failed:', e?.message));
-  }, [chart, showClusters, showImbalance, showDelta, showStacked, klinesVersion, r, fetchXvClusters, mergeClusters]);
+  }, [chart, showClusters, showReversal, showDelta, klinesVersion, r, fetchXvClusters, mergeClusters]);
 
   // Cluster overlays are per visible candle, so redraw on zoom/scroll too.
   useEffect(() => {
@@ -1020,25 +981,35 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     clusterSpikeMultiplier,
   ]);
 
-  // Highlight reversal bricks with a strong bid/ask imbalance (>= imbalanceRatio).
+  // Highlight reversal bricks passing the enabled footprint sub-filters
+  // (bid/ask imbalance and/or stacked imbalance), under the master toggle.
   useEffect(() => {
     if (!chart) { return; }
-    if (!showImbalance) {
+    if (!showReversal) {
       chart.removeOverlay({ name: 'xvImbalanceMark' });
       return;
     }
-    drawXvImbalanceForVisible(chart, clustersByTs, imbalanceRatio, imbalanceSide);
-  }, [chart, clustersByTs, clustersTick, klinesVersion, showImbalance, imbalanceRatio, imbalanceSide]);
-
-  // Highlight reversal bricks with N consecutive strongly-imbalanced levels.
-  useEffect(() => {
-    if (!chart) { return; }
-    if (!showStacked) {
-      chart.removeOverlay({ name: 'xvStackedMark' });
-      return;
-    }
-    drawXvStackedForVisible(chart, clustersByTs, stackedRunN, stackedRatioM);
-  }, [chart, clustersByTs, clustersTick, klinesVersion, showStacked, stackedRunN, stackedRatioM]);
+    drawXvReversalHighlight(chart, clustersByTs, {
+      imbalanceEnabled: showImbalance,
+      imbalanceRatio,
+      imbalanceSide,
+      stackedEnabled: showStacked,
+      stackedRunN,
+      stackedRatioM,
+    });
+  }, [
+    chart,
+    clustersByTs,
+    clustersTick,
+    klinesVersion,
+    showReversal,
+    showImbalance,
+    imbalanceRatio,
+    imbalanceSide,
+    showStacked,
+    stackedRunN,
+    stackedRatioM,
+  ]);
 
   const onSaveChartSettings = useCallback((values: any) => {
     const nextVolumeWidth = !!values.volumeWidth;
@@ -1054,7 +1025,8 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     const nextShowClusters = !!values.showClusters;
     const nextShowClusterSpike = !!values.showClusterSpike;
     const nextClusterSpikeMultiplier = Number(values.clusterSpikeMultiplier) || DEFAULT_CLUSTERS.clusterSpikeMultiplier;
-    const nextShowImbalance = !!values.showImbalance;
+    const nextShowReversal = !!values.showReversal;
+    const nextShowImbalance = values.showImbalance !== false;
     const nextImbalanceRatio = Number(values.imbalanceRatio) || DEFAULT_IMBALANCE.imbalanceRatio;
     const nextImbalanceSide = typeof values.imbalanceSide === 'string' ? values.imbalanceSide : DEFAULT_IMBALANCE.imbalanceSide;
     const nextShowStacked = !!values.showStacked;
@@ -1073,6 +1045,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     setShowClusters(nextShowClusters);
     setShowClusterSpike(nextShowClusterSpike);
     setClusterSpikeMultiplier(nextClusterSpikeMultiplier);
+    setShowReversal(nextShowReversal);
     setShowImbalance(nextShowImbalance);
     setImbalanceRatio(nextImbalanceRatio);
     setImbalanceSide(nextImbalanceSide);
@@ -1098,6 +1071,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
             showClusters: nextShowClusters,
             showClusterSpike: nextShowClusterSpike,
             clusterSpikeMultiplier: nextClusterSpikeMultiplier,
+            showReversal: nextShowReversal,
             showImbalance: nextShowImbalance,
             imbalanceRatio: nextImbalanceRatio,
             imbalanceSide: nextImbalanceSide,
@@ -1246,6 +1220,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
               showClusters,
               showClusterSpike,
               clusterSpikeMultiplier,
+              showReversal,
               showImbalance,
               imbalanceRatio,
               imbalanceSide,
