@@ -149,6 +149,11 @@ const DEFAULT_RSI = {
 // Overbought / oversold reference bands drawn on the RSI pane.
 const RSI_BANDS = [80, 20];
 
+// Footprint delta sub-pane defaults.
+const DEFAULT_DELTA = {
+  showDelta: false,
+};
+
 // Draw the 20/80 reference lines on the RSI pane. Returns false so the default
 // RSI line(s) still render on top (klinecharts skips defaults only when draw
 // returns true). The pane scale is pinned to 0–100 so the bands stay in view.
@@ -193,6 +198,9 @@ const DOWN = '#ef5350';
 const xvConfig = { volumeWidth: false, volP5: 0, volP95: 1, volWidthMin: 0.14, volWidthMax: 0.96 };
 
 const DEFAULT_VOL_WIDTH = { volWidthMin: 0.14, volWidthMax: 0.96 };
+
+// Per-brick delta (Σbv − Σsv) keyed by bar ts, read by the XV_DELTA indicator.
+const xvDeltaConfig: { byTs: Record<string, number> } = { byTs: {} };
 
 function pct(arr: number[], p: number): number {
   if (arr.length === 0) return 0;
@@ -248,6 +256,83 @@ function registerRangeXvIndicator() {
   } as any);
 }
 
+// Footprint delta sub-pane: per-brick delta (Σbv − Σsv) histogram coloured by
+// sign + a cumulative-delta line. Values come from xvDeltaConfig.byTs (built
+// from the loaded footprints); calc feeds the pane's auto y-range, draw renders.
+let deltaIndicatorRegistered = false;
+function registerXvDeltaIndicator() {
+  if (deltaIndicatorRegistered) return;
+  deltaIndicatorRegistered = true;
+  registerIndicator({
+    name: 'XV_DELTA',
+    shortName: 'Delta',
+    calc: (dataList: any[]) => {
+      let cum = 0;
+      return dataList.map((d) => {
+        const delta = xvDeltaConfig.byTs[String(d.timestamp)] ?? 0;
+        cum += delta;
+        return { delta, cum };
+      });
+    },
+    figures: [
+      { key: 'delta', title: 'Δ: ', type: 'bar' },
+      { key: 'cum', title: 'ΣΔ: ', type: 'line' },
+    ],
+    draw: ({ ctx, chart, xAxis, yAxis, bounding }: any) => {
+      const dataList = chart.getDataList();
+      const vr = chart.getVisibleRange();
+      const slot = chart.getBarSpace().bar;
+      // Recompute identically to calc (both read xvDeltaConfig) so we control
+      // colouring; cum runs from the oldest loaded brick.
+      let cum = 0;
+      const vals = dataList.map((d: any) => {
+        const delta = xvDeltaConfig.byTs[String(d.timestamp)] ?? 0;
+        cum += delta;
+        return { delta, cum };
+      });
+      const y0 = yAxis.convertToPixel(0);
+      ctx.save();
+      // zero line
+      ctx.setLineDash([3, 3]);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(150,150,150,0.45)';
+      ctx.beginPath();
+      ctx.moveTo(0, y0);
+      ctx.lineTo(bounding.width, y0);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // per-brick delta histogram
+      const w = Math.max(1, slot * 0.7);
+      for (let i = vr.from; i < vr.to; i++) {
+        const rr = vals[i];
+        if (!rr) continue;
+        const x = xAxis.convertToPixel(i);
+        const yv = yAxis.convertToPixel(rr.delta);
+        ctx.fillStyle = rr.delta >= 0 ? UP : DOWN;
+        const top = Math.min(y0, yv);
+        let h = Math.abs(yv - y0);
+        if (h < 1) h = 1;
+        ctx.fillRect(x - w / 2, top, w, h);
+      }
+      // cumulative delta line
+      ctx.beginPath();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#2962ff';
+      let started = false;
+      for (let i = vr.from; i < vr.to; i++) {
+        const rr = vals[i];
+        if (!rr) continue;
+        const x = xAxis.convertToPixel(i);
+        const y = yAxis.convertToPixel(rr.cum);
+        if (!started) { ctx.moveTo(x, y); started = true; } else { ctx.lineTo(x, y); }
+      }
+      ctx.stroke();
+      ctx.restore();
+      return true;
+    },
+  } as any);
+}
+
 export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   // Persist chart settings per pair (R is price-scale specific to each pair),
   // mirroring how the dhm graph stores its global settings in localStorage.
@@ -274,6 +359,8 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   // RSI sub-pane (built-in klinecharts indicator) — toggle + period from settings.
   const [showRsi, setShowRsi] = useState<boolean>(DEFAULT_RSI.showRsi);
   const [rsiPeriod, setRsiPeriod] = useState<number>(DEFAULT_RSI.rsiPeriod);
+  // Footprint delta sub-pane (uses footprints, like the imbalance highlight).
+  const [showDelta, setShowDelta] = useState<boolean>(DEFAULT_DELTA.showDelta);
   const [volWidthMin, setVolWidthMin] = useState<number>(DEFAULT_VOL_WIDTH.volWidthMin);
   const [volWidthMax, setVolWidthMax] = useState<number>(DEFAULT_VOL_WIDTH.volWidthMax);
   const [loading, setLoading] = useState<boolean>(false);
@@ -460,6 +547,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   useEffect(() => {
     if (!containerRef.current) return;
     registerRangeXvIndicator();
+    registerXvDeltaIndicator();
     const chart = init(containerRef.current);
     chartRef.current = chart;
     setChart(chart);
@@ -662,6 +750,29 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     }
   }, [chart, showRsi, rsiPeriod]);
 
+  // Footprint delta sub-pane. Rebuild the per-ts delta map from footprints, then
+  // (re)create the custom XV_DELTA indicator so calc re-reads the fresh values.
+  useEffect(() => {
+    if (!chart) { return; }
+    const map: Record<string, number> = {};
+    for (const ts in clustersByTs) {
+      const data = clustersByTs[ts]?.data;
+      if (!data || typeof data !== 'object') { continue; }
+      let bid = 0;
+      let ask = 0;
+      for (const k in data) {
+        bid += Number(data[k]?.bv) || 0;
+        ask += Number(data[k]?.sv) || 0;
+      }
+      map[ts] = bid - ask;
+    }
+    xvDeltaConfig.byTs = map;
+    chart.removeIndicator?.({ paneId: 'xv_delta_pane', name: 'XV_DELTA' });
+    if (showDelta) {
+      chart.createIndicator?.('XV_DELTA', false, { id: 'xv_delta_pane' });
+    }
+  }, [chart, showDelta, clustersByTs, klinesVersion]);
+
   // The header's R selector drives `r` through the /{pairId}/{r} path segment.
   // When present it wins over the saved value; selecting a different R re-runs
   // this and retriggers the reload effect below.
@@ -685,6 +796,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
         setVolumeWidth(!!parsed.volumeWidth);
         setShowRsi(parsed.showRsi !== false);
         setRsiPeriod(Number(parsed.rsiPeriod) || DEFAULT_RSI.rsiPeriod);
+        setShowDelta(!!parsed.showDelta);
         setVolWidthMin(Number.isFinite(Number(parsed.volWidthMin)) ? Number(parsed.volWidthMin) : DEFAULT_VOL_WIDTH.volWidthMin);
         setVolWidthMax(Number(parsed.volWidthMax) || DEFAULT_VOL_WIDTH.volWidthMax);
         setShowStrongLevels(parsed.showStrongLevels !== false);
@@ -745,7 +857,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   // changes or clusters are toggled on. REST footprints share the brick ts, so
   // they key straight into clustersByTs; live updates arrive via the WS stream.
   useEffect(() => {
-    if (!chart || !(showClusters || showImbalance) || !r) { return; }
+    if (!chart || !(showClusters || showImbalance || showDelta) || !r) { return; }
     const dl = chart.getDataList?.();
     if (!dl?.length) { return; }
     const minTs = Number(dl[0].timestamp);
@@ -754,7 +866,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     fetchXvClusters(r, minTs, maxTs + 1)
       .then((items) => mergeClusters(items, (it) => String(it.ts)))
       .catch((e) => console.error('xv clusters load failed:', e?.message));
-  }, [chart, showClusters, showImbalance, klinesVersion, r, fetchXvClusters, mergeClusters]);
+  }, [chart, showClusters, showImbalance, showDelta, klinesVersion, r, fetchXvClusters, mergeClusters]);
 
   // Cluster overlays are per visible candle, so redraw on zoom/scroll too.
   useEffect(() => {
@@ -803,6 +915,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     const nextVolumeWidth = !!values.volumeWidth;
     const nextShowRsi = !!values.showRsi;
     const nextRsiPeriod = Number(values.rsiPeriod) || DEFAULT_RSI.rsiPeriod;
+    const nextShowDelta = !!values.showDelta;
     const nextVolWidthMin = Number.isFinite(Number(values.volWidthMin)) ? Number(values.volWidthMin) : DEFAULT_VOL_WIDTH.volWidthMin;
     const nextVolWidthMax = Number(values.volWidthMax) || DEFAULT_VOL_WIDTH.volWidthMax;
     const nextR = values.r != null ? String(values.r) : '';
@@ -820,6 +933,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     setVolumeWidth(nextVolumeWidth);
     setShowRsi(nextShowRsi);
     setRsiPeriod(nextRsiPeriod);
+    setShowDelta(nextShowDelta);
     setVolWidthMin(nextVolWidthMin);
     setVolWidthMax(nextVolWidthMax);
     setR(nextR);
@@ -843,6 +957,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
             r: nextR,
             volumeWidth: nextVolumeWidth,
             showRsi: nextShowRsi,
+            showDelta: nextShowDelta,
             rsiPeriod: nextRsiPeriod,
             volWidthMin: nextVolWidthMin,
             volWidthMax: nextVolWidthMax,
@@ -990,6 +1105,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
               volumeWidth,
               showRsi,
               rsiPeriod,
+              showDelta,
               volWidthMin,
               volWidthMax,
               showStrongLevels,

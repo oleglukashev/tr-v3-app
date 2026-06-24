@@ -20,6 +20,7 @@ export function RangeXvSettingsForm({ defaultValues, onSubmit }: any) {
             />
             <CheckboxElement name='volumeWidth' label='Ширина по объёму' />
             <CheckboxElement name='showRsi' label='Показывать RSI?' />
+            <CheckboxElement name='showDelta' label='Показывать дельту (footprint, Δ bid/ask)?' />
             <TextFieldElement
               name='rsiPeriod'
               label='RSI: Период'
