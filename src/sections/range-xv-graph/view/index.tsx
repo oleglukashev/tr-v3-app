@@ -85,9 +85,13 @@ function passesImbalanceFilter(
   return true;
 }
 
-/** Passes the stacked filter: runN consecutive levels each imbalanced >= ratioM. */
-function passesStackedFilter(data: Record<string, any>, runN: number, ratioM: number): boolean {
-  if (!(runN >= 1) || !(ratioM > 0)) return false;
+/**
+ * Passes the stacked filter: runN consecutive price levels each with an
+ * absolute bid/ask volume difference |bv − sv| >= minDiff (M is a volume
+ * amount, not a ratio).
+ */
+function passesStackedFilter(data: Record<string, any>, runN: number, minDiff: number): boolean {
+  if (!(runN >= 1) || !(minDiff > 0)) return false;
   const keys = Object.keys(data)
     .filter((k) => Number.isFinite(parseFloat(k)))
     .sort((x, y) => parseFloat(x) - parseFloat(y));
@@ -96,9 +100,7 @@ function passesStackedFilter(data: Record<string, any>, runN: number, ratioM: nu
     const lvl = data[k];
     const bv = Number(lvl?.bv) || 0;
     const sv = Number(lvl?.sv) || 0;
-    const hi = Math.max(bv, sv);
-    const lo = Math.min(bv, sv);
-    const strong = lo > 0 ? hi / lo >= ratioM : hi > 0;
+    const strong = Math.abs(bv - sv) >= minDiff;
     run = strong ? run + 1 : 0;
     if (run >= runN) return true;
   }
