@@ -765,8 +765,12 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     }
   }, [chart, showDelta]);
 
-  // Rebuild the per-ts delta map from footprints and recompute the existing
-  // pane in place (no recreate → pane height preserved, no full redraw).
+  // Rebuild the per-ts delta map from footprints (cheap, no layout) on every
+  // change, but THROTTLE the recompute+relayout: live xvClusterForming ticks
+  // arrive continuously, and overrideIndicator triggers a full chart layout —
+  // doing that per websocket message is what re-renders the whole chart. The
+  // forming-bar redraw (mergeBars) already refreshes the pane between throttles.
+  const deltaThrottleRef = useRef<{ last: number; timer: any }>({ last: 0, timer: null });
   useEffect(() => {
     if (!chart || !showDelta) { return; }
     const map: Record<string, number> = {};
@@ -782,8 +786,25 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
       map[ts] = bid - ask;
     }
     xvDeltaConfig.byTs = map;
-    chart.overrideIndicator?.({ name: 'XV_DELTA' });
+    const th = deltaThrottleRef.current;
+    const fire = () => {
+      th.last = Date.now();
+      th.timer = null;
+      chart.overrideIndicator?.({ name: 'XV_DELTA' });
+    };
+    const elapsed = Date.now() - th.last;
+    if (elapsed >= 700) {
+      fire();
+    } else if (th.timer == null) {
+      th.timer = setTimeout(fire, 700 - elapsed);
+    }
   }, [chart, showDelta, clustersByTs, klinesVersion]);
+
+  // Clear any pending throttled delta recompute on unmount.
+  useEffect(() => () => {
+    const th = deltaThrottleRef.current;
+    if (th.timer != null) { clearTimeout(th.timer); th.timer = null; }
+  }, []);
 
   // The header's R selector drives `r` through the /{pairId}/{r} path segment.
   // When present it wins over the saved value; selecting a different R re-runs
