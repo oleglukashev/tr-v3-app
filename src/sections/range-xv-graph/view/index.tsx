@@ -272,6 +272,9 @@ function registerXvDeltaIndicator() {
   registerIndicator({
     name: 'XV_DELTA',
     shortName: 'Delta',
+    // Footprint deltas live outside klinecharts' data, so an explicit
+    // overrideIndicator() must always recompute (default would no-op).
+    shouldUpdate: () => true,
     calc: (dataList: any[]) => {
       let cum = 0;
       return dataList.map((d) => {
@@ -284,18 +287,12 @@ function registerXvDeltaIndicator() {
       { key: 'delta', title: 'Δ: ', type: 'bar' },
       { key: 'cum', title: 'ΣΔ: ', type: 'line' },
     ],
-    draw: ({ ctx, chart, xAxis, yAxis, bounding }: any) => {
-      const dataList = chart.getDataList();
+    draw: ({ ctx, chart, indicator, xAxis, yAxis, bounding }: any) => {
+      // Use the precomputed calc result (refreshed via overrideIndicator) rather
+      // than rebuilding the cumulative array every frame — keeps resize cheap.
+      const vals = indicator?.result || [];
       const vr = chart.getVisibleRange();
       const slot = chart.getBarSpace().bar;
-      // Recompute identically to calc (both read xvDeltaConfig) so we control
-      // colouring; cum runs from the oldest loaded brick.
-      let cum = 0;
-      const vals = dataList.map((d: any) => {
-        const delta = xvDeltaConfig.byTs[String(d.timestamp)] ?? 0;
-        cum += delta;
-        return { delta, cum };
-      });
       const y0 = yAxis.convertToPixel(0);
       ctx.save();
       // zero line
@@ -756,10 +753,22 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     }
   }, [chart, showRsi, rsiPeriod]);
 
-  // Footprint delta sub-pane. Rebuild the per-ts delta map from footprints, then
-  // (re)create the custom XV_DELTA indicator so calc re-reads the fresh values.
+  // Footprint delta sub-pane: create/remove on toggle only. Recreating the
+  // indicator on data changes would destroy the pane (and its resized height)
+  // and force a full relayout — so data refreshes go through overrideIndicator.
   useEffect(() => {
     if (!chart) { return; }
+    if (showDelta) {
+      chart.createIndicator?.('XV_DELTA', false, { id: 'xv_delta_pane' });
+    } else {
+      chart.removeIndicator?.({ paneId: 'xv_delta_pane', name: 'XV_DELTA' });
+    }
+  }, [chart, showDelta]);
+
+  // Rebuild the per-ts delta map from footprints and recompute the existing
+  // pane in place (no recreate → pane height preserved, no full redraw).
+  useEffect(() => {
+    if (!chart || !showDelta) { return; }
     const map: Record<string, number> = {};
     for (const ts in clustersByTs) {
       const data = clustersByTs[ts]?.data;
@@ -773,10 +782,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
       map[ts] = bid - ask;
     }
     xvDeltaConfig.byTs = map;
-    chart.removeIndicator?.({ paneId: 'xv_delta_pane', name: 'XV_DELTA' });
-    if (showDelta) {
-      chart.createIndicator?.('XV_DELTA', false, { id: 'xv_delta_pane' });
-    }
+    chart.overrideIndicator?.({ name: 'XV_DELTA' });
   }, [chart, showDelta, clustersByTs, klinesVersion]);
 
   // The header's R selector drives `r` through the /{pairId}/{r} path segment.
