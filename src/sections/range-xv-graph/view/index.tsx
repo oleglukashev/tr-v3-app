@@ -87,9 +87,9 @@ function passesImbalanceFilter(
 
 /**
  * Passes the stacked filter: runN consecutive price levels with the imbalance
- * all on the SAME side — each level where the absolute bid/ask volume difference
- * |buys − sells| >= minDiff (M is a volume amount, "greater BY M", not a ratio).
- * The run breaks when a level isn't strong, has no dominant side, or flips side.
+ * all on the SAME side — each level is strong when buys exceed sells BY M
+ * (buy side) OR sells exceed buys BY M (sell side); M is a volume amount, not a
+ * ratio. The run breaks when a level isn't strong or flips side.
  */
 function passesStackedFilter(data: Record<string, any>, runN: number, minDiff: number): boolean {
   if (!(runN >= 1) || !(minDiff > 0)) return false;
@@ -102,10 +102,10 @@ function passesStackedFilter(data: Record<string, any>, runN: number, minDiff: n
     const lvl = data[k];
     const bv = Number(lvl?.bv) || 0;
     const sv = Number(lvl?.sv) || 0;
-    const diff = bv - sv;
-    const strong = Math.abs(diff) >= minDiff;
-    const dir = diff > 0 ? 1 : (diff < 0 ? -1 : 0);
-    if (!strong || dir === 0) {
+    const buyExceeds = bv - sv >= minDiff; // buys greater than sells by >= M
+    const sellExceeds = sv - bv >= minDiff; // sells greater than buys by >= M
+    const dir = buyExceeds ? 1 : (sellExceeds ? -1 : 0);
+    if (dir === 0) {
       run = 0;
       runDir = 0;
       continue;
