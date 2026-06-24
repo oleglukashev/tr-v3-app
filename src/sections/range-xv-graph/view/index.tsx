@@ -199,11 +199,7 @@ const UP = '#26a69a';
 const DOWN = '#ef5350';
 
 // Mutable config read by the (globally registered) custom indicator draw.
-// volWidthMin/Max are the body width (as a fraction of the bar slot) at the
-// lowest / highest volume.
-const xvConfig = { volumeWidth: false, volP5: 0, volP95: 1, volWidthMin: 0.14, volWidthMax: 0.96 };
-
-const DEFAULT_VOL_WIDTH = { volWidthMin: 0.14, volWidthMax: 0.96 };
+const xvConfig = { volumeWidth: false, volP5: 0, volP95: 1 };
 
 // Per-brick delta (Σbv − Σsv) keyed by bar ts, read by the XV_DELTA indicator.
 const xvDeltaConfig: { byTs: Record<string, number> } = { byTs: {} };
@@ -242,8 +238,7 @@ function registerRangeXvIndicator() {
         const col = up ? UP : DOWN;
         let t = (Number(d.volume) - xvConfig.volP5) / (xvConfig.volP95 - xvConfig.volP5);
         t = Math.max(0, Math.min(1, t));
-        const frac = xvConfig.volWidthMin + (xvConfig.volWidthMax - xvConfig.volWidthMin) * Math.sqrt(t);
-        const w = Math.max(1, slot * Math.min(0.99, frac));
+        const w = Math.max(1, Math.min(slot * 0.96, slot * (0.14 + 0.84 * Math.sqrt(t))));
         ctx.strokeStyle = col;
         ctx.fillStyle = col;
         ctx.lineWidth = 1;
@@ -364,8 +359,6 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   const [rsiPeriod, setRsiPeriod] = useState<number>(DEFAULT_RSI.rsiPeriod);
   // Footprint delta sub-pane (uses footprints, like the imbalance highlight).
   const [showDelta, setShowDelta] = useState<boolean>(DEFAULT_DELTA.showDelta);
-  const [volWidthMin, setVolWidthMin] = useState<number>(DEFAULT_VOL_WIDTH.volWidthMin);
-  const [volWidthMax, setVolWidthMax] = useState<number>(DEFAULT_VOL_WIDTH.volWidthMax);
   const [loading, setLoading] = useState<boolean>(false);
   const [openChartSettings, setOpenChartSettings] = useState<boolean>(false);
 
@@ -701,9 +694,6 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     const chart = chartRef.current;
     if (!chart) return;
     xvConfig.volumeWidth = volumeWidth;
-    // Keep min <= max; push into the config the indicator reads.
-    xvConfig.volWidthMin = Math.max(0, Math.min(volWidthMin, volWidthMax));
-    xvConfig.volWidthMax = Math.max(volWidthMin, volWidthMax);
     if (volumeWidth) {
       chart.setStyles({
         candle: {
@@ -714,12 +704,10 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
           },
         },
       } as any);
-      // Re-create so width-param changes take effect (forces a redraw).
-      if (xvIndicatorOnRef.current) {
-        chart.removeIndicator?.('candle_pane', 'RANGE_XV');
+      if (!xvIndicatorOnRef.current) {
+        chart.createIndicator('RANGE_XV', true, { id: 'candle_pane' });
+        xvIndicatorOnRef.current = true;
       }
-      chart.createIndicator('RANGE_XV', true, { id: 'candle_pane' });
-      xvIndicatorOnRef.current = true;
     } else {
       if (xvIndicatorOnRef.current) {
         chart.removeIndicator?.({ paneId: 'candle_pane', name: 'RANGE_XV' });
@@ -735,7 +723,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
         },
       } as any);
     }
-  }, [volumeWidth, volWidthMin, volWidthMax]);
+  }, [volumeWidth]);
 
   // RSI in its own sub-pane. Recreated on period change (calcParams), removed
   // when toggled off. Built-in klinecharts 'RSI' indicator — no registration.
@@ -830,8 +818,6 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
         setShowRsi(parsed.showRsi !== false);
         setRsiPeriod(Number(parsed.rsiPeriod) || DEFAULT_RSI.rsiPeriod);
         setShowDelta(!!parsed.showDelta);
-        setVolWidthMin(Number.isFinite(Number(parsed.volWidthMin)) ? Number(parsed.volWidthMin) : DEFAULT_VOL_WIDTH.volWidthMin);
-        setVolWidthMax(Number(parsed.volWidthMax) || DEFAULT_VOL_WIDTH.volWidthMax);
         setShowStrongLevels(parsed.showStrongLevels !== false);
         setStrongLevelsLookback(Number(parsed.strongLevelsLookback) || DEFAULT_STRONG_LEVELS.strongLevelsLookback);
         setStrongLevelsTolerance(Number(parsed.strongLevelsTolerance) || DEFAULT_STRONG_LEVELS.strongLevelsTolerance);
@@ -949,8 +935,6 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     const nextShowRsi = !!values.showRsi;
     const nextRsiPeriod = Number(values.rsiPeriod) || DEFAULT_RSI.rsiPeriod;
     const nextShowDelta = !!values.showDelta;
-    const nextVolWidthMin = Number.isFinite(Number(values.volWidthMin)) ? Number(values.volWidthMin) : DEFAULT_VOL_WIDTH.volWidthMin;
-    const nextVolWidthMax = Number(values.volWidthMax) || DEFAULT_VOL_WIDTH.volWidthMax;
     const nextR = values.r != null ? String(values.r) : '';
     const nextShowStrongLevels = values.showStrongLevels !== false;
     const nextLookback = Number(values.strongLevelsLookback) || DEFAULT_STRONG_LEVELS.strongLevelsLookback;
@@ -967,8 +951,6 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     setShowRsi(nextShowRsi);
     setRsiPeriod(nextRsiPeriod);
     setShowDelta(nextShowDelta);
-    setVolWidthMin(nextVolWidthMin);
-    setVolWidthMax(nextVolWidthMax);
     setR(nextR);
     setShowStrongLevels(nextShowStrongLevels);
     setStrongLevelsLookback(nextLookback);
@@ -992,8 +974,6 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
             showRsi: nextShowRsi,
             showDelta: nextShowDelta,
             rsiPeriod: nextRsiPeriod,
-            volWidthMin: nextVolWidthMin,
-            volWidthMax: nextVolWidthMax,
             showStrongLevels: nextShowStrongLevels,
             strongLevelsLookback: nextLookback,
             strongLevelsTolerance: nextTolerance,
@@ -1139,8 +1119,6 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
               showRsi,
               rsiPeriod,
               showDelta,
-              volWidthMin,
-              volWidthMax,
               showStrongLevels,
               strongLevelsLookback,
               strongLevelsTolerance,
