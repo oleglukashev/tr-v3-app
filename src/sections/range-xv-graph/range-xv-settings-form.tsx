@@ -92,6 +92,23 @@ export function RangeXvSettingsForm({ defaultValues, onSubmit }: any) {
               size='small'
               fullWidth
             />
+            <CheckboxElement name='showStacked' label='Подсвечивать разворотные свечи со стопкой дисбалансов?' />
+            <TextFieldElement
+              name='stackedRunN'
+              label='Стопка: уровней подряд (N)'
+              type='number'
+              inputProps={{ min: 1, step: 1 }}
+              size='small'
+              fullWidth
+            />
+            <TextFieldElement
+              name='stackedRatioM'
+              label='Стопка: перевес на уровне, раз (M)'
+              type='number'
+              inputProps={{ min: 1, step: 0.5 }}
+              size='small'
+              fullWidth
+            />
           </Box>
           <CustomFormButton />
         </Container>
