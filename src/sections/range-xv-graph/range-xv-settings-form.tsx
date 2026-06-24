@@ -1,4 +1,4 @@
-import { FormContainer, CheckboxElement, TextFieldElement } from "react-hook-form-mui";
+import { FormContainer, CheckboxElement, TextFieldElement, SelectElement } from "react-hook-form-mui";
 import { Box } from "@mui/material";
 import Container from "@mui/material/Container";
 import CustomFormButton from "@/src/components/custom-form-button/custom-form-button";
@@ -93,6 +93,17 @@ export function RangeXvSettingsForm({ defaultValues, onSubmit }: any) {
               label='Дисбаланс bid/ask: во сколько раз (N)'
               type='number'
               inputProps={{ min: 1, step: 0.5 }}
+              size='small'
+              fullWidth
+            />
+            <SelectElement
+              name='imbalanceSide'
+              label='Дисбаланс: сторона перевеса'
+              options={[
+                { id: '', label: 'Любая' },
+                { id: 'bid', label: 'Перевес покупок (bid)' },
+                { id: 'ask', label: 'Перевес продаж (ask)' },
+              ]}
               size='small'
               fullWidth
             />
