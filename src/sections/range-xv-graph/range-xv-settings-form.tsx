@@ -62,6 +62,15 @@ export function RangeXvSettingsForm({ defaultValues, onSubmit }: any) {
               size='small'
               fullWidth
             />
+            <CheckboxElement name='showImbalance' label='Подсвечивать разворотные свечи с дисбалансом bid/ask?' />
+            <TextFieldElement
+              name='imbalanceRatio'
+              label='Дисбаланс bid/ask: во сколько раз (N)'
+              type='number'
+              inputProps={{ min: 1, step: 0.5 }}
+              size='small'
+              fullWidth
+            />
           </Box>
           <CustomFormButton />
         </Container>
