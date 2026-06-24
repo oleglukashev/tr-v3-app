@@ -130,6 +130,33 @@ function xvClusterHasLevels(it: any): boolean {
   return d != null && typeof d === 'object' && Object.keys(d).length > 0;
 }
 
+// RSI sub-pane defaults (built-in klinecharts indicator).
+const DEFAULT_RSI = {
+  showRsi: true,
+  rsiPeriod: 14,
+};
+// Overbought / oversold reference bands drawn on the RSI pane.
+const RSI_BANDS = [80, 20];
+
+// Draw the 20/80 reference lines on the RSI pane. Returns false so the default
+// RSI line(s) still render on top (klinecharts skips defaults only when draw
+// returns true). The pane scale is pinned to 0–100 so the bands stay in view.
+function drawRsiBands({ ctx, bounding, yAxis }: any): boolean {
+  ctx.save();
+  ctx.setLineDash([4, 3]);
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(150,150,150,0.55)';
+  for (const lv of RSI_BANDS) {
+    const y = yAxis.convertToPixel(lv);
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(bounding.width, y);
+    ctx.stroke();
+  }
+  ctx.restore();
+  return false;
+}
+
 // Strong-levels (S/R) defaults, mirroring the dhm graph.
 const DEFAULT_STRONG_LEVELS = {
   showStrongLevels: true,
@@ -228,6 +255,9 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   rRef.current = r;
 
   const [volumeWidth, setVolumeWidth] = useState<boolean>(false);
+  // RSI sub-pane (built-in klinecharts indicator) — toggle + period from settings.
+  const [showRsi, setShowRsi] = useState<boolean>(DEFAULT_RSI.showRsi);
+  const [rsiPeriod, setRsiPeriod] = useState<number>(DEFAULT_RSI.rsiPeriod);
   const [loading, setLoading] = useState<boolean>(false);
   const [openChartSettings, setOpenChartSettings] = useState<boolean>(false);
 
@@ -577,7 +607,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
       }
     } else {
       if (xvIndicatorOnRef.current) {
-        chart.removeIndicator?.('candle_pane', 'RANGE_XV');
+        chart.removeIndicator?.({ paneId: 'candle_pane', name: 'RANGE_XV' });
         xvIndicatorOnRef.current = false;
       }
       chart.setStyles({
@@ -591,6 +621,22 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
       } as any);
     }
   }, [volumeWidth]);
+
+  // RSI in its own sub-pane. Recreated on period change (calcParams), removed
+  // when toggled off. Built-in klinecharts 'RSI' indicator — no registration.
+  useEffect(() => {
+    if (!chart) { return; }
+    // removeIndicator takes a FILTER object; a bare string matches every
+    // indicator and would wipe the candle-pane bars (RANGE_XV) too.
+    chart.removeIndicator?.({ paneId: 'rsi_pane', name: 'RSI' });
+    if (showRsi) {
+      chart.createIndicator?.(
+        { name: 'RSI', calcParams: [rsiPeriod], minValue: 0, maxValue: 100, draw: drawRsiBands },
+        false,
+        { id: 'rsi_pane' },
+      );
+    }
+  }, [chart, showRsi, rsiPeriod]);
 
   // The header's R selector drives `r` through the /{pairId}/{r} path segment.
   // When present it wins over the saved value; selecting a different R re-runs
@@ -613,6 +659,8 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
           setR(parsed.r != null ? String(parsed.r) : '');
         }
         setVolumeWidth(!!parsed.volumeWidth);
+        setShowRsi(parsed.showRsi !== false);
+        setRsiPeriod(Number(parsed.rsiPeriod) || DEFAULT_RSI.rsiPeriod);
         setShowStrongLevels(parsed.showStrongLevels !== false);
         setStrongLevelsLookback(Number(parsed.strongLevelsLookback) || DEFAULT_STRONG_LEVELS.strongLevelsLookback);
         setStrongLevelsTolerance(Number(parsed.strongLevelsTolerance) || DEFAULT_STRONG_LEVELS.strongLevelsTolerance);
@@ -726,6 +774,8 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
 
   const onSaveChartSettings = useCallback((values: any) => {
     const nextVolumeWidth = !!values.volumeWidth;
+    const nextShowRsi = !!values.showRsi;
+    const nextRsiPeriod = Number(values.rsiPeriod) || DEFAULT_RSI.rsiPeriod;
     const nextR = values.r != null ? String(values.r) : '';
     const nextShowStrongLevels = values.showStrongLevels !== false;
     const nextLookback = Number(values.strongLevelsLookback) || DEFAULT_STRONG_LEVELS.strongLevelsLookback;
@@ -738,6 +788,8 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     const nextShowImbalance = !!values.showImbalance;
     const nextImbalanceRatio = Number(values.imbalanceRatio) || DEFAULT_IMBALANCE.imbalanceRatio;
     setVolumeWidth(nextVolumeWidth);
+    setShowRsi(nextShowRsi);
+    setRsiPeriod(nextRsiPeriod);
     setR(nextR);
     setShowStrongLevels(nextShowStrongLevels);
     setStrongLevelsLookback(nextLookback);
@@ -757,6 +809,8 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
           JSON.stringify({
             r: nextR,
             volumeWidth: nextVolumeWidth,
+            showRsi: nextShowRsi,
+            rsiPeriod: nextRsiPeriod,
             showStrongLevels: nextShowStrongLevels,
             strongLevelsLookback: nextLookback,
             strongLevelsTolerance: nextTolerance,
@@ -898,6 +952,8 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
             defaultValues={{
               r,
               volumeWidth,
+              showRsi,
+              rsiPeriod,
               showStrongLevels,
               strongLevelsLookback,
               strongLevelsTolerance,

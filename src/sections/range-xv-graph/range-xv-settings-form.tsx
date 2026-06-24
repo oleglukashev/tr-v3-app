@@ -19,6 +19,15 @@ export function RangeXvSettingsForm({ defaultValues, onSubmit }: any) {
               fullWidth
             />
             <CheckboxElement name='volumeWidth' label='Ширина по объёму' />
+            <CheckboxElement name='showRsi' label='Показывать RSI?' />
+            <TextFieldElement
+              name='rsiPeriod'
+              label='RSI: Период'
+              type='number'
+              inputProps={{ min: 2, step: 1 }}
+              size='small'
+              fullWidth
+            />
             <CheckboxElement name='showStrongLevels' label='Показывать сильные уровни (S/R)?' />
             <TextFieldElement
               name='strongLevelsLookback'
