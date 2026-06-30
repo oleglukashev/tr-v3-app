@@ -129,6 +129,11 @@ export default function AdminHeader() {
                 Pairs
               </Button>
               <Button
+                href="/admin/exchanges"
+              >
+                Exchanges
+              </Button>
+              <Button
                 href="/admin/stats"
               >
                 Stats

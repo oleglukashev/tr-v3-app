@@ -19,6 +19,7 @@ import {balanceApi} from "@/lib/redux/api/balanceApi";
 import { drawingElementsApi } from "./api/drawingElementsApi";
 import { datasetApi } from "./api/datasetApi";
 import { xvClusterPrecisionApi } from "./api/xvClusterPrecisionApi";
+import { exchangeApi } from "@/lib/redux/api/exchangeApi";
 
 export const reduxStore = configureStore({
   reducer: {
@@ -42,6 +43,7 @@ export const reduxStore = configureStore({
     [drawingElementsApi.reducerPath]: drawingElementsApi.reducer,
     [datasetApi.reducerPath]: datasetApi.reducer,
     [xvClusterPrecisionApi.reducerPath]: xvClusterPrecisionApi.reducer,
+    [exchangeApi.reducerPath]: exchangeApi.reducer,
   },
   //devTools: process.env.NEXT_PUBLIC_ENV !== "production",
   middleware: (getDefaultMiddleware) =>
@@ -66,5 +68,6 @@ export const reduxStore = configureStore({
       drawingElementsApi.middleware,
       datasetApi.middleware,
       xvClusterPrecisionApi.middleware,
+      exchangeApi.middleware,
     ]),
 });
