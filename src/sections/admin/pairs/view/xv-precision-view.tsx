@@ -3,8 +3,6 @@
 import { useState } from "react";
 import {
   Box,
-  Card,
-  CardContent,
   Table,
   TableHead,
   TableBody,
@@ -56,8 +54,7 @@ export default function XvPrecisionView() {
   };
 
   return (
-    <Card>
-      <CardContent>
+    <>
         <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 1.5 }}>
           XV precision — размер ценового уровня футпринта по R
         </Typography>
@@ -146,7 +143,6 @@ export default function XvPrecisionView() {
             )}
           </TableBody>
         </Table>
-      </CardContent>
-    </Card>
+    </>
   );
 }

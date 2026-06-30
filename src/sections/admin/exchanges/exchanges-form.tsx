@@ -16,6 +16,7 @@ export default function ExchangeForm({ defaultValues, isLoading, onSubmit }) {
       apiSecret: zodStringSchema().optional(),
       password: zodStringSchema().optional(),
       defaultType: zodStringSchema().optional(),
+      timeframes: zodStringSchema().optional(),
       testnet: boolean(),
       activated: boolean(),
     })),
@@ -72,6 +73,14 @@ export default function ExchangeForm({ defaultValues, isLoading, onSubmit }) {
         <TextFieldElement
           name='defaultType'
           label='Default type (spot, swap, future ...)'
+          size='small'
+          sx={{ mt: 2 }}
+          fullWidth
+        />
+
+        <TextFieldElement
+          name='timeframes'
+          label='Timeframes для klines (через запятую, напр. 5m,15m,1h)'
           size='small'
           sx={{ mt: 2 }}
           fullWidth

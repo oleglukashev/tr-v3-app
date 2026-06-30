@@ -83,6 +83,7 @@ export default function ExchangesIndexRow({ item, statuses }: Props) {
       <TableCell><Label color='success'>{item.name}</Label><StatusDot status={status} /></TableCell>
       <TableCell>{item.ccxtId}</TableCell>
       <TableCell>{item.defaultType || '—'}</TableCell>
+      <TableCell>{item.timeframes || '—'}</TableCell>
       <TableCell>{maskKey(item.apiKey)}</TableCell>
       <TableCell><Label color={item.testnet ? 'warning' : 'default'}>{item.testnet ? 'Yes' : 'No'}</Label></TableCell>
       <TableCell><Label color={item.activated ? 'success' : 'error'}>{item.activated ? 'Yes' : 'No'}</Label></TableCell>

@@ -1,21 +1,49 @@
-import {useGetAllQuery} from "@/lib/redux/api/pairApi";
+import {useGetAllQuery, useCreateMutation} from "@/lib/redux/api/pairApi";
 import PairsIndexRow from "@/src/sections/admin/pairs/pairs-index-row";
-import CustomTablePage from "@/src/components/custom-table-page/custom-table-page";
 import PairForm from "@/src/sections/admin/pairs/pairs-form";
 import {useCallback, useMemo, useState} from "react";
 import {onSubmitWrapper} from "@/src/utils/submit";
-import {useCreateMutation} from "@/lib/redux/api/pairApi";
-import {FormControl, InputLabel, MenuItem, Select} from "@mui/material";
+import {
+  Box,
+  Button,
+  Dialog,
+  DialogTitle,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+} from "@mui/material";
+
+const HEAD = [
+  { id: 'id', label: 'ID' },
+  { id: 'name', label: 'Name' },
+  { id: 'tradingService', label: 'Trading service' },
+  { id: 'active', label: 'Activated?' },
+  { id: 'isDhm', label: 'DHM/DZM?' },
+  { id: 'getKlineData', label: 'Get kline data?' },
+  { id: 'getBidasksData', label: 'Get orderbooks data?' },
+  { id: 'actions', label: '' },
+];
 
 export default function AdminPairsIndexView({ }: any) {
-  const { data: pairs, isLoading } = useGetAllQuery({}) as any;
+  const { data: pairs } = useGetAllQuery({}) as any;
   const [create] = useCreateMutation();
   const [tradingServiceFilter, setTradingServiceFilter] = useState<string>("all");
+  const [openCreate, setOpenCreate] = useState<boolean>(false);
 
-  const onSubmitCreate = useCallback((values: any) => {
+  const onSubmitCreate = useCallback(async (values: any) => {
     const data = Object.assign({}, values);
     data.clusterPrecision = data.clusterPrecision.trim().length ? JSON.parse(data.clusterPrecision) : null;
-    return onSubmitWrapper(() => create(data), null, 'Created');
+    const res: any = await onSubmitWrapper(() => create(data), null, 'Created');
+    if (!res.error) {
+      setOpenCreate(false);
+    }
+    return res;
   }, []);
 
   // Distinct trading services present in the loaded pairs, for the filter selectbox.
@@ -41,22 +69,8 @@ export default function AdminPairsIndexView({ }: any) {
   );
 
   return (
-    <CustomTablePage
-      data={filteredPairs}
-      isLoading={isLoading}
-      tableHead={[
-        { id: 'id', label: 'ID' },
-        { id: 'name', label: 'Name' },
-        { id: 'tradingService', label: 'Trading service' },
-        { id: 'active', label: 'Activated?' },
-        { id: 'isDhm', label: 'DHM/DZM?' },
-        { id: 'getKlineData', label: 'Get kline data?' },
-        { id: 'getBidasksData', label: 'Get orderbooks data?' },
-        { id: 'actions', label: null}
-      ]}
-      CreateForm={PairForm}
-      onSubmitCreate={onSubmitCreate}
-      headerActions={(
+    <>
+      <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
         <FormControl size="small" sx={{ minWidth: 200 }}>
           <InputLabel id="pairs-trading-service-filter-label">Trading service</InputLabel>
           <Select
@@ -73,9 +87,40 @@ export default function AdminPairsIndexView({ }: any) {
             ))}
           </Select>
         </FormControl>
-      )}
-      title='Pairs'
-      RowComponent={PairsIndexRow}
-    />
+        <Box sx={{ flexGrow: 1 }} />
+        <Button variant="contained" onClick={() => setOpenCreate(true)}>
+          Создать
+        </Button>
+      </Box>
+
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            {HEAD.map((h) => (
+              <TableCell key={h.id} align={h.id === 'actions' ? 'right' : 'left'}>
+                {h.label}
+              </TableCell>
+            ))}
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {filteredPairs.map((p: any) => (
+            <PairsIndexRow key={p.id} item={p} />
+          ))}
+          {filteredPairs.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={HEAD.length} sx={{ color: 'text.secondary' }}>
+                Данных нет
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+
+      <Dialog fullWidth maxWidth="sm" open={openCreate} onClose={() => setOpenCreate(false)}>
+        <DialogTitle>Создание</DialogTitle>
+        <PairForm defaultValues={{}} onSubmit={onSubmitCreate} />
+      </Dialog>
+    </>
   )
 }
