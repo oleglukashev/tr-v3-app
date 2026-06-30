@@ -17,6 +17,7 @@ export default function CustomTablePage({
                                           search,
                                           onSubmitCreate,
                                           CreateForm,
+                                          headerActions,
                                           RowComponent,
                                           customTablePage,
                                           isLoading,
@@ -69,6 +70,7 @@ export default function CustomTablePage({
               )}
             </Grid>
             <Grid item>
+              {headerActions}
               {search && (
                 <CustomTableSearch
                   value={customTablePage.searchParams.get('q')}

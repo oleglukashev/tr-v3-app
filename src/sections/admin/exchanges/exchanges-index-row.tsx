@@ -13,8 +13,21 @@ import {enqueueSnackbar} from "notistack";
 import ExchangeForm from "@/src/sections/admin/exchanges/exchanges-form";
 
 type Props = {
-  item: any
+  item: any,
+  statuses?: Record<number, 'loading' | 'ok' | 'error'>
 };
+
+function StatusDot({ status }: { status?: 'loading' | 'ok' | 'error' }) {
+  if (!status) return null;
+  const color = status === 'ok' ? 'success.main' : status === 'error' ? 'error.main' : 'grey.400';
+  return (
+    <Box
+      component='span'
+      title={status === 'ok' ? 'Соединение OK' : status === 'error' ? 'Ошибка соединения' : 'Проверка...'}
+      sx={{ ml: 1, display: 'inline-block', width: 10, height: 10, borderRadius: '50%', bgcolor: color, verticalAlign: 'middle' }}
+    />
+  );
+}
 
 function maskKey(value?: string) {
   if (!value) return '—';
@@ -22,11 +35,13 @@ function maskKey(value?: string) {
   return `${value.slice(0, 4)}…${value.slice(-4)}`;
 }
 
-export default function ExchangesIndexRow({ item }: Props) {
+export default function ExchangesIndexRow({ item, statuses }: Props) {
   const [openUpdateForm, setOpenUpdateForm] = useState<boolean>(false);
   const [openDelete, setOpenDelete] = useState<boolean>(false);
   const [openConnect, setOpenConnect] = useState<boolean>(false);
   const [connectResult, setConnectResult] = useState<any>(null);
+  const [localStatus, setLocalStatus] = useState<'loading' | 'ok' | 'error' | undefined>(undefined);
+  const status = localStatus ?? statuses?.[item.id];
   const popover = usePopover();
   const [update, { isLoading: isUpdateLoading }] = useUpdateMutation();
   const [remove, { isLoading: isRemoveLoading }] = useRemoveMutation();
@@ -43,17 +58,21 @@ export default function ExchangesIndexRow({ item }: Props) {
   const onConnect = useCallback(async () => {
     setOpenConnect(true);
     setConnectResult(null);
+    setLocalStatus('loading');
     const res: any = await connect(item.id);
     if (res.error) {
       const message = res.error?.data?.message || 'Ошибка подключения';
       enqueueSnackbar(typeof message === 'string' ? message : 'Ошибка подключения', { variant: 'error' });
       setConnectResult({ ok: false, error: typeof message === 'string' ? message : JSON.stringify(message) });
+      setLocalStatus('error');
     } else {
       setConnectResult(res.data);
       if (res.data?.ok) {
         enqueueSnackbar('Успешное подключение к бирже');
+        setLocalStatus('ok');
       } else {
         enqueueSnackbar(res.data?.error || 'Не удалось подключиться', { variant: 'error' });
+        setLocalStatus('error');
       }
     }
   }, [item.id]);
@@ -61,7 +80,7 @@ export default function ExchangesIndexRow({ item }: Props) {
   return (
     <TableRow key={item.id}>
       <TableCell>{item.id}</TableCell>
-      <TableCell><Label color='success'>{item.name}</Label></TableCell>
+      <TableCell><Label color='success'>{item.name}</Label><StatusDot status={status} /></TableCell>
       <TableCell>{item.ccxtId}</TableCell>
       <TableCell>{item.defaultType || '—'}</TableCell>
       <TableCell>{maskKey(item.apiKey)}</TableCell>
