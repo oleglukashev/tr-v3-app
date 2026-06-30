@@ -29,8 +29,10 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import Label from "src/components/label";
 import {
   useGetDatasetsQuery,
+  useGetDatasetPairsQuery,
   useDeleteDatasetMutation,
   type DatasetRow,
+  type DatasetPair,
 } from "@/lib/redux/api/datasetApi";
 
 const TABS: Array<{ kind: "klines" | "bidasks"; label: string }> = [
@@ -51,7 +53,18 @@ export default function AdminDataView() {
   const [datasetFilter, setDatasetFilter] = useState<string>("all");
   const [pending, setPending] = useState<DatasetRow | null>(null);
   const { data } = useGetDatasetsQuery();
+  const { data: pairsData } = useGetDatasetPairsQuery();
   const [deleteDataset, { isLoading: isDeleting }] = useDeleteDatasetMutation();
+
+  // Merge pair names (from api.traken-trade.ru) onto dataset rows (from bidasks) by pairId.
+  const nameById = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const p of (Array.isArray(pairsData) ? pairsData : []) as DatasetPair[]) {
+      m.set(p.id, p.name || p.symbol || String(p.id));
+    }
+    return m;
+  }, [pairsData]);
+  const pairName = (pairId: number) => nameById.get(pairId) ?? String(pairId);
 
   const kind = TABS[tab].kind;
   // Rows for the active tab, before the type/dataset selectbox filters.
@@ -64,12 +77,12 @@ export default function AdminDataView() {
   const pairOptions = useMemo(() => {
     const seen = new Map<string, string>();
     for (const r of tabRows) {
-      seen.set(String(r.pairId), r.pairName);
+      seen.set(String(r.pairId), pairName(r.pairId));
     }
     return Array.from(seen, ([value, label]) => ({ value, label })).sort((a, b) =>
       a.label.localeCompare(b.label),
     );
-  }, [tabRows]);
+  }, [tabRows, nameById]);
 
   // Distinct datasets available in this tab, for the Dataset selectbox.
   const datasetOptions = useMemo(() => {
@@ -84,13 +97,20 @@ export default function AdminDataView() {
 
   const rows: DatasetRow[] = useMemo(
     () =>
-      tabRows.filter(
-        (r) =>
-          (pairFilter === "all" || String(r.pairId) === pairFilter) &&
-          (typeFilter === "all" || r.type === typeFilter) &&
-          (datasetFilter === "all" || `${r.keyField}:${r.key}` === datasetFilter),
-      ),
-    [tabRows, pairFilter, typeFilter, datasetFilter],
+      tabRows
+        .filter(
+          (r) =>
+            (pairFilter === "all" || String(r.pairId) === pairFilter) &&
+            (typeFilter === "all" || r.type === typeFilter) &&
+            (datasetFilter === "all" || `${r.keyField}:${r.key}` === datasetFilter),
+        )
+        .sort(
+          (a, b) =>
+            pairName(a.pairId).localeCompare(pairName(b.pairId)) ||
+            a.type.localeCompare(b.type) ||
+            a.key.localeCompare(b.key),
+        ),
+    [tabRows, pairFilter, typeFilter, datasetFilter, nameById],
   );
 
   const onTabChange = (v: number) => {
@@ -184,7 +204,7 @@ export default function AdminDataView() {
                 {rows.map((row) => (
                   <TableRow key={`${row.table}:${row.pairId}:${row.key}`}>
                     <TableCell>
-                      <Label color="success">{row.pairName}</Label>
+                      <Label color="success">{pairName(row.pairId)}</Label>
                     </TableCell>
                     <TableCell>
                       <Label color={row.type === "xv" ? "primary" : "default"}>
@@ -230,7 +250,7 @@ export default function AdminDataView() {
             {pending && (
               <>
                 This permanently deletes <b>{pending.count.toLocaleString()}</b> rows
-                from <b>{pending.table}</b> for <b>{pending.pairName}</b> ({keyLabel(pending)}).
+                from <b>{pending.table}</b> for <b>{pairName(pending.pairId)}</b> ({keyLabel(pending)}).
                 This cannot be undone.
               </>
             )}
