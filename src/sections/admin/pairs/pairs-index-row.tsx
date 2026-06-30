@@ -26,6 +26,7 @@ export default function PairsIndexRow({ item }: Props) {
   const onSubmitUpdate = useCallback((values) => {
     const data = Object.assign({}, values);
     data.clusterPrecision = data.clusterPrecision.trim().length ? JSON.parse(data.clusterPrecision) : null;
+    delete data.tradingService; // included relation must not leak into the update payload
     return onSubmitWrapper(() => update({ id: item.id, values: data }), () => setOpenUpdateForm(false), 'Успешно обновлено');
   }, [item.id]);
 
@@ -37,6 +38,7 @@ export default function PairsIndexRow({ item }: Props) {
     <TableRow key={item.id}>
       <TableCell>{item.id}</TableCell>
       <TableCell><Label color='success'>{item.name}</Label></TableCell>
+      <TableCell><Label color='info'>{item.tradingService?.name || '—'}</Label></TableCell>
       <TableCell><Label color={item.activated ? 'success' : 'error'}>{item.activated ? 'Yes' : 'No'}</Label></TableCell>
       <TableCell><Label color={item.isDhm ? 'success' : 'default'}>{item.isDhm ? 'DHM' : '-'}</Label></TableCell>
       <TableCell><Label color={item.isUsedToKline ? 'success' : 'error'}>{item.isUsedToKline ? 'Yes' : 'No'}</Label></TableCell>
