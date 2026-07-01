@@ -30,7 +30,9 @@ import Label from "src/components/label";
 import {
   useGetDatasetsQuery,
   useGetDatasetPairsQuery,
+  useGetKlineDatasetsQuery,
   useDeleteDatasetMutation,
+  useDeleteKlineDatasetMutation,
   type DatasetRow,
   type DatasetPair,
 } from "@/lib/redux/api/datasetApi";
@@ -53,9 +55,20 @@ export default function AdminDataView() {
   const [typeFilter, setTypeFilter] = useState<"all" | "general" | "xv">("all");
   const [datasetFilter, setDatasetFilter] = useState<string>("all");
   const [pending, setPending] = useState<DatasetRow | null>(null);
-  const { data } = useGetDatasetsQuery();
+  const { data: bidasksData } = useGetDatasetsQuery();
+  const { data: klineData } = useGetKlineDatasetsQuery();
   const { data: pairsData } = useGetDatasetPairsQuery();
   const [deleteDataset, { isLoading: isDeleting }] = useDeleteDatasetMutation();
+  const [deleteKlineDataset, { isLoading: isDeletingKline }] = useDeleteKlineDatasetMutation();
+
+  // klines (general) приходят из klines-сервиса, остальное (xv_klines, clusters, xv_clusters) — из bidasks.
+  const data = useMemo(
+    () => [
+      ...(Array.isArray(bidasksData) ? bidasksData : []),
+      ...(Array.isArray(klineData) ? klineData : []),
+    ],
+    [bidasksData, klineData],
+  );
 
   // Merge pair names (from api.traken-trade.ru) onto dataset rows (from bidasks) by pairId.
   const nameById = useMemo(() => {
@@ -146,11 +159,16 @@ export default function AdminDataView() {
   const onConfirmDelete = async () => {
     if (!pending) return;
     try {
-      await deleteDataset({
-        table: pending.table,
-        pairId: pending.pairId,
-        key: pending.key,
-      }).unwrap();
+      // klines (general) удаляются в klines-сервисе, остальное — в bidasks.
+      if (pending.table === "klines") {
+        await deleteKlineDataset({ pairId: pending.pairId, key: pending.key }).unwrap();
+      } else {
+        await deleteDataset({
+          table: pending.table,
+          pairId: pending.pairId,
+          key: pending.key,
+        }).unwrap();
+      }
     } catch {
       /* surfaced by RTK error state; keep the dialog flow simple */
     }
@@ -266,7 +284,7 @@ export default function AdminDataView() {
                         aria-label="delete"
                         size="small"
                         color="error"
-                        disabled={isDeleting}
+                        disabled={isDeleting || isDeletingKline}
                         onClick={() => setPending(row)}
                       >
                         <DeleteIcon fontSize="small" />
@@ -301,11 +319,11 @@ export default function AdminDataView() {
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setPending(null)} disabled={isDeleting}>
+          <Button onClick={() => setPending(null)} disabled={isDeleting || isDeletingKline}>
             Cancel
           </Button>
-          <Button onClick={onConfirmDelete} color="error" variant="contained" disabled={isDeleting}>
-            {isDeleting ? "Deleting…" : "Delete"}
+          <Button onClick={onConfirmDelete} color="error" variant="contained" disabled={isDeleting || isDeletingKline}>
+            {isDeleting || isDeletingKline ? "Deleting…" : "Delete"}
           </Button>
         </DialogActions>
       </Dialog>

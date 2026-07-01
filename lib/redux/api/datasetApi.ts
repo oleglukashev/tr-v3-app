@@ -1,5 +1,5 @@
 import { createApi } from "@reduxjs/toolkit/dist/query/react";
-import { customTrClustersFetchBase, customTrApiFetchBase } from "../../customFetchBase";
+import { customTrClustersFetchBase, customTrApiFetchBase, customTrKlinesFetchBase } from "../../customFetchBase";
 
 export type DatasetRow = {
   kind: "klines" | "bidasks";
@@ -23,6 +23,7 @@ export type DatasetPair = {
 // loose and compose with the other BaseApi slices in the store, same as them.
 const reducerPath: string = "datasetApi";
 const pairsReducerPath: string = "datasetPairsApi";
+const klineReducerPath: string = "klineDatasetApi";
 
 /** Admin datasets — grouped row counts + delete, served by the bidasks service.
  *  Rows carry only pairId; pair names are merged on the frontend (see datasetPairsApi). */
@@ -58,5 +59,26 @@ export const datasetPairsApi = createApi({
   }),
 });
 
+/** klines (general) datasets — served by klines.traken-trade.ru (the real klines DB). */
+export const klineDatasetApi = createApi({
+  reducerPath: klineReducerPath,
+  baseQuery: customTrKlinesFetchBase,
+  tagTypes: ["KlineDataset"],
+  endpoints: (builder: any) => ({
+    getKlineDatasets: builder.query({
+      query: () => ({ url: "datasets", method: "GET" }),
+      providesTags: ["KlineDataset"],
+    }),
+    deleteKlineDataset: builder.mutation({
+      query: ({ pairId, key }: { pairId: number; key: string }) => ({
+        url: `datasets/klines/${pairId}/${encodeURIComponent(key)}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["KlineDataset"],
+    }),
+  }),
+});
+
 export const { useGetDatasetsQuery, useDeleteDatasetMutation } = datasetApi as any;
 export const { useGetDatasetPairsQuery } = datasetPairsApi as any;
+export const { useGetKlineDatasetsQuery, useDeleteKlineDatasetMutation } = klineDatasetApi as any;

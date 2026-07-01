@@ -17,7 +17,7 @@ import { orderbookStorageApi } from "./api/orderbookStorageApi";
 import { orderbookApi } from "./api/orderbookApi";
 import {balanceApi} from "@/lib/redux/api/balanceApi";
 import { drawingElementsApi } from "./api/drawingElementsApi";
-import { datasetApi, datasetPairsApi } from "./api/datasetApi";
+import { datasetApi, datasetPairsApi, klineDatasetApi } from "./api/datasetApi";
 import { xvClusterPrecisionApi } from "./api/xvClusterPrecisionApi";
 import { exchangeApi } from "@/lib/redux/api/exchangeApi";
 
@@ -43,6 +43,7 @@ export const reduxStore = configureStore({
     [drawingElementsApi.reducerPath]: drawingElementsApi.reducer,
     [datasetApi.reducerPath]: datasetApi.reducer,
     [datasetPairsApi.reducerPath]: datasetPairsApi.reducer,
+    [klineDatasetApi.reducerPath]: klineDatasetApi.reducer,
     [xvClusterPrecisionApi.reducerPath]: xvClusterPrecisionApi.reducer,
     [exchangeApi.reducerPath]: exchangeApi.reducer,
   },
@@ -69,6 +70,7 @@ export const reduxStore = configureStore({
       drawingElementsApi.middleware,
       datasetApi.middleware,
       datasetPairsApi.middleware,
+      klineDatasetApi.middleware,
       xvClusterPrecisionApi.middleware,
       exchangeApi.middleware,
     ]),
