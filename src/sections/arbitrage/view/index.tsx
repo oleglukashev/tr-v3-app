@@ -7,14 +7,14 @@ import {
   CardHeader,
   Collapse,
   IconButton,
+  InputAdornment,
   Stack,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
-  ToggleButton,
-  ToggleButtonGroup,
+  TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -33,22 +33,14 @@ import {
 import {
   getOrderbookDepthWebSocketUrl,
   SUBSCRIBE_ALL_DEPTH,
-  SLIPPAGE_BANDS,
 } from "@/src/utils/orderbookDepthWebSocket";
 
-interface DepthBand {
-  base: number;
-  notional: number;
-}
-interface DepthProfile {
+type Level = [number, number]; // [price, amount(base)]
+interface DepthBook {
   pairId: number;
   ts: number;
-  bestBid: number;
-  bestAsk: number;
-  mid: number;
-  spreadPct: number;
-  ask: Record<string, DepthBand>;
-  bid: Record<string, DepthBand>;
+  bids: Level[]; // best-first (descending)
+  asks: Level[]; // best-first (ascending)
 }
 
 interface ArbitrageLeg {
@@ -56,7 +48,9 @@ interface ArbitrageLeg {
   tradingServiceName: string;
   pairId: number;
   symbol: string;
-  price: number;
+  price: number; // best (top-of-book) price
+  effPrice: number | null; // VWAP for the chosen volume (null = no book)
+  effFilled: boolean; // could the book fully absorb the volume?
   takerFee: number;
   direction: 'long' | 'short';
 }
@@ -66,11 +60,8 @@ interface ArbitrageCombo {
   priceDiffPercent: number;
   long: ArbitrageLeg;
   short: ArbitrageLeg;
-  netProfitPercent: number;
-  // Max USDT executable on both legs within the selected slippage tolerance (min of the two books).
-  liquidityUsd: number | null;
-  // netProfitPercent minus a conservative slippage haircut (tolerance on each leg).
-  netAfterSlippagePercent: number;
+  netProfitPercent: number; // from top prices
+  effProfitPercent: number | null; // from effective (VWAP) prices, minus fees
 }
 
 interface ArbitrageOpportunity {
@@ -79,23 +70,53 @@ interface ArbitrageOpportunity {
   others: ArbitrageCombo[];
 }
 
-const fmtPrice = (value: number) =>
-  value?.toLocaleString('en-US', { maximumFractionDigits: 8 });
-const fmtPct = (value: number) => `${Number(value ?? 0).toFixed(3)}%`;
-const fmtUsd = (value: number | null) => {
-  if (value == null) return '—';
-  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
-  if (value >= 1_000) return `$${(value / 1_000).toFixed(1)}k`;
-  return `$${value.toFixed(0)}`;
-};
+const fmtPrice = (value: number | null) =>
+  value == null ? '—' : value.toLocaleString('en-US', { maximumFractionDigits: 8 });
+const fmtPct = (value: number | null) =>
+  value == null ? '—' : `${Number(value).toFixed(3)}%`;
 
-function toLeg(item: any, direction: 'long' | 'short'): ArbitrageLeg {
+/**
+ * Walk one side of the book to spend `targetUsd` (quote notional) and return the volume-weighted
+ * average price. asks → buying, bids → selling. `filled` is false if the top-N levels can't absorb
+ * the whole target (vwap is then over what's available).
+ */
+function vwapForNotional(
+  levels: Level[],
+  targetUsd: number,
+): { vwap: number; filled: boolean } | null {
+  if (!levels || !levels.length || !(targetUsd > 0)) return null;
+  let baseAcc = 0;
+  let usdAcc = 0;
+  for (const [price, amount] of levels) {
+    if (!(price > 0) || !(amount > 0)) continue;
+    const levelUsd = price * amount;
+    const takeUsd = Math.min(levelUsd, targetUsd - usdAcc);
+    if (takeUsd <= 0) break;
+    baseAcc += takeUsd / price;
+    usdAcc += takeUsd;
+    if (usdAcc >= targetUsd) break;
+  }
+  if (baseAcc <= 0) return null;
+  return { vwap: usdAcc / baseAcc, filled: usdAcc >= targetUsd * 0.999 };
+}
+
+function toLeg(
+  item: any,
+  direction: 'long' | 'short',
+  book: DepthBook | undefined,
+  volumeUsd: number,
+): ArbitrageLeg {
+  // long = buy → walk asks; short = sell → walk bids.
+  const levels = direction === 'long' ? book?.asks : book?.bids;
+  const eff = volumeUsd > 0 ? vwapForNotional(levels as Level[], volumeUsd) : null;
   return {
     tradingServiceId: item.pair.tradingServiceId,
     tradingServiceName: item.service.name,
     pairId: item.pair.id,
     symbol: item.pair.symbol,
     price: item.price,
+    effPrice: eff ? eff.vwap : null,
+    effFilled: eff ? eff.filled : false,
     takerFee: Number(item.service.takerFee ?? 0),
     direction,
   };
@@ -104,23 +125,22 @@ function toLeg(item: any, direction: 'long' | 'short'): ArbitrageLeg {
 function buildCombo(
   a: any,
   b: any,
-  depth: Record<number, DepthProfile>,
-  tol: number,
+  depth: Record<number, DepthBook>,
+  volumeUsd: number,
 ): ArbitrageCombo {
   const cheapest = a.price <= b.price ? a : b;
   const dearest = a.price <= b.price ? b : a;
   const priceDiffPercent =
     ((dearest.price - cheapest.price) / cheapest.price) * 100;
-  const long = toLeg(cheapest, 'long');
-  const short = toLeg(dearest, 'short');
+  const long = toLeg(cheapest, 'long', depth[cheapest.pair.id], volumeUsd);
+  const short = toLeg(dearest, 'short', depth[dearest.pair.id], volumeUsd);
 
-  // Entering the arbitrage: BUY on the cheap leg (consume its asks), SELL on the dear leg
-  // (consume its bids). Executable size within tolerance is the thinner of the two books.
-  const tolKey = String(tol);
-  const askUsd = depth[long.pairId]?.ask?.[tolKey]?.notional;
-  const bidUsd = depth[short.pairId]?.bid?.[tolKey]?.notional;
-  const liquidityUsd =
-    askUsd != null && bidUsd != null ? Math.min(askUsd, bidUsd) : null;
+  // Effective profit: buy at long.effPrice, sell at short.effPrice, minus taker fees on both.
+  let effProfitPercent: number | null = null;
+  if (long.effPrice != null && short.effPrice != null && long.effPrice > 0) {
+    const effDiff = ((short.effPrice - long.effPrice) / long.effPrice) * 100;
+    effProfitPercent = effDiff - long.takerFee - short.takerFee;
+  }
 
   return {
     key: `${cheapest.pair.name}-${long.tradingServiceId}-${short.tradingServiceId}`,
@@ -128,18 +148,15 @@ function buildCombo(
     long,
     short,
     netProfitPercent: priceDiffPercent - long.takerFee - short.takerFee,
-    liquidityUsd,
-    // Conservative: at max size each leg can slip up to `tol`, so subtract it from both legs.
-    netAfterSlippagePercent:
-      priceDiffPercent - long.takerFee - short.takerFee - tol * 2,
+    effProfitPercent,
   };
 }
 
 function computeOpportunities(
   pairs: any,
   prices: Record<number, number>,
-  depth: Record<number, DepthProfile>,
-  tol: number,
+  depth: Record<number, DepthBook>,
+  volumeUsd: number,
 ): ArbitrageOpportunity[] {
   const byName = new Map<string, any[]>();
   for (const pair of pairs || []) {
@@ -159,7 +176,7 @@ function computeOpportunities(
     for (let i = 0; i < list.length; i++) {
       for (let j = i + 1; j < list.length; j++) {
         if (list[i].pair.id === list[j].pair.id) continue;
-        combos.push(buildCombo(list[i], list[j], depth, tol));
+        combos.push(buildCombo(list[i], list[j], depth, volumeUsd));
       }
     }
     if (!combos.length) continue;
@@ -185,6 +202,15 @@ function LegCell({ leg }: { leg: ArbitrageLeg }) {
       <Typography variant='caption' color='text.secondary'>
         {fmtPrice(leg.price)} · fee {fmtPct(leg.takerFee)}
       </Typography>
+      {/* Effective (VWAP) price for the chosen volume. */}
+      <Tooltip title={leg.effFilled ? 'Средняя цена исполнения на выбранный объём' : 'Стакана не хватает на весь объём — цена по доступной глубине'}>
+        <Typography
+          variant='caption'
+          color={leg.effPrice == null ? 'text.disabled' : leg.effFilled ? 'primary.main' : 'warning.main'}
+        >
+          eff: {fmtPrice(leg.effPrice)}{leg.effPrice != null && !leg.effFilled ? ' ⚠' : ''}
+        </Typography>
+      </Tooltip>
     </Stack>
   );
 }
@@ -207,22 +233,15 @@ function ComboCells({ combo }: { combo: ArbitrageCombo }) {
         </Label>
       </TableCell>
       <TableCell sx={{ textAlign: 'right' }}>
-        <Tooltip title='Макс объём входа на обеих ногах в пределах допуска проскальзывания (тоньшая из двух книг)'>
-          <span>
-            {combo.liquidityUsd == null ? (
-              <Typography variant='caption' color='text.secondary'>
-                n/a
-              </Typography>
-            ) : (
-              <Typography variant='body2'>{fmtUsd(combo.liquidityUsd)}</Typography>
-            )}
-          </span>
-        </Tooltip>
-      </TableCell>
-      <TableCell sx={{ textAlign: 'right' }}>
-        <Label color={combo.netAfterSlippagePercent > 0 ? 'success' : 'default'}>
-          {fmtPct(combo.netAfterSlippagePercent)}
-        </Label>
+        {combo.effProfitPercent == null ? (
+          <Typography variant='caption' color='text.secondary'>
+            n/a
+          </Typography>
+        ) : (
+          <Label color={combo.effProfitPercent > 0 ? 'success' : 'error'}>
+            {fmtPct(combo.effProfitPercent)}
+          </Label>
+        )}
       </TableCell>
     </>
   );
@@ -248,7 +267,7 @@ function OpportunityRow({ item }: { item: ArbitrageOpportunity }) {
       </TableRow>
       {hasOthers && (
         <TableRow>
-          <TableCell sx={{ py: 0, borderBottom: 'none' }} colSpan={8}>
+          <TableCell sx={{ py: 0, borderBottom: 'none' }} colSpan={7}>
             <Collapse in={open} timeout='auto' unmountOnExit>
               <Box sx={{ my: 1, mx: 2 }}>
                 <Typography variant='caption' color='text.secondary'>
@@ -261,8 +280,7 @@ function OpportunityRow({ item }: { item: ArbitrageOpportunity }) {
                       <TableCell>Цена 1 (дешевле)</TableCell>
                       <TableCell>Цена 2 (дороже)</TableCell>
                       <TableCell sx={{ textAlign: 'right' }}>Чистый профит</TableCell>
-                      <TableCell sx={{ textAlign: 'right' }}>Ликвидность</TableCell>
-                      <TableCell sx={{ textAlign: 'right' }}>Профит − слип.</TableCell>
+                      <TableCell sx={{ textAlign: 'right' }}>Профит (объём)</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -286,11 +304,11 @@ export default function ArbitrageIndexView() {
   const { data: pairs } = useGetAllQuery({ activated: true });
 
   const pricesRef = useRef<Record<number, number>>({});
-  const depthRef = useRef<Record<number, DepthProfile>>({});
+  const depthRef = useRef<Record<number, DepthBook>>({});
   const [tick, setTick] = useState(0);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
-  // Slippage tolerance used for the executable-size / net-after-slippage columns.
-  const [slipTol, setSlipTol] = useState<number>(0.25);
+  // Entry volume (USDT notional per leg) used to compute effective execution prices.
+  const [volumeUsd, setVolumeUsd] = useState<number>(1000);
 
   const { sendJsonMessage: sendPrices, readyState: pricesReady } = useWebSocket(
     getKlinesPricesWebSocketUrl(),
@@ -322,7 +340,7 @@ export default function ArbitrageIndexView() {
         try {
           const msg = JSON.parse(event.data);
           if (msg?.type === 'depthSnapshot' && msg.data) {
-            const next: Record<number, DepthProfile> = {};
+            const next: Record<number, DepthBook> = {};
             for (const key of Object.keys(msg.data)) {
               next[Number(key)] = msg.data[key];
             }
@@ -356,9 +374,9 @@ export default function ArbitrageIndexView() {
         pairs || [],
         pricesRef.current,
         depthRef.current,
-        slipTol,
+        volumeUsd,
       ),
-    [pairs, tick, slipTol],
+    [pairs, tick, volumeUsd],
   );
 
   const connectionLabel = useMemo(() => {
@@ -388,23 +406,17 @@ export default function ArbitrageIndexView() {
           }
           action={
             <Stack direction='row' spacing={2} alignItems='center' sx={{ mt: 1 }}>
-              <Stack direction='row' spacing={1} alignItems='center'>
-                <Typography variant='caption' color='text.secondary'>
-                  Проскальз.
-                </Typography>
-                <ToggleButtonGroup
-                  size='small'
-                  exclusive
-                  value={slipTol}
-                  onChange={(_, v) => v != null && setSlipTol(v)}
-                >
-                  {SLIPPAGE_BANDS.map((b) => (
-                    <ToggleButton key={b} value={b}>
-                      {b}%
-                    </ToggleButton>
-                  ))}
-                </ToggleButtonGroup>
-              </Stack>
+              <TextField
+                size='small'
+                label='Объём входа'
+                type='number'
+                value={volumeUsd}
+                onChange={(e) => setVolumeUsd(Math.max(0, Number(e.target.value) || 0))}
+                sx={{ width: 160 }}
+                InputProps={{
+                  endAdornment: <InputAdornment position='end'>USDT</InputAdornment>,
+                }}
+              />
               {connectionLabel}
             </Stack>
           }
@@ -419,16 +431,13 @@ export default function ArbitrageIndexView() {
                 <TableCell>Цена 1 (дешевле)</TableCell>
                 <TableCell>Цена 2 (дороже)</TableCell>
                 <TableCell sx={{ textAlign: 'right' }}>Чистый профит</TableCell>
-                <TableCell sx={{ textAlign: 'right' }}>
-                  Ликвидность (≤{slipTol}%)
-                </TableCell>
-                <TableCell sx={{ textAlign: 'right' }}>Профит − слип.</TableCell>
+                <TableCell sx={{ textAlign: 'right' }}>Профит (объём)</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {opportunities.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} sx={{ textAlign: 'center', py: 4 }}>
+                  <TableCell colSpan={7} sx={{ textAlign: 'center', py: 4 }}>
                     <Typography variant='body2' color='text.secondary'>
                       Нет арбитражных данных
                     </Typography>
