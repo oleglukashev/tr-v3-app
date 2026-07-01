@@ -19,6 +19,15 @@ const baseTrApiQuery = fetchBaseQuery({
   //credentials: "include",
 });
 
+// api-домен + Bearer-токен (для guarded-маршрутов tr-v3-api, напр. stats).
+const baseTrApiAuthQuery = fetchBaseQuery({
+  baseUrl: process.env.NEXT_PUBLIC_TR_API_DOMAIN,
+  prepareHeaders: (headers) => {
+    headers.set('Authorization', `Bearer ${process.env.NEXT_PUBLIC_TR_API_BASIC_TOKEN}`);
+    return headers;
+  },
+});
+
 const baseTrKlinesQuery = fetchBaseQuery({
   baseUrl: process.env.NEXT_PUBLIC_TR_KLINES_DOMAIN,
   //credentials: "include",
@@ -52,6 +61,14 @@ export const customTrFetchBase: BaseQueryFn<
   FetchBaseQueryError
 > = async (args: FetchArgs, api, extraOptions) => {
   return fetchBase(baseTrQuery, args, api, extraOptions);
+};
+
+export const customTrApiAuthFetchBase: BaseQueryFn<
+  FetchArgs,
+  unknown,
+  FetchBaseQueryError
+> = async (args: FetchArgs, api, extraOptions) => {
+  return fetchBase(baseTrApiAuthQuery, args, api, extraOptions);
 };
 
 export const customTrKlinesFetchBase: BaseQueryFn<
