@@ -25,8 +25,7 @@ import moment from "moment";
 import { useGetAllQuery } from "@/lib/redux/api/pairApi";
 import {
   getKlinesPricesWebSocketUrl,
-  getKlinesPricesSnapshotUrl,
-  SUBSCRIBE_PRICES,
+  SUBSCRIBE_ALL_PRICES,
 } from "@/src/utils/arbitrageWebSocket";
 
 interface ArbitrageLeg {
@@ -239,44 +238,28 @@ export default function ArbitrageIndexView() {
       onMessage: (event: MessageEvent) => {
         try {
           const msg = JSON.parse(event.data);
-          if (msg?.type === 'price' && msg.data) {
-            const price = parseFloat(msg.data.price);
-            if (Number.isFinite(price)) {
-              pricesRef.current[Number(msg.data.pairId)] = price;
+          // Whole price store arrives at once as { [pairId]: price }.
+          if (msg?.type === 'pricesSnapshot' && msg.data) {
+            const next: Record<number, number> = {};
+            for (const key of Object.keys(msg.data)) {
+              const price = parseFloat(msg.data[key]);
+              if (Number.isFinite(price)) {
+                next[Number(key)] = price;
+              }
             }
+            pricesRef.current = next;
           }
         } catch {}
       },
     },
   );
 
-  // Subscribe to all price updates once the socket is open.
+  // Ask for the whole price store at once once the socket is open (immediate + periodic snapshots).
   useEffect(() => {
     if (readyState === ReadyState.OPEN) {
-      sendJsonMessage(SUBSCRIBE_PRICES);
+      sendJsonMessage(SUBSCRIBE_ALL_PRICES);
     }
   }, [readyState]);
-
-  // Seed the price map from the klines snapshot so the table isn't empty until the next 5m close.
-  useEffect(() => {
-    let cancelled = false;
-    fetch(getKlinesPricesSnapshotUrl())
-      .then((r) => r.json())
-      .then((store: Record<string, string>) => {
-        if (cancelled || !store) return;
-        for (const key of Object.keys(store)) {
-          const price = parseFloat(store[key]);
-          if (Number.isFinite(price)) {
-            pricesRef.current[Number(key)] = price;
-          }
-        }
-        setTick((t) => t + 1);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // Recompute the table every 3 seconds from the latest prices.
   useEffect(() => {

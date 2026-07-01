@@ -1,7 +1,7 @@
 /**
- * Prices for the arbitrage page come from the klines service price store.
- * Live updates: klines WebSocket (`subscribePrices`, one message per pairId on each 5m close).
- * Initial seed: HTTP snapshot of the whole store (`GET /prices`), keyed by pairId.
+ * Prices for the arbitrage page come from the klines service price store, delivered over the
+ * klines WebSocket as one full snapshot ({ [pairId]: price }) — immediately on subscribe and then
+ * every few seconds — via the `subscribeAllPrices` / `pricesSnapshot` protocol.
  */
 
 /** klines WebSocket URL. Override with NEXT_PUBLIC_TR_KLINES_WS_URL. */
@@ -12,11 +12,5 @@ export function getKlinesPricesWebSocketUrl(): string {
   return 'ws://klines.traken-trade.ru/ws/';
 }
 
-/** HTTP snapshot of all current prices ({ [pairId]: price }). */
-export function getKlinesPricesSnapshotUrl(): string {
-  const base = (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_TR_KLINES_DOMAIN) || '';
-  return `${String(base).replace(/\/$/, '')}/prices`;
-}
-
-/** Message the client sends after the socket opens to receive every price update. */
-export const SUBSCRIBE_PRICES = { type: 'subscribePrices' } as const;
+/** Message the client sends after the socket opens to receive the whole price store at once. */
+export const SUBSCRIBE_ALL_PRICES = { type: 'subscribeAllPrices' } as const;
