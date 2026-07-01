@@ -39,23 +39,20 @@ interface ArbitrageLeg {
   direction: 'long' | 'short';
 }
 
-interface ArbitrageServiceQuote {
-  tradingServiceId: number;
-  tradingServiceName: string;
-  pairId: number;
-  price: number;
-  takerFee: number;
-  role: 'long' | 'short' | null;
-}
-
-interface ArbitrageOpportunity {
-  name: string;
+interface ArbitrageCombo {
+  key: string;
   priceDiffPercent: number;
   long: ArbitrageLeg;
   short: ArbitrageLeg;
   netProfitPercent: number;
-  // Every trading service quoting this pair (for the expandable breakdown).
-  services: ArbitrageServiceQuote[];
+}
+
+interface ArbitrageOpportunity {
+  name: string;
+  // Most profitable spread — shown in the main row.
+  best: ArbitrageCombo;
+  // All other pairwise combinations of trading services — shown in the dropdown.
+  others: ArbitrageCombo[];
 }
 
 const fmtPrice = (value: number) =>
@@ -74,9 +71,24 @@ function toLeg(item: any, direction: 'long' | 'short'): ArbitrageLeg {
   };
 }
 
-// Client-side matching: group active pairs by name, then for each name that exists on 2+ trading
-// services keep the single most profitable spread (cheapest vs most expensive) plus the full list
-// of every service quoting the pair for the expandable breakdown.
+function buildCombo(a: any, b: any): ArbitrageCombo {
+  const cheapest = a.price <= b.price ? a : b;
+  const dearest = a.price <= b.price ? b : a;
+  const priceDiffPercent =
+    ((dearest.price - cheapest.price) / cheapest.price) * 100;
+  const long = toLeg(cheapest, 'long');
+  const short = toLeg(dearest, 'short');
+  return {
+    key: `${cheapest.pair.name}-${long.tradingServiceId}-${short.tradingServiceId}`,
+    priceDiffPercent,
+    long,
+    short,
+    netProfitPercent: priceDiffPercent - long.takerFee - short.takerFee,
+  };
+}
+
+// Client-side matching: group active pairs by name, build every pairwise combination of trading
+// services, keep the most profitable one for the main row and the rest for the dropdown.
 function computeOpportunities(
   pairs: any,
   prices: Record<number, number>,
@@ -97,53 +109,27 @@ function computeOpportunities(
   }
 
   const opportunities: ArbitrageOpportunity[] = [];
-  for (const list of byName.values()) {
+  for (const [name, list] of byName.entries()) {
     if (list.length < 2) {
       continue;
     }
-    let cheapest = list[0];
-    let dearest = list[0];
-    for (const item of list) {
-      if (item.price < cheapest.price) cheapest = item;
-      if (item.price > dearest.price) dearest = item;
+    const combos: ArbitrageCombo[] = [];
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        if (list[i].pair.id === list[j].pair.id) continue;
+        combos.push(buildCombo(list[i], list[j]));
+      }
     }
-    if (cheapest.pair.id === dearest.pair.id || cheapest.price <= 0) {
+    if (!combos.length) {
       continue;
     }
-
-    const priceDiffPercent =
-      ((dearest.price - cheapest.price) / cheapest.price) * 100;
-    const long = toLeg(cheapest, 'long');
-    const short = toLeg(dearest, 'short');
-
-    const services: ArbitrageServiceQuote[] = list
-      .slice()
-      .sort((a, b) => a.price - b.price)
-      .map((item) => ({
-        tradingServiceId: item.pair.tradingServiceId,
-        tradingServiceName: item.service.name,
-        pairId: item.pair.id,
-        price: item.price,
-        takerFee: Number(item.service.takerFee ?? 0),
-        role:
-          item.pair.id === cheapest.pair.id
-            ? 'long'
-            : item.pair.id === dearest.pair.id
-            ? 'short'
-            : null,
-      }));
-
-    opportunities.push({
-      name: cheapest.pair.name,
-      priceDiffPercent,
-      long,
-      short,
-      netProfitPercent: priceDiffPercent - long.takerFee - short.takerFee,
-      services,
-    });
+    combos.sort((a, b) => b.netProfitPercent - a.netProfitPercent);
+    opportunities.push({ name, best: combos[0], others: combos.slice(1) });
   }
 
-  return opportunities.sort((a, b) => b.netProfitPercent - a.netProfitPercent);
+  return opportunities.sort(
+    (a, b) => b.best.netProfitPercent - a.best.netProfitPercent,
+  );
 }
 
 function LegCell({ leg }: { leg: ArbitrageLeg }) {
@@ -163,77 +149,75 @@ function LegCell({ leg }: { leg: ArbitrageLeg }) {
   );
 }
 
+function ComboCells({ combo }: { combo: ArbitrageCombo }) {
+  return (
+    <>
+      <TableCell sx={{ textAlign: 'right' }}>
+        <Label color='info'>{fmtPct(combo.priceDiffPercent)}</Label>
+      </TableCell>
+      <TableCell>
+        <LegCell leg={combo.long} />
+      </TableCell>
+      <TableCell>
+        <LegCell leg={combo.short} />
+      </TableCell>
+      <TableCell sx={{ textAlign: 'right' }}>
+        <Label color={combo.netProfitPercent > 0 ? 'success' : 'error'}>
+          {fmtPct(combo.netProfitPercent)}
+        </Label>
+      </TableCell>
+    </>
+  );
+}
+
 function OpportunityRow({ item }: { item: ArbitrageOpportunity }) {
   const [open, setOpen] = useState(false);
+  const hasOthers = item.others.length > 0;
   return (
     <>
       <TableRow hover>
         <TableCell sx={{ width: 48 }}>
-          <IconButton size='small' onClick={() => setOpen((v) => !v)}>
-            {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
-          </IconButton>
+          {hasOthers && (
+            <IconButton size='small' onClick={() => setOpen((v) => !v)}>
+              {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+            </IconButton>
+          )}
         </TableCell>
         <TableCell>
           <Typography variant='subtitle2'>{item.name}</Typography>
         </TableCell>
-        <TableCell sx={{ textAlign: 'right' }}>
-          <Label color='info'>{fmtPct(item.priceDiffPercent)}</Label>
-        </TableCell>
-        <TableCell>
-          <LegCell leg={item.long} />
-        </TableCell>
-        <TableCell>
-          <LegCell leg={item.short} />
-        </TableCell>
-        <TableCell sx={{ textAlign: 'right' }}>
-          <Label color={item.netProfitPercent > 0 ? 'success' : 'error'}>
-            {fmtPct(item.netProfitPercent)}
-          </Label>
-        </TableCell>
+        <ComboCells combo={item.best} />
       </TableRow>
-      <TableRow>
-        <TableCell sx={{ py: 0, borderBottom: 'none' }} colSpan={6}>
-          <Collapse in={open} timeout='auto' unmountOnExit>
-            <Box sx={{ my: 1, mx: 2 }}>
-              <Typography variant='caption' color='text.secondary'>
-                Все площадки по паре {item.name}
-              </Typography>
-              <Table size='small'>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Trading service</TableCell>
-                    <TableCell sx={{ textAlign: 'right' }}>Цена</TableCell>
-                    <TableCell sx={{ textAlign: 'right' }}>Taker fee</TableCell>
-                    <TableCell sx={{ textAlign: 'right' }}>Роль</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {item.services.map((s) => (
-                    <TableRow key={s.tradingServiceId}>
-                      <TableCell>{s.tradingServiceName}</TableCell>
-                      <TableCell sx={{ textAlign: 'right' }}>
-                        {fmtPrice(s.price)}
-                      </TableCell>
-                      <TableCell sx={{ textAlign: 'right' }}>
-                        {fmtPct(s.takerFee)}
-                      </TableCell>
-                      <TableCell sx={{ textAlign: 'right' }}>
-                        {s.role === 'long' && <Label color='success'>LONG</Label>}
-                        {s.role === 'short' && <Label color='error'>SHORT</Label>}
-                        {!s.role && (
-                          <Typography variant='caption' color='text.secondary'>
-                            —
-                          </Typography>
-                        )}
-                      </TableCell>
+      {hasOthers && (
+        <TableRow>
+          <TableCell sx={{ py: 0, borderBottom: 'none' }} colSpan={6}>
+            <Collapse in={open} timeout='auto' unmountOnExit>
+              <Box sx={{ my: 1, mx: 2 }}>
+                <Typography variant='caption' color='text.secondary'>
+                  Другие комбинации площадок по паре {item.name}
+                </Typography>
+                <Table size='small'>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ textAlign: 'right' }}>Разница цен</TableCell>
+                      <TableCell>Цена 1 (дешевле)</TableCell>
+                      <TableCell>Цена 2 (дороже)</TableCell>
+                      <TableCell sx={{ textAlign: 'right' }}>Чистый профит</TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Box>
-          </Collapse>
-        </TableCell>
-      </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {item.others.map((combo) => (
+                      <TableRow key={combo.key}>
+                        <ComboCells combo={combo} />
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Box>
+            </Collapse>
+          </TableCell>
+        </TableRow>
+      )}
     </>
   );
 }
