@@ -5,6 +5,8 @@ import {
   Card,
   CardContent,
   CardHeader,
+  Collapse,
+  IconButton,
   Stack,
   Table,
   TableBody,
@@ -13,6 +15,8 @@ import {
   TableRow,
   Typography,
 } from "@mui/material";
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import useWebSocket, { ReadyState } from 'react-use-websocket';
 import { useEffect, useMemo, useRef, useState } from "react";
 import Box from "@mui/material/Box";
@@ -35,20 +39,44 @@ interface ArbitrageLeg {
   direction: 'long' | 'short';
 }
 
+interface ArbitrageServiceQuote {
+  tradingServiceId: number;
+  tradingServiceName: string;
+  pairId: number;
+  price: number;
+  takerFee: number;
+  role: 'long' | 'short' | null;
+}
+
 interface ArbitrageOpportunity {
   name: string;
   priceDiffPercent: number;
   long: ArbitrageLeg;
   short: ArbitrageLeg;
   netProfitPercent: number;
+  // Every trading service quoting this pair (for the expandable breakdown).
+  services: ArbitrageServiceQuote[];
 }
 
 const fmtPrice = (value: number) =>
   value?.toLocaleString('en-US', { maximumFractionDigits: 8 });
 const fmtPct = (value: number) => `${Number(value ?? 0).toFixed(3)}%`;
 
+function toLeg(item: any, direction: 'long' | 'short'): ArbitrageLeg {
+  return {
+    tradingServiceId: item.pair.tradingServiceId,
+    tradingServiceName: item.service.name,
+    pairId: item.pair.id,
+    symbol: item.pair.symbol,
+    price: item.price,
+    takerFee: Number(item.service.takerFee ?? 0),
+    direction,
+  };
+}
+
 // Client-side matching: group active pairs by name, then for each name that exists on 2+ trading
-// services compare the live prices (by pairId) and compute the net possible profit.
+// services keep the single most profitable spread (cheapest vs most expensive) plus the full list
+// of every service quoting the pair for the expandable breakdown.
 function computeOpportunities(
   pairs: any,
   prices: Record<number, number>,
@@ -79,36 +107,39 @@ function computeOpportunities(
       if (item.price < cheapest.price) cheapest = item;
       if (item.price > dearest.price) dearest = item;
     }
-    if (cheapest.pair.id === dearest.pair.id) {
+    if (cheapest.pair.id === dearest.pair.id || cheapest.price <= 0) {
       continue;
     }
 
     const priceDiffPercent =
       ((dearest.price - cheapest.price) / cheapest.price) * 100;
-    const long: ArbitrageLeg = {
-      tradingServiceId: cheapest.pair.tradingServiceId,
-      tradingServiceName: cheapest.service.name,
-      pairId: cheapest.pair.id,
-      symbol: cheapest.pair.symbol,
-      price: cheapest.price,
-      takerFee: Number(cheapest.service.takerFee ?? 0),
-      direction: 'long',
-    };
-    const short: ArbitrageLeg = {
-      tradingServiceId: dearest.pair.tradingServiceId,
-      tradingServiceName: dearest.service.name,
-      pairId: dearest.pair.id,
-      symbol: dearest.pair.symbol,
-      price: dearest.price,
-      takerFee: Number(dearest.service.takerFee ?? 0),
-      direction: 'short',
-    };
+    const long = toLeg(cheapest, 'long');
+    const short = toLeg(dearest, 'short');
+
+    const services: ArbitrageServiceQuote[] = list
+      .slice()
+      .sort((a, b) => a.price - b.price)
+      .map((item) => ({
+        tradingServiceId: item.pair.tradingServiceId,
+        tradingServiceName: item.service.name,
+        pairId: item.pair.id,
+        price: item.price,
+        takerFee: Number(item.service.takerFee ?? 0),
+        role:
+          item.pair.id === cheapest.pair.id
+            ? 'long'
+            : item.pair.id === dearest.pair.id
+            ? 'short'
+            : null,
+      }));
+
     opportunities.push({
       name: cheapest.pair.name,
       priceDiffPercent,
       long,
       short,
       netProfitPercent: priceDiffPercent - long.takerFee - short.takerFee,
+      services,
     });
   }
 
@@ -129,6 +160,81 @@ function LegCell({ leg }: { leg: ArbitrageLeg }) {
         {fmtPrice(leg.price)} · fee {fmtPct(leg.takerFee)}
       </Typography>
     </Stack>
+  );
+}
+
+function OpportunityRow({ item }: { item: ArbitrageOpportunity }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <TableRow hover>
+        <TableCell sx={{ width: 48 }}>
+          <IconButton size='small' onClick={() => setOpen((v) => !v)}>
+            {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+          </IconButton>
+        </TableCell>
+        <TableCell>
+          <Typography variant='subtitle2'>{item.name}</Typography>
+        </TableCell>
+        <TableCell sx={{ textAlign: 'right' }}>
+          <Label color='info'>{fmtPct(item.priceDiffPercent)}</Label>
+        </TableCell>
+        <TableCell>
+          <LegCell leg={item.long} />
+        </TableCell>
+        <TableCell>
+          <LegCell leg={item.short} />
+        </TableCell>
+        <TableCell sx={{ textAlign: 'right' }}>
+          <Label color={item.netProfitPercent > 0 ? 'success' : 'error'}>
+            {fmtPct(item.netProfitPercent)}
+          </Label>
+        </TableCell>
+      </TableRow>
+      <TableRow>
+        <TableCell sx={{ py: 0, borderBottom: 'none' }} colSpan={6}>
+          <Collapse in={open} timeout='auto' unmountOnExit>
+            <Box sx={{ my: 1, mx: 2 }}>
+              <Typography variant='caption' color='text.secondary'>
+                Все площадки по паре {item.name}
+              </Typography>
+              <Table size='small'>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Trading service</TableCell>
+                    <TableCell sx={{ textAlign: 'right' }}>Цена</TableCell>
+                    <TableCell sx={{ textAlign: 'right' }}>Taker fee</TableCell>
+                    <TableCell sx={{ textAlign: 'right' }}>Роль</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {item.services.map((s) => (
+                    <TableRow key={s.tradingServiceId}>
+                      <TableCell>{s.tradingServiceName}</TableCell>
+                      <TableCell sx={{ textAlign: 'right' }}>
+                        {fmtPrice(s.price)}
+                      </TableCell>
+                      <TableCell sx={{ textAlign: 'right' }}>
+                        {fmtPct(s.takerFee)}
+                      </TableCell>
+                      <TableCell sx={{ textAlign: 'right' }}>
+                        {s.role === 'long' && <Label color='success'>LONG</Label>}
+                        {s.role === 'short' && <Label color='error'>SHORT</Label>}
+                        {!s.role && (
+                          <Typography variant='caption' color='text.secondary'>
+                            —
+                          </Typography>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Box>
+          </Collapse>
+        </TableCell>
+      </TableRow>
+    </>
   );
 }
 
@@ -229,6 +335,7 @@ export default function ArbitrageIndexView() {
           <Table size='small'>
             <TableHead>
               <TableRow>
+                <TableCell sx={{ width: 48 }} />
                 <TableCell>Пара</TableCell>
                 <TableCell sx={{ textAlign: 'right' }}>Разница цен</TableCell>
                 <TableCell>Цена 1 (дешевле)</TableCell>
@@ -239,7 +346,7 @@ export default function ArbitrageIndexView() {
             <TableBody>
               {opportunities.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} sx={{ textAlign: 'center', py: 4 }}>
+                  <TableCell colSpan={6} sx={{ textAlign: 'center', py: 4 }}>
                     <Typography variant='body2' color='text.secondary'>
                       Нет арбитражных данных
                     </Typography>
@@ -247,25 +354,7 @@ export default function ArbitrageIndexView() {
                 </TableRow>
               )}
               {opportunities.map((item) => (
-                <TableRow key={item.name} hover>
-                  <TableCell>
-                    <Typography variant='subtitle2'>{item.name}</Typography>
-                  </TableCell>
-                  <TableCell sx={{ textAlign: 'right' }}>
-                    <Label color='info'>{fmtPct(item.priceDiffPercent)}</Label>
-                  </TableCell>
-                  <TableCell>
-                    <LegCell leg={item.long} />
-                  </TableCell>
-                  <TableCell>
-                    <LegCell leg={item.short} />
-                  </TableCell>
-                  <TableCell sx={{ textAlign: 'right' }}>
-                    <Label color={item.netProfitPercent > 0 ? 'success' : 'error'}>
-                      {fmtPct(item.netProfitPercent)}
-                    </Label>
-                  </TableCell>
-                </TableRow>
+                <OpportunityRow key={item.name} item={item} />
               ))}
             </TableBody>
           </Table>
