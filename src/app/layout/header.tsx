@@ -94,6 +94,7 @@ export default function Header() {
     { url: 'dhm', label: 'DHMs' },
     { url: 'clusters', label: 'Clusters' },
     { url: 'tda', label: 'TDA' },
+    { url: 'arbitrage', label: 'Арбитраж' },
     { url: 'admin', label: 'Admin' },
   ]
   const router = useRouter();
@@ -201,7 +202,7 @@ export default function Header() {
                 }}
               >
                 {(pages || []).map((item: any) => (
-                  item.url === 'tda' || item.url === 'admin' ? (
+                  item.url === 'tda' || item.url === 'admin' || item.url === 'arbitrage' ? (
                     <MenuItem key={item.url} onClick={() => router.replace(`/${item.url}`)}>{item.label}</MenuItem>
                   ) : item.url === 'range-xv-graph' ? (
                     <MenuItem key={item.url} onClick={() => router.replace(`/${item.url}/${pair?.id || pairs?.[0]?.id}`)}>{item.label}</MenuItem>
