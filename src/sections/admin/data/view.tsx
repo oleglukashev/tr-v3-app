@@ -49,6 +49,7 @@ function keyLabel(row: DatasetRow): string {
 export default function AdminDataView() {
   const [tab, setTab] = useState(0);
   const [pairFilter, setPairFilter] = useState<string>("all");
+  const [tsFilter, setTsFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<"all" | "general" | "xv">("all");
   const [datasetFilter, setDatasetFilter] = useState<string>("all");
   const [pending, setPending] = useState<DatasetRow | null>(null);
@@ -65,6 +66,16 @@ export default function AdminDataView() {
     return m;
   }, [pairsData]);
   const pairName = (pairId: number) => nameById.get(pairId) ?? String(pairId);
+
+  // pairId -> trading service name (also from api.traken-trade.ru).
+  const tsById = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const p of (Array.isArray(pairsData) ? pairsData : []) as DatasetPair[]) {
+      m.set(p.id, p.tradingServiceName || (p.tradingServiceId != null ? `#${p.tradingServiceId}` : "—"));
+    }
+    return m;
+  }, [pairsData]);
+  const tsName = (pairId: number) => tsById.get(pairId) ?? "—";
 
   const kind = TABS[tab].kind;
   // Rows for the active tab, before the type/dataset selectbox filters.
@@ -84,6 +95,17 @@ export default function AdminDataView() {
     );
   }, [tabRows, nameById]);
 
+  // Distinct trading services available in this tab, for the Trading service selectbox.
+  const tsOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const r of tabRows) {
+      seen.set(tsName(r.pairId), tsName(r.pairId));
+    }
+    return Array.from(seen, ([value, label]) => ({ value, label })).sort((a, b) =>
+      a.label.localeCompare(b.label),
+    );
+  }, [tabRows, tsById]);
+
   // Distinct datasets available in this tab, for the Dataset selectbox.
   const datasetOptions = useMemo(() => {
     const seen = new Map<string, string>();
@@ -101,6 +123,7 @@ export default function AdminDataView() {
         .filter(
           (r) =>
             (pairFilter === "all" || String(r.pairId) === pairFilter) &&
+            (tsFilter === "all" || tsName(r.pairId) === tsFilter) &&
             (typeFilter === "all" || r.type === typeFilter) &&
             (datasetFilter === "all" || `${r.keyField}:${r.key}` === datasetFilter),
         )
@@ -110,12 +133,13 @@ export default function AdminDataView() {
             a.type.localeCompare(b.type) ||
             a.key.localeCompare(b.key),
         ),
-    [tabRows, pairFilter, typeFilter, datasetFilter, nameById],
+    [tabRows, pairFilter, tsFilter, typeFilter, datasetFilter, nameById, tsById],
   );
 
   const onTabChange = (v: number) => {
     setTab(v);
     setPairFilter("all"); // available pairs/datasets differ per tab
+    setTsFilter("all");
     setDatasetFilter("all");
   };
 
@@ -160,6 +184,22 @@ export default function AdminDataView() {
                   ))}
                 </Select>
               </FormControl>
+              <FormControl size="small" sx={{ minWidth: 180 }}>
+                <InputLabel id="data-ts-filter-label">Trading service</InputLabel>
+                <Select
+                  labelId="data-ts-filter-label"
+                  label="Trading service"
+                  value={tsFilter}
+                  onChange={(e) => setTsFilter(e.target.value as string)}
+                >
+                  <MenuItem value="all">All trading services</MenuItem>
+                  {tsOptions.map((o) => (
+                    <MenuItem key={o.value} value={o.value}>
+                      {o.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
               <FormControl size="small" sx={{ minWidth: 160 }}>
                 <InputLabel id="data-type-filter-label">Type</InputLabel>
                 <Select
@@ -194,6 +234,7 @@ export default function AdminDataView() {
               <TableHead>
                 <TableRow>
                   <TableCell>Pair</TableCell>
+                  <TableCell>Trading service</TableCell>
                   <TableCell>Type</TableCell>
                   <TableCell>Dataset</TableCell>
                   <TableCell sx={{ textAlign: 'right' }}>Rows</TableCell>
@@ -205,6 +246,9 @@ export default function AdminDataView() {
                   <TableRow key={`${row.table}:${row.pairId}:${row.key}`}>
                     <TableCell>
                       <Label color="success">{pairName(row.pairId)}</Label>
+                    </TableCell>
+                    <TableCell>
+                      <Label color="default">{tsName(row.pairId)}</Label>
                     </TableCell>
                     <TableCell>
                       <Label color={row.type === "xv" ? "primary" : "default"}>
@@ -232,7 +276,7 @@ export default function AdminDataView() {
                 ))}
                 {rows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} sx={{ color: 'text.secondary' }}>
+                    <TableCell colSpan={6} sx={{ color: 'text.secondary' }}>
                       No datasets.
                     </TableCell>
                   </TableRow>

@@ -15,6 +15,8 @@ export type DatasetPair = {
   id: number;
   name: string;
   symbol: string;
+  tradingServiceId: number;
+  tradingServiceName: string | null;
 };
 
 // Typed as a plain string (not a literal) so the reducer/middleware types stay
