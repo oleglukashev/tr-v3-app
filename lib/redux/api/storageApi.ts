@@ -1,10 +1,10 @@
 import { BaseApi } from "./baseApi";
-import {customTrFetchBase} from "../../customFetchBase";
+import {customTrApiAuthFetchBase} from "../../customFetchBase";
 
 const collectionPath = 'storages';
 export const storageApi = (new BaseApi({
   reducerPath: collectionPath,
-  baseQuery: customTrFetchBase,
+  baseQuery: customTrApiAuthFetchBase,
   collectionPath,
 })).create();
 
