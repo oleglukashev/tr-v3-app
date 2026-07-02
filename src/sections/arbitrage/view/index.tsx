@@ -6,6 +6,10 @@ import {
   CardContent,
   CardHeader,
   Collapse,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  Divider,
   IconButton,
   InputAdornment,
   Stack,
@@ -70,6 +74,12 @@ const fmtPrice = (value: number | null) =>
   value == null ? '—' : value.toLocaleString('en-US', { maximumFractionDigits: 8 });
 const fmtPct = (value: number | null) =>
   value == null ? '—' : `${Number(value).toFixed(3)}%`;
+const fmtUsd = (value: number | null) => {
+  if (value == null) return '—';
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
+  if (value >= 1_000) return `$${(value / 1_000).toFixed(1)}k`;
+  return `$${value.toFixed(0)}`;
+};
 
 /**
  * Walk one side of the book to spend `targetUsd` (quote notional) and return the volume-weighted
@@ -266,15 +276,215 @@ function ComboCells({ combo }: { combo: ArbitrageCombo }) {
   );
 }
 
-function OpportunityRow({ item }: { item: ArbitrageOpportunity }) {
+// ---- order-book popup: how an entry of `volumeUsd` walks the book ----
+
+interface WalkRow {
+  price: number;
+  size: number;
+  levelUsd: number;
+  cumUsd: number;
+  fillFrac: number; // 0..1 — how much of THIS level the entry consumes
+}
+function walkBook(levels: Level[], targetUsd: number) {
+  const rows: WalkRow[] = [];
+  let cumUsd = 0;
+  let filledUsd = 0;
+  let filledBase = 0;
+  for (const [price, size] of levels || []) {
+    if (!(price > 0) || !(size > 0)) continue;
+    const levelUsd = price * size;
+    const remaining = Math.max(0, targetUsd - cumUsd);
+    const takenUsd = Math.min(levelUsd, remaining);
+    if (takenUsd > 0) {
+      filledUsd += takenUsd;
+      filledBase += takenUsd / price;
+    }
+    cumUsd += levelUsd;
+    rows.push({ price, size, levelUsd, cumUsd, fillFrac: levelUsd > 0 ? takenUsd / levelUsd : 0 });
+  }
+  const vwap = filledBase > 0 ? filledUsd / filledBase : null;
+  return { rows, vwap, filledUsd, filledBase, filled: filledUsd >= targetUsd * 0.999 };
+}
+
+const DEPTH_DIALOG_LEVELS = 14;
+
+function LegDepthPanel({ leg, book, volumeUsd }: { leg: ArbitrageLeg; book?: DepthBook; volumeUsd: number }) {
+  const isLong = leg.direction === 'long';
+  const side = isLong ? 'success' : 'error'; // buy=asks(green here as "long"), sell=bids(red as "short")
+  const accent = isLong ? '#36B37E' : '#FF5630';
+  const levels = ((isLong ? book?.asks : book?.bids) || []).slice(0, DEPTH_DIALOG_LEVELS);
+  const walk = walkBook(levels, volumeUsd);
+  const best = levels[0]?.[0] ?? null;
+  const shiftPct =
+    best && walk.vwap ? (isLong ? (walk.vwap / best - 1) * 100 : (1 - walk.vwap / best) * 100) : null;
+  const maxUsd = Math.max(1, ...levels.map((l) => l[0] * l[1]));
+
+  return (
+    <Card variant='outlined' sx={{ height: '100%' }}>
+      <CardContent>
+        <Stack direction='row' spacing={1} alignItems='center' sx={{ mb: 1 }}>
+          <Label color={side as any}>{isLong ? 'LONG · BUY' : 'SHORT · SELL'}</Label>
+          <Typography variant='subtitle2'>{leg.tradingServiceName}</Typography>
+        </Stack>
+
+        <Table size='small' sx={{ '& td': { py: 0.25, border: 0 } }}>
+          <TableHead>
+            <TableRow>
+              <TableCell sx={{ py: 0.5 }}>Цена</TableCell>
+              <TableCell sx={{ py: 0.5, textAlign: 'right' }}>Объём</TableCell>
+              <TableCell sx={{ py: 0.5, textAlign: 'right' }}>Σ USDT</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {levels.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={3} sx={{ textAlign: 'center', color: 'text.secondary' }}>
+                  нет стакана
+                </TableCell>
+              </TableRow>
+            )}
+            {walk.rows.map((r, i) => (
+              <TableRow key={i}>
+                <TableCell sx={{ position: 'relative' }}>
+                  {/* depth bar */}
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      left: 0,
+                      top: 2,
+                      bottom: 2,
+                      width: `${Math.min(100, (r.levelUsd / maxUsd) * 100)}%`,
+                      bgcolor: accent,
+                      opacity: r.fillFrac > 0 ? 0.28 : 0.1,
+                      borderRadius: 0.5,
+                    }}
+                  />
+                  <Typography
+                    variant='caption'
+                    sx={{ position: 'relative', fontWeight: r.fillFrac > 0 ? 700 : 400, color: accent }}
+                  >
+                    {fmtPrice(r.price)}
+                    {r.fillFrac > 0 && r.fillFrac < 1 ? ' ◀' : ''}
+                  </Typography>
+                </TableCell>
+                <TableCell sx={{ textAlign: 'right' }}>
+                  <Typography variant='caption'>{r.size.toLocaleString('en-US', { maximumFractionDigits: 4 })}</Typography>
+                </TableCell>
+                <TableCell sx={{ textAlign: 'right' }}>
+                  <Typography variant='caption' color='text.secondary'>{fmtUsd(r.cumUsd)}</Typography>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+
+        <Divider sx={{ my: 1 }} />
+        <Stack spacing={0.5}>
+          <Row label='Лучшая цена' value={fmtPrice(best)} />
+          <Row
+            label='Средняя цена входа'
+            value={walk.vwap != null ? `${fmtPrice(walk.vwap)}${shiftPct != null ? `  (${isLong ? '+' : '−'}${Math.abs(shiftPct).toFixed(3)}%)` : ''}` : '—'}
+            strong
+          />
+          <Row
+            label='Наберётся'
+            value={`${fmtUsd(walk.filledUsd)} · ${walk.filledBase.toLocaleString('en-US', { maximumFractionDigits: 4 })}`}
+          />
+          {!walk.filled && (
+            <Typography variant='caption' color='warning.main'>
+              ⚠ стакана не хватает на весь объём — цена по доступной глубине
+            </Typography>
+          )}
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <Stack direction='row' justifyContent='space-between' alignItems='center'>
+      <Typography variant='caption' color='text.secondary'>{label}</Typography>
+      <Typography variant={strong ? 'subtitle2' : 'caption'}>{value}</Typography>
+    </Stack>
+  );
+}
+
+function ArbitrageDepthDialog({
+  opportunity,
+  depth,
+  volumeUsd,
+  onClose,
+}: {
+  opportunity: ArbitrageOpportunity | null;
+  depth: Record<number, DepthBook>;
+  volumeUsd: number;
+  onClose: () => void;
+}) {
+  const combo = opportunity?.best;
+  return (
+    <Dialog open={!!opportunity} onClose={onClose} maxWidth='md' fullWidth>
+      {combo && (
+        <>
+          <DialogTitle>
+            <Stack direction='row' spacing={1.5} alignItems='center' flexWrap='wrap'>
+              <Typography variant='h6'>{opportunity!.name}</Typography>
+              <Label color='info'>Разница {fmtPct(combo.priceDiffPercent)}</Label>
+              <Label color={combo.netProfitPercent > 0 ? 'success' : 'error'}>
+                Профит {fmtPct(combo.netProfitPercent)}
+              </Label>
+              {combo.effProfitPercent != null && (
+                <Label color={combo.effProfitPercent > 0 ? 'success' : 'error'}>
+                  Профит на объём {fmtPct(combo.effProfitPercent)}
+                </Label>
+              )}
+              <Typography variant='caption' color='text.secondary'>
+                вход {fmtUsd(volumeUsd)} на ногу
+              </Typography>
+            </Stack>
+          </DialogTitle>
+          <DialogContent>
+            <Box
+              sx={{
+                display: 'flex',
+                gap: 2,
+                flexDirection: { xs: 'column', md: 'row' },
+                mt: 0.5,
+              }}
+            >
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <LegDepthPanel leg={combo.long} book={depth[combo.long.pairId]} volumeUsd={volumeUsd} />
+              </Box>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <LegDepthPanel leg={combo.short} book={depth[combo.short.pairId]} volumeUsd={volumeUsd} />
+              </Box>
+            </Box>
+          </DialogContent>
+        </>
+      )}
+    </Dialog>
+  );
+}
+
+function OpportunityRow({ item, onOpen }: { item: ArbitrageOpportunity; onOpen: (o: ArbitrageOpportunity) => void }) {
   const [open, setOpen] = useState(false);
   const hasOthers = item.others.length > 0;
   return (
     <>
-      <TableRow hover>
+      <TableRow
+        hover
+        onClick={() => onOpen(item)}
+        sx={{ cursor: 'pointer' }}
+      >
         <TableCell sx={{ width: 48 }}>
           {hasOthers && (
-            <IconButton size='small' onClick={() => setOpen((v) => !v)}>
+            <IconButton
+              size='small'
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen((v) => !v);
+              }}
+            >
               {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
             </IconButton>
           )}
@@ -327,6 +537,8 @@ export default function ArbitrageIndexView() {
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   // Entry volume (USDT notional per leg) used to compute effective execution prices.
   const [volumeUsd, setVolumeUsd] = useState<number>(1000);
+  // Opportunity whose order-book popup is open.
+  const [selected, setSelected] = useState<ArbitrageOpportunity | null>(null);
 
   const { sendJsonMessage: sendDepth, readyState: depthReady } = useWebSocket(
     getOrderbookDepthWebSocketUrl(),
@@ -427,12 +639,19 @@ export default function ArbitrageIndexView() {
                 </TableRow>
               )}
               {opportunities.map((item) => (
-                <OpportunityRow key={item.name} item={item} />
+                <OpportunityRow key={item.name} item={item} onOpen={setSelected} />
               ))}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
+
+      <ArbitrageDepthDialog
+        opportunity={selected}
+        depth={depthRef.current}
+        volumeUsd={volumeUsd}
+        onClose={() => setSelected(null)}
+      />
     </Container>
   );
 }
