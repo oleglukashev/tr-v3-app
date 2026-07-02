@@ -27,10 +27,6 @@ import Label from "src/components/label";
 import moment from "moment";
 import { useGetAllQuery } from "@/lib/redux/api/pairApi";
 import {
-  getKlinesPricesWebSocketUrl,
-  SUBSCRIBE_ALL_PRICES,
-} from "@/src/utils/arbitrageWebSocket";
-import {
   getOrderbookDepthWebSocketUrl,
   SUBSCRIBE_ALL_DEPTH,
 } from "@/src/utils/orderbookDepthWebSocket";
@@ -112,14 +108,16 @@ function toLeg(
   // Reference price is the LIVE top-of-book on the side we'd actually trade (bestAsk to buy,
   // bestBid to sell) — not the klines `last` (which lags up to 5m). This keeps eff on the correct
   // side of it: eff(buy) >= bestAsk, eff(sell) <= bestBid. Fall back to `last` when no book yet.
+  // The book side we'd trade is guaranteed present (computeOpportunities only keeps pairs with a
+  // full book), so bookTop is the live bestAsk (buy) / bestBid (sell).
   const bookTop =
-    levels && levels[0] && Number(levels[0][0]) > 0 ? Number(levels[0][0]) : null;
+    levels && levels[0] && Number(levels[0][0]) > 0 ? Number(levels[0][0]) : 0;
   return {
     tradingServiceId: item.pair.tradingServiceId,
     tradingServiceName: item.service.name,
     pairId: item.pair.id,
     symbol: item.pair.symbol,
-    price: bookTop != null ? bookTop : item.price,
+    price: bookTop,
     effPrice: eff ? eff.vwap : null,
     effFilled: eff ? eff.filled : false,
     takerFee: Number(item.service.takerFee ?? 0),
@@ -139,11 +137,11 @@ function buildCombo(
   volumeUsd: number,
 ): ArbitrageCombo {
   // Pick the profitable direction from the LIVE book: buy where the ask is low, sell where the bid
-  // is high. Compare both directions' top-of-book spreads (fall back to last price if no book yet).
-  const askA = bestSide(depth[a.pair.id], 'ask') ?? a.price;
-  const bidA = bestSide(depth[a.pair.id], 'bid') ?? a.price;
-  const askB = bestSide(depth[b.pair.id], 'ask') ?? b.price;
-  const bidB = bestSide(depth[b.pair.id], 'bid') ?? b.price;
+  // is high. Compare both directions' top-of-book spreads.
+  const askA = bestSide(depth[a.pair.id], 'ask') as number;
+  const bidA = bestSide(depth[a.pair.id], 'bid') as number;
+  const askB = bestSide(depth[b.pair.id], 'ask') as number;
+  const bidB = bestSide(depth[b.pair.id], 'bid') as number;
   const spreadLongA = (bidB - askA) / askA; // long A (buy A), short B (sell B)
   const spreadLongB = (bidA - askB) / askB; // long B (buy B), short A (sell A)
   const longItem = spreadLongA >= spreadLongB ? a : b;
@@ -174,7 +172,6 @@ function buildCombo(
 
 function computeOpportunities(
   pairs: any,
-  prices: Record<number, number>,
   depth: Record<number, DepthBook>,
   volumeUsd: number,
 ): ArbitrageOpportunity[] {
@@ -182,10 +179,12 @@ function computeOpportunities(
   for (const pair of pairs || []) {
     const service = pair.tradingService;
     if (!service || service.activated === false) continue;
-    const price = prices[pair.id];
-    if (!Number.isFinite(price) || price <= 0) continue;
+    // A pair is "live" when it has a full order book (both a bid and an ask). Prices come entirely
+    // from the book now — no dependency on the klines price feed.
+    const book = depth[pair.id];
+    if (!bestSide(book, 'ask') || !bestSide(book, 'bid')) continue;
     const list = byName.get(pair.name) || [];
-    list.push({ pair, service, price });
+    list.push({ pair, service });
     byName.set(pair.name, list);
   }
 
@@ -323,33 +322,11 @@ function OpportunityRow({ item }: { item: ArbitrageOpportunity }) {
 export default function ArbitrageIndexView() {
   const { data: pairs } = useGetAllQuery({ activated: true });
 
-  const pricesRef = useRef<Record<number, number>>({});
   const depthRef = useRef<Record<number, DepthBook>>({});
   const [tick, setTick] = useState(0);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   // Entry volume (USDT notional per leg) used to compute effective execution prices.
   const [volumeUsd, setVolumeUsd] = useState<number>(1000);
-
-  const { sendJsonMessage: sendPrices, readyState: pricesReady } = useWebSocket(
-    getKlinesPricesWebSocketUrl(),
-    {
-      share: false,
-      shouldReconnect: () => true,
-      onMessage: (event: MessageEvent) => {
-        try {
-          const msg = JSON.parse(event.data);
-          if (msg?.type === 'pricesSnapshot' && msg.data) {
-            const next: Record<number, number> = {};
-            for (const key of Object.keys(msg.data)) {
-              const price = parseFloat(msg.data[key]);
-              if (Number.isFinite(price)) next[Number(key)] = price;
-            }
-            pricesRef.current = next;
-          }
-        } catch {}
-      },
-    },
-  );
 
   const { sendJsonMessage: sendDepth, readyState: depthReady } = useWebSocket(
     getOrderbookDepthWebSocketUrl(),
@@ -372,14 +349,10 @@ export default function ArbitrageIndexView() {
   );
 
   useEffect(() => {
-    if (pricesReady === ReadyState.OPEN) sendPrices(SUBSCRIBE_ALL_PRICES);
-  }, [pricesReady]);
-
-  useEffect(() => {
     if (depthReady === ReadyState.OPEN) sendDepth(SUBSCRIBE_ALL_DEPTH);
   }, [depthReady]);
 
-  // Recompute the table every 3 seconds from the latest prices + depth.
+  // Recompute the table every 3 seconds from the latest order books.
   useEffect(() => {
     const id = setInterval(() => {
       setTick((t) => t + 1);
@@ -389,30 +362,19 @@ export default function ArbitrageIndexView() {
   }, []);
 
   const opportunities = useMemo(
-    () =>
-      computeOpportunities(
-        pairs || [],
-        pricesRef.current,
-        depthRef.current,
-        volumeUsd,
-      ),
+    () => computeOpportunities(pairs || [], depthRef.current, volumeUsd),
     [pairs, tick, volumeUsd],
   );
 
   const connectionLabel = useMemo(() => {
-    const label = (state: number) =>
-      state === ReadyState.OPEN
+    const color =
+      depthReady === ReadyState.OPEN
         ? 'success'
-        : state === ReadyState.CONNECTING
+        : depthReady === ReadyState.CONNECTING
         ? 'warning'
         : 'error';
-    return (
-      <Stack direction='row' spacing={1} alignItems='center'>
-        <Label color={label(pricesReady) as any}>цены</Label>
-        <Label color={label(depthReady) as any}>стакан</Label>
-      </Stack>
-    );
-  }, [pricesReady, depthReady]);
+    return <Label color={color as any}>стакан</Label>;
+  }, [depthReady]);
 
   return (
     <Container maxWidth='xl' sx={{ mt: 10 }}>
