@@ -2,6 +2,7 @@
 
 import Container from "@mui/material/Container";
 import {
+  Button,
   Card,
   CardContent,
   CardHeader,
@@ -30,10 +31,14 @@ import Box from "@mui/material/Box";
 import Label from "src/components/label";
 import moment from "moment";
 import { useGetAllQuery } from "@/lib/redux/api/pairApi";
+import { useCreateMutation as useCreateArbitrageSession } from "@/lib/redux/api/arbitrageSessionApi";
+import { useSnackbar } from "notistack";
 import {
   getOrderbookDepthWebSocketUrl,
   SUBSCRIBE_ALL_DEPTH,
 } from "@/src/utils/orderbookDepthWebSocket";
+
+const ARB_VOLUME_STORAGE_KEY = 'arbVolumeUsd';
 
 type Level = [number, number]; // [price, amount(base)]
 interface DepthBook {
@@ -466,7 +471,17 @@ function ArbitrageDepthDialog({
   );
 }
 
-function OpportunityRow({ item, onOpen }: { item: ArbitrageOpportunity; onOpen: (o: ArbitrageOpportunity) => void }) {
+function OpportunityRow({
+  item,
+  onOpen,
+  onEnter,
+  entering,
+}: {
+  item: ArbitrageOpportunity;
+  onOpen: (o: ArbitrageOpportunity) => void;
+  onEnter: (c: ArbitrageCombo) => void;
+  entering: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const hasOthers = item.others.length > 0;
   return (
@@ -493,10 +508,24 @@ function OpportunityRow({ item, onOpen }: { item: ArbitrageOpportunity; onOpen: 
           <Typography variant='subtitle2'>{item.name}</Typography>
         </TableCell>
         <ComboCells combo={item.best} />
+        <TableCell sx={{ textAlign: 'right' }}>
+          <Button
+            size='small'
+            variant='contained'
+            color='success'
+            disabled={entering}
+            onClick={(e) => {
+              e.stopPropagation();
+              onEnter(item.best);
+            }}
+          >
+            Войти
+          </Button>
+        </TableCell>
       </TableRow>
       {hasOthers && (
         <TableRow>
-          <TableCell sx={{ py: 0, borderBottom: 'none' }} colSpan={7}>
+          <TableCell sx={{ py: 0, borderBottom: 'none' }} colSpan={8}>
             <Collapse in={open} timeout='auto' unmountOnExit>
               <Box sx={{ my: 1, mx: 2 }}>
                 <Typography variant='caption' color='text.secondary'>
@@ -532,13 +561,53 @@ function OpportunityRow({ item, onOpen }: { item: ArbitrageOpportunity; onOpen: 
 export default function ArbitrageIndexView() {
   const { data: pairs } = useGetAllQuery({ activated: true });
 
+  const { enqueueSnackbar } = useSnackbar();
+  const [createSession, { isLoading: entering }] = useCreateArbitrageSession();
+
   const depthRef = useRef<Record<number, DepthBook>>({});
   const [tick, setTick] = useState(0);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
-  // Entry volume (USDT notional per leg) used to compute effective execution prices.
-  const [volumeUsd, setVolumeUsd] = useState<number>(1000);
+  // Entry volume (USDT notional per leg). Persisted in localStorage.
+  const [volumeUsd, setVolumeUsd] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const v = Number(window.localStorage.getItem(ARB_VOLUME_STORAGE_KEY));
+      if (v > 0) return v;
+    }
+    return 1000;
+  });
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(ARB_VOLUME_STORAGE_KEY, String(volumeUsd));
+    }
+  }, [volumeUsd]);
   // Opportunity whose order-book popup is open.
   const [selected, setSelected] = useState<ArbitrageOpportunity | null>(null);
+
+  // Open a real arbitrage position: buy (long) on long.pairId, sell (short) on short.pairId.
+  const handleEnter = async (combo: ArbitrageCombo) => {
+    const confirmed = window.confirm(
+      `Открыть арбитраж на ${fmtUsd(volumeUsd)}/ногу?\n` +
+        `LONG ${combo.long.tradingServiceName} (${fmtPrice(combo.long.price)})\n` +
+        `SHORT ${combo.short.tradingServiceName} (${fmtPrice(combo.short.price)})`,
+    );
+    if (!confirmed) return;
+    try {
+      const res: any = await createSession({
+        longPairId: combo.long.pairId,
+        shortPairId: combo.short.pairId,
+        amountUsd: volumeUsd,
+      }).unwrap();
+      if (res?.status === 'failed') {
+        enqueueSnackbar('Вход частично/не удался — см. статистику', { variant: 'warning' });
+      } else {
+        enqueueSnackbar('Позиции открыты', { variant: 'success' });
+      }
+    } catch (e: any) {
+      enqueueSnackbar(`Ошибка входа: ${e?.data?.message || e?.error || 'unknown'}`, {
+        variant: 'error',
+      });
+    }
+  };
 
   const { sendJsonMessage: sendDepth, readyState: depthReady } = useWebSocket(
     getOrderbookDepthWebSocketUrl(),
@@ -626,12 +695,13 @@ export default function ArbitrageIndexView() {
                 <TableCell>Цена 2 (дороже)</TableCell>
                 <TableCell sx={{ textAlign: 'right' }}>Чистый профит</TableCell>
                 <TableCell sx={{ textAlign: 'right' }}>Профит (объём)</TableCell>
+                <TableCell sx={{ textAlign: 'right' }} />
               </TableRow>
             </TableHead>
             <TableBody>
               {opportunities.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} sx={{ textAlign: 'center', py: 4 }}>
+                  <TableCell colSpan={8} sx={{ textAlign: 'center', py: 4 }}>
                     <Typography variant='body2' color='text.secondary'>
                       Нет арбитражных данных
                     </Typography>
@@ -639,7 +709,13 @@ export default function ArbitrageIndexView() {
                 </TableRow>
               )}
               {opportunities.map((item) => (
-                <OpportunityRow key={item.name} item={item} onOpen={setSelected} />
+                <OpportunityRow
+                  key={item.name}
+                  item={item}
+                  onOpen={setSelected}
+                  onEnter={handleEnter}
+                  entering={entering}
+                />
               ))}
             </TableBody>
           </Table>

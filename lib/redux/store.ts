@@ -20,6 +20,7 @@ import { drawingElementsApi } from "./api/drawingElementsApi";
 import { datasetApi, datasetPairsApi, klineDatasetApi } from "./api/datasetApi";
 import { xvClusterPrecisionApi } from "./api/xvClusterPrecisionApi";
 import { exchangeApi } from "@/lib/redux/api/exchangeApi";
+import { arbitrageSessionApi } from "@/lib/redux/api/arbitrageSessionApi";
 
 export const reduxStore = configureStore({
   reducer: {
@@ -46,6 +47,7 @@ export const reduxStore = configureStore({
     [klineDatasetApi.reducerPath]: klineDatasetApi.reducer,
     [xvClusterPrecisionApi.reducerPath]: xvClusterPrecisionApi.reducer,
     [exchangeApi.reducerPath]: exchangeApi.reducer,
+    [arbitrageSessionApi.reducerPath]: arbitrageSessionApi.reducer,
   },
   //devTools: process.env.NEXT_PUBLIC_ENV !== "production",
   middleware: (getDefaultMiddleware) =>
@@ -73,5 +75,6 @@ export const reduxStore = configureStore({
       klineDatasetApi.middleware,
       xvClusterPrecisionApi.middleware,
       exchangeApi.middleware,
+      arbitrageSessionApi.middleware,
     ]),
 });
