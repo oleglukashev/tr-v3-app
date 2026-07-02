@@ -290,12 +290,16 @@ interface WalkRow {
   cumUsd: number;
   fillFrac: number; // 0..1 — how much of THIS level the entry consumes
 }
+// Order-book size is scaled to display units; the whole popup (Объём, Σ USDT, fill, Наберётся)
+// uses the scaled size so the numbers are consistent.
+const SIZE_DIVISOR = 10;
 function walkBook(levels: Level[], targetUsd: number) {
   const rows: WalkRow[] = [];
   let cumUsd = 0;
   let filledUsd = 0;
   let filledBase = 0;
-  for (const [price, size] of levels || []) {
+  for (const [price, rawSize] of levels || []) {
+    const size = rawSize / SIZE_DIVISOR;
     if (!(price > 0) || !(size > 0)) continue;
     const levelUsd = price * size;
     const remaining = Math.max(0, targetUsd - cumUsd);
@@ -322,7 +326,7 @@ function LegDepthPanel({ leg, book, volumeUsd }: { leg: ArbitrageLeg; book?: Dep
   const best = levels[0]?.[0] ?? null;
   const shiftPct =
     best && walk.vwap ? (isLong ? (walk.vwap / best - 1) * 100 : (1 - walk.vwap / best) * 100) : null;
-  const maxUsd = Math.max(1, ...levels.map((l) => l[0] * l[1]));
+  const maxUsd = Math.max(1, ...levels.map((l) => (l[0] * l[1]) / SIZE_DIVISOR));
 
   return (
     <Card variant='outlined' sx={{ height: '100%' }}>
@@ -373,7 +377,7 @@ function LegDepthPanel({ leg, book, volumeUsd }: { leg: ArbitrageLeg; book?: Dep
                   </Typography>
                 </TableCell>
                 <TableCell sx={{ textAlign: 'right' }}>
-                  <Typography variant='caption'>{(r.size / 10).toLocaleString('en-US', { maximumFractionDigits: 4 })}</Typography>
+                  <Typography variant='caption'>{r.size.toLocaleString('en-US', { maximumFractionDigits: 4 })}</Typography>
                 </TableCell>
                 <TableCell sx={{ textAlign: 'right' }}>
                   <Typography variant='caption' color='text.secondary'>{fmtUsd(r.cumUsd)}</Typography>
