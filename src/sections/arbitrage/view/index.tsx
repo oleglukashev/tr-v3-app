@@ -106,20 +106,30 @@ function toLeg(
   book: DepthBook | undefined,
   volumeUsd: number,
 ): ArbitrageLeg {
-  // long = buy → walk asks; short = sell → walk bids.
+  // long = buy → asks; short = sell → bids.
   const levels = direction === 'long' ? book?.asks : book?.bids;
   const eff = volumeUsd > 0 ? vwapForNotional(levels as Level[], volumeUsd) : null;
+  // Reference price is the LIVE top-of-book on the side we'd actually trade (bestAsk to buy,
+  // bestBid to sell) — not the klines `last` (which lags up to 5m). This keeps eff on the correct
+  // side of it: eff(buy) >= bestAsk, eff(sell) <= bestBid. Fall back to `last` when no book yet.
+  const bookTop =
+    levels && levels[0] && Number(levels[0][0]) > 0 ? Number(levels[0][0]) : null;
   return {
     tradingServiceId: item.pair.tradingServiceId,
     tradingServiceName: item.service.name,
     pairId: item.pair.id,
     symbol: item.pair.symbol,
-    price: item.price,
+    price: bookTop != null ? bookTop : item.price,
     effPrice: eff ? eff.vwap : null,
     effFilled: eff ? eff.filled : false,
     takerFee: Number(item.service.takerFee ?? 0),
     direction,
   };
+}
+
+function bestSide(book: DepthBook | undefined, side: 'ask' | 'bid'): number | null {
+  const lv = side === 'ask' ? book?.asks : book?.bids;
+  return lv && lv[0] && Number(lv[0][0]) > 0 ? Number(lv[0][0]) : null;
 }
 
 function buildCombo(
@@ -128,14 +138,24 @@ function buildCombo(
   depth: Record<number, DepthBook>,
   volumeUsd: number,
 ): ArbitrageCombo {
-  const cheapest = a.price <= b.price ? a : b;
-  const dearest = a.price <= b.price ? b : a;
-  const priceDiffPercent =
-    ((dearest.price - cheapest.price) / cheapest.price) * 100;
-  const long = toLeg(cheapest, 'long', depth[cheapest.pair.id], volumeUsd);
-  const short = toLeg(dearest, 'short', depth[dearest.pair.id], volumeUsd);
+  // Pick the profitable direction from the LIVE book: buy where the ask is low, sell where the bid
+  // is high. Compare both directions' top-of-book spreads (fall back to last price if no book yet).
+  const askA = bestSide(depth[a.pair.id], 'ask') ?? a.price;
+  const bidA = bestSide(depth[a.pair.id], 'bid') ?? a.price;
+  const askB = bestSide(depth[b.pair.id], 'ask') ?? b.price;
+  const bidB = bestSide(depth[b.pair.id], 'bid') ?? b.price;
+  const spreadLongA = (bidB - askA) / askA; // long A (buy A), short B (sell B)
+  const spreadLongB = (bidA - askB) / askB; // long B (buy B), short A (sell A)
+  const longItem = spreadLongA >= spreadLongB ? a : b;
+  const shortItem = spreadLongA >= spreadLongB ? b : a;
 
-  // Effective profit: buy at long.effPrice, sell at short.effPrice, minus taker fees on both.
+  const long = toLeg(longItem, 'long', depth[longItem.pair.id], volumeUsd);
+  const short = toLeg(shortItem, 'short', depth[shortItem.pair.id], volumeUsd);
+
+  // Executable top-of-book spread: buy at long.price (bestAsk), sell at short.price (bestBid).
+  const priceDiffPercent = ((short.price - long.price) / long.price) * 100;
+
+  // Volume-adjusted spread (VWAP): buy at long.effPrice, sell at short.effPrice.
   let effProfitPercent: number | null = null;
   if (long.effPrice != null && short.effPrice != null && long.effPrice > 0) {
     const effDiff = ((short.effPrice - long.effPrice) / long.effPrice) * 100;
@@ -143,7 +163,7 @@ function buildCombo(
   }
 
   return {
-    key: `${cheapest.pair.name}-${long.tradingServiceId}-${short.tradingServiceId}`,
+    key: `${longItem.pair.name}-${long.tradingServiceId}-${short.tradingServiceId}`,
     priceDiffPercent,
     long,
     short,
