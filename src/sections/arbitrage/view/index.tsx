@@ -368,7 +368,7 @@ function LegDepthPanel({ leg, book, volumeUsd }: { leg: ArbitrageLeg; book?: Dep
                   </Typography>
                 </TableCell>
                 <TableCell sx={{ textAlign: 'right' }}>
-                  <Typography variant='caption'>{r.size.toLocaleString('en-US', { maximumFractionDigits: 4 })}</Typography>
+                  <Typography variant='caption'>{(r.size / 100).toLocaleString('en-US', { maximumFractionDigits: 4 })}</Typography>
                 </TableCell>
                 <TableCell sx={{ textAlign: 'right' }}>
                   <Typography variant='caption' color='text.secondary'>{fmtUsd(r.cumUsd)}</Typography>
