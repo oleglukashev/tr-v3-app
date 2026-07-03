@@ -414,25 +414,30 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
   );
 }
 
+interface Selection {
+  name: string;
+  combo: ArbitrageCombo;
+}
+
 function ArbitrageDepthDialog({
-  opportunity,
+  selection,
   depth,
   volumeUsd,
   onClose,
 }: {
-  opportunity: ArbitrageOpportunity | null;
+  selection: Selection | null;
   depth: Record<number, DepthBook>;
   volumeUsd: number;
   onClose: () => void;
 }) {
-  const combo = opportunity?.best;
+  const combo = selection?.combo;
   return (
-    <Dialog open={!!opportunity} onClose={onClose} maxWidth='md' fullWidth>
+    <Dialog open={!!selection} onClose={onClose} maxWidth='md' fullWidth>
       {combo && (
         <>
           <DialogTitle>
             <Stack direction='row' spacing={1.5} alignItems='center' flexWrap='wrap'>
-              <Typography variant='h6'>{opportunity!.name}</Typography>
+              <Typography variant='h6'>{selection!.name}</Typography>
               <Label color='info'>Разница {fmtPct(combo.priceDiffPercent)}</Label>
               <Label color={combo.netProfitPercent > 0 ? 'success' : 'error'}>
                 Профит {fmtPct(combo.netProfitPercent)}
@@ -470,14 +475,14 @@ function ArbitrageDepthDialog({
   );
 }
 
-function OpportunityRow({ item, onOpen }: { item: ArbitrageOpportunity; onOpen: (o: ArbitrageOpportunity) => void }) {
+function OpportunityRow({ item, onOpen }: { item: ArbitrageOpportunity; onOpen: (name: string, combo: ArbitrageCombo) => void }) {
   const [open, setOpen] = useState(false);
   const hasOthers = item.others.length > 0;
   return (
     <>
       <TableRow
         hover
-        onClick={() => onOpen(item)}
+        onClick={() => onOpen(item.name, item.best)}
         sx={{ cursor: 'pointer' }}
       >
         <TableCell sx={{ width: 48 }}>
@@ -518,7 +523,12 @@ function OpportunityRow({ item, onOpen }: { item: ArbitrageOpportunity; onOpen: 
                   </TableHead>
                   <TableBody>
                     {item.others.map((combo) => (
-                      <TableRow key={combo.key}>
+                      <TableRow
+                        key={combo.key}
+                        hover
+                        onClick={() => onOpen(item.name, combo)}
+                        sx={{ cursor: 'pointer' }}
+                      >
                         <ComboCells combo={combo} />
                       </TableRow>
                     ))}
@@ -542,7 +552,7 @@ export default function ArbitrageIndexView() {
   // Entry volume (USDT notional per leg) used to compute effective execution prices.
   const [volumeUsd, setVolumeUsd] = useState<number>(1000);
   // Opportunity whose order-book popup is open.
-  const [selected, setSelected] = useState<ArbitrageOpportunity | null>(null);
+  const [selected, setSelected] = useState<Selection | null>(null);
 
   const { sendJsonMessage: sendDepth, readyState: depthReady } = useWebSocket(
     getOrderbookDepthWebSocketUrl(),
@@ -643,7 +653,11 @@ export default function ArbitrageIndexView() {
                 </TableRow>
               )}
               {opportunities.map((item) => (
-                <OpportunityRow key={item.name} item={item} onOpen={setSelected} />
+                <OpportunityRow
+                  key={item.name}
+                  item={item}
+                  onOpen={(name, combo) => setSelected({ name, combo })}
+                />
               ))}
             </TableBody>
           </Table>
@@ -651,7 +665,7 @@ export default function ArbitrageIndexView() {
       </Card>
 
       <ArbitrageDepthDialog
-        opportunity={selected}
+        selection={selected}
         depth={depthRef.current}
         volumeUsd={volumeUsd}
         onClose={() => setSelected(null)}
