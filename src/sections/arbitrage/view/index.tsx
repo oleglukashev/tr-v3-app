@@ -285,9 +285,9 @@ interface WalkRow {
   cumUsd: number;
   fillFrac: number; // 0..1 — how much of THIS level the entry consumes
 }
-// Order-book size is scaled to display units; the whole popup (Объём, Σ USDT, fill, Наберётся)
-// uses the scaled size so the numbers are consistent.
-const SIZE_DIVISOR = 10;
+// Amounts already arrive in base coins (tr-v3-orderbook-client normalizes by contractSize), so no
+// scaling is needed here. Kept as a constant in case a display scale is ever wanted.
+const SIZE_DIVISOR = 1;
 function walkBook(levels: Level[], targetUsd: number) {
   const rows: WalkRow[] = [];
   let cumUsd = 0;
