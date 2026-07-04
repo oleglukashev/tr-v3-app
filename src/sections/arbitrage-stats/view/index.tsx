@@ -35,6 +35,17 @@ const fmtPrice = (v: any) =>
 const fmtPct = (v: any) => (v == null ? '—' : `${Number(v).toFixed(3)}%`);
 const fmtUsd = (v: any) => (v == null ? '—' : `$${Number(v).toFixed(2)}`);
 
+// Colour the current price vs entry by whether the leg is in profit:
+// LONG profits when price goes up, SHORT when it goes down.
+const currentPriceColor = (current: any, entry: any, isLong: boolean) => {
+  if (current == null || entry == null || Number(current) === Number(entry)) {
+    return 'text.secondary';
+  }
+  const up = Number(current) > Number(entry);
+  const good = isLong ? up : !up;
+  return good ? 'success.main' : 'error.main';
+};
+
 const STATUS_COLOR: Record<string, any> = {
   created: 'info',
   success: 'success',
@@ -149,7 +160,10 @@ export default function ArbitrageStatsIndexView() {
                   <TableCell sx={{ textAlign: 'right' }}>
                     <Stack spacing={0}>
                       <Typography variant='caption'>{fmtPrice(s.pair1EntryPrice)}</Typography>
-                      <Typography variant='caption' color='text.secondary'>
+                      <Typography
+                        variant='caption'
+                        color={currentPriceColor(s.currentLongPrice, s.pair1EntryPrice, true)}
+                      >
                         {fmtPrice(s.currentLongPrice)}
                       </Typography>
                     </Stack>
@@ -157,7 +171,10 @@ export default function ArbitrageStatsIndexView() {
                   <TableCell sx={{ textAlign: 'right' }}>
                     <Stack spacing={0}>
                       <Typography variant='caption'>{fmtPrice(s.pair2EntryPrice)}</Typography>
-                      <Typography variant='caption' color='text.secondary'>
+                      <Typography
+                        variant='caption'
+                        color={currentPriceColor(s.currentShortPrice, s.pair2EntryPrice, false)}
+                      >
                         {fmtPrice(s.currentShortPrice)}
                       </Typography>
                     </Stack>
