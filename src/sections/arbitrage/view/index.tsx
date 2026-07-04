@@ -34,6 +34,7 @@ import { useGetAllQuery } from "@/lib/redux/api/pairApi";
 import {
   useCreateMutation as useCreateArbitrageSession,
   useGetFundingQuery,
+  useGetLimitsQuery,
 } from "@/lib/redux/api/arbitrageSessionApi";
 import { useSnackbar } from "notistack";
 import {
@@ -57,6 +58,13 @@ interface FundingInfo {
   nextFundingTime: number | null;
 }
 type FundingMap = Record<number, FundingInfo>;
+
+interface LimitInfo {
+  minAmount: number | null; // min order size in base coins
+  minCost: number | null; // min order notional (quote)
+  contractSize: number | null;
+}
+type LimitMap = Record<number, LimitInfo>;
 
 interface ArbitrageLeg {
   tradingServiceId: number;
@@ -85,6 +93,8 @@ interface ArbitrageCombo {
   // Days for adverse funding to consume the captured spread (netProfitPercent). null when funding is
   // neutral/favorable or unknown.
   daysToEatProfit: number | null;
+  // Minimum entry volume (USDT/leg) so BOTH legs clear their market minimum. null when unknown.
+  minVolumeUsd: number | null;
 }
 
 interface ArbitrageOpportunity {
@@ -206,12 +216,23 @@ function bestSide(book: DepthBook | undefined, side: 'ask' | 'bid'): number | nu
   return lv && lv[0] && Number(lv[0][0]) > 0 ? Number(lv[0][0]) : null;
 }
 
+// Minimum entry volume (USDT) for one leg = max(minAmount×price, minCost).
+function legMinVolume(leg: ArbitrageLeg, limits: LimitMap): number | null {
+  const lim = limits[leg.pairId];
+  if (!lim) return null;
+  const byAmount = lim.minAmount != null && leg.price > 0 ? lim.minAmount * leg.price : 0;
+  const byCost = lim.minCost != null ? lim.minCost : 0;
+  const m = Math.max(byAmount, byCost);
+  return m > 0 ? m : null;
+}
+
 function buildCombo(
   a: any,
   b: any,
   depth: Record<number, DepthBook>,
   volumeUsd: number,
   funding: FundingMap,
+  limits: LimitMap,
 ): ArbitrageCombo {
   // Pick the profitable direction from the LIVE book: buy where the ask is low, sell where the bid
   // is high. Compare both directions' top-of-book spreads.
@@ -256,6 +277,11 @@ function buildCombo(
     daysToEatProfit = netProfitPercent / Math.abs(netFundingDayPct);
   }
 
+  const legMins = [legMinVolume(long, limits), legMinVolume(short, limits)].filter(
+    (v): v is number => v != null,
+  );
+  const minVolumeUsd = legMins.length ? Math.max(...legMins) : null;
+
   return {
     key: `${longItem.pair.name}-${long.tradingServiceId}-${short.tradingServiceId}`,
     priceDiffPercent,
@@ -265,6 +291,7 @@ function buildCombo(
     effProfitPercent,
     netFundingDayPct,
     daysToEatProfit,
+    minVolumeUsd,
   };
 }
 
@@ -273,6 +300,7 @@ function computeOpportunities(
   depth: Record<number, DepthBook>,
   volumeUsd: number,
   funding: FundingMap,
+  limits: LimitMap,
 ): ArbitrageOpportunity[] {
   const byName = new Map<string, any[]>();
   for (const pair of pairs || []) {
@@ -294,7 +322,7 @@ function computeOpportunities(
     for (let i = 0; i < list.length; i++) {
       for (let j = i + 1; j < list.length; j++) {
         if (list[i].pair.id === list[j].pair.id) continue;
-        combos.push(buildCombo(list[i], list[j], depth, volumeUsd, funding));
+        combos.push(buildCombo(list[i], list[j], depth, volumeUsd, funding, limits));
       }
     }
     if (!combos.length) continue;
@@ -542,6 +570,12 @@ function ArbitrageDepthDialog({
               <Typography variant='caption' color='text.secondary'>
                 вход {fmtUsd(volumeUsd)} на ногу
               </Typography>
+              {combo.minVolumeUsd != null && (
+                <Label color={volumeUsd < combo.minVolumeUsd ? 'error' : 'default'}>
+                  мин. {fmtUsd(combo.minVolumeUsd)}/ногу
+                  {volumeUsd < combo.minVolumeUsd ? ' ⚠ мало' : ''}
+                </Label>
+              )}
             </Stack>
           </DialogTitle>
           <DialogContent>
@@ -567,16 +601,54 @@ function ArbitrageDepthDialog({
   );
 }
 
+// "Войти" button — warns (orange) when the entry volume is below the combo's market minimum, so the
+// user can't unknowingly try a size that one leg would reject.
+function EnterButton({
+  combo,
+  volumeUsd,
+  entering,
+  onEnter,
+  variant,
+}: {
+  combo: ArbitrageCombo;
+  volumeUsd: number;
+  entering: boolean;
+  onEnter: (c: ArbitrageCombo) => void;
+  variant: 'contained' | 'outlined';
+}) {
+  const belowMin = combo.minVolumeUsd != null && volumeUsd < combo.minVolumeUsd;
+  return (
+    <Tooltip title={belowMin ? `Объём ниже минимума ${fmtUsd(combo.minVolumeUsd)}/ногу — увеличьте вход` : ''}>
+      <span>
+        <Button
+          size='small'
+          variant={variant}
+          color={belowMin ? 'warning' : 'success'}
+          disabled={entering}
+          onClick={(e) => {
+            e.stopPropagation();
+            onEnter(combo);
+          }}
+        >
+          Войти{belowMin ? ' ⚠' : ''}
+        </Button>
+      </span>
+    </Tooltip>
+  );
+}
+
 function OpportunityRow({
   item,
   onOpen,
   onEnter,
   entering,
+  volumeUsd,
 }: {
   item: ArbitrageOpportunity;
   onOpen: (name: string, combo: ArbitrageCombo) => void;
   onEnter: (c: ArbitrageCombo) => void;
   entering: boolean;
+  volumeUsd: number;
 }) {
   const [open, setOpen] = useState(false);
   const hasOthers = item.others.length > 0;
@@ -605,18 +677,13 @@ function OpportunityRow({
         </TableCell>
         <ComboCells combo={item.best} />
         <TableCell sx={{ textAlign: 'right' }}>
-          <Button
-            size='small'
+          <EnterButton
+            combo={item.best}
+            volumeUsd={volumeUsd}
+            entering={entering}
+            onEnter={onEnter}
             variant='contained'
-            color='success'
-            disabled={entering}
-            onClick={(e) => {
-              e.stopPropagation();
-              onEnter(item.best);
-            }}
-          >
-            Войти
-          </Button>
+          />
         </TableCell>
       </TableRow>
       {hasOthers && (
@@ -649,18 +716,13 @@ function OpportunityRow({
                       >
                         <ComboCells combo={combo} />
                         <TableCell sx={{ textAlign: 'right' }}>
-                          <Button
-                            size='small'
+                          <EnterButton
+                            combo={combo}
+                            volumeUsd={volumeUsd}
+                            entering={entering}
+                            onEnter={onEnter}
                             variant='outlined'
-                            color='success'
-                            disabled={entering}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onEnter(combo);
-                            }}
-                          >
-                            Войти
-                          </Button>
+                          />
                         </TableCell>
                       </TableRow>
                     ))}
@@ -682,6 +744,11 @@ export default function ArbitrageIndexView() {
     pollingInterval: 30000,
   });
   const funding: FundingMap = (fundingData as any) || {};
+  // Market min-order limits (change rarely; refetch every 5 min).
+  const { data: limitsData } = useGetLimitsQuery({} as any, {
+    pollingInterval: 300000,
+  });
+  const limits: LimitMap = (limitsData as any) || {};
 
   const { enqueueSnackbar } = useSnackbar();
   const [createSession, { isLoading: entering }] = useCreateArbitrageSession();
@@ -768,8 +835,8 @@ export default function ArbitrageIndexView() {
   }, []);
 
   const opportunities = useMemo(
-    () => computeOpportunities(pairs || [], depthRef.current, volumeUsd, funding),
-    [pairs, tick, volumeUsd, fundingData],
+    () => computeOpportunities(pairs || [], depthRef.current, volumeUsd, funding, limits),
+    [pairs, tick, volumeUsd, fundingData, limitsData],
   );
 
   const connectionLabel = useMemo(() => {
@@ -841,6 +908,7 @@ export default function ArbitrageIndexView() {
                   onOpen={(name, combo) => setSelected({ name, combo })}
                   onEnter={handleEnter}
                   entering={entering}
+                  volumeUsd={volumeUsd}
                 />
               ))}
             </TableBody>

@@ -13,6 +13,9 @@ export const arbitrageSessionApi = (new BaseApi({
     getFunding: builder.query({
       query: () => ({ url: `${collectionPath}/funding` }),
     }),
+    getLimits: builder.query({
+      query: () => ({ url: `${collectionPath}/limits` }),
+    }),
   }),
 })).create();
 
@@ -21,4 +24,5 @@ export const {
   useCreateMutation,
   useRemoveMutation,
   useGetFundingQuery,
+  useGetLimitsQuery,
 } = arbitrageSessionApi as any;
