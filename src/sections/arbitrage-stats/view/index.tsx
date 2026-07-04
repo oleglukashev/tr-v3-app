@@ -20,11 +20,17 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import Box from "@mui/material/Box";
 import Label from "src/components/label";
 import moment from "moment";
+import { useEffect, useMemo, useRef, useState } from "react";
+import useWebSocket, { ReadyState } from 'react-use-websocket';
 import {
   useGetAllQuery,
   useRemoveMutation,
   useCloseSessionMutation,
 } from "@/lib/redux/api/arbitrageSessionApi";
+import {
+  getOrderbookDepthWebSocketUrl,
+  SUBSCRIBE_ALL_DEPTH,
+} from "@/src/utils/orderbookDepthWebSocket";
 import { useSnackbar } from "notistack";
 
 // Statuses where positions are (or may be) open, so a market close makes sense.
@@ -53,15 +59,69 @@ const STATUS_COLOR: Record<string, any> = {
   failed: 'error',
 };
 
+// Mid price from a depth book ({ bids, asks } best-first). null when the book is empty.
+const midPrice = (book: any): number | null => {
+  const bid = Number(book?.bids?.[0]?.[0]);
+  const ask = Number(book?.asks?.[0]?.[0]);
+  if (bid > 0 && ask > 0) return (bid + ask) / 2;
+  if (bid > 0) return bid;
+  if (ask > 0) return ask;
+  return null;
+};
+
 export default function ArbitrageStatsIndexView() {
-  // Poll — PnL is computed live server-side from current prices.
+  // Poll the list (statuses/new rows). PnL for OPEN sessions is computed on the client from the live
+  // order-book depth feed — the API no longer calls exchanges.
   const { data: sessions, refetch } = useGetAllQuery({}, { pollingInterval: 5000 } as any);
   const list: any[] = Array.isArray(sessions) ? sessions : [];
   const { enqueueSnackbar } = useSnackbar();
   const [removeSession, { isLoading: removing }] = useRemoveMutation();
   const [closeSession, { isLoading: closing }] = useCloseSessionMutation();
 
-  const totalPnl = list.reduce((acc, s) => acc + (Number(s.pnlUsd) || 0), 0);
+  // Live prices per pairId from the same depth feed the /arbitrage page uses.
+  const depthRef = useRef<Record<number, any>>({});
+  const [tick, setTick] = useState(0);
+  const { sendJsonMessage, readyState } = useWebSocket(getOrderbookDepthWebSocketUrl(), {
+    share: false,
+    shouldReconnect: () => true,
+    onMessage: (event: MessageEvent) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg?.type === 'depthSnapshot' && msg.data) {
+          const next: Record<number, any> = {};
+          for (const k of Object.keys(msg.data)) next[Number(k)] = msg.data[k];
+          depthRef.current = next;
+          setTick((t) => t + 1);
+        }
+      } catch (_) {}
+    },
+  });
+  useEffect(() => {
+    if (readyState === ReadyState.OPEN) sendJsonMessage(SUBSCRIBE_ALL_DEPTH);
+  }, [readyState, sendJsonMessage]);
+
+  // Augment each session with live current prices + PnL (open) or frozen realized PnL (closed).
+  const rows = useMemo(() => {
+    return list.map((s) => {
+      if (s.closed) {
+        return { ...s, curLong: null, curShort: null }; // pnl from backend (realized)
+      }
+      const curLong = midPrice(depthRef.current[s.pair1Id]);
+      const curShort = midPrice(depthRef.current[s.pair2Id]);
+      let pnlPct: number | null = null;
+      let pnlUsd: number | null = null;
+      if (curLong != null && s.pair1EntryPrice && curShort != null && s.pair2EntryPrice) {
+        const longPct = ((curLong - s.pair1EntryPrice) / s.pair1EntryPrice) * 100;
+        const shortPct = ((s.pair2EntryPrice - curShort) / s.pair2EntryPrice) * 100;
+        pnlPct = longPct + shortPct;
+        pnlUsd = (Number(s.amountUsd) * pnlPct) / 100;
+      }
+      return { ...s, curLong, curShort, pnlPct, pnlUsd };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessions, tick]);
+
+  const totalPnl = rows.reduce((acc, s) => acc + (Number(s.pnlUsd) || 0), 0);
 
   // Deletes only the DB record — does NOT close any open exchange positions.
   const handleDelete = async (s: any) => {
@@ -140,7 +200,7 @@ export default function ArbitrageStatsIndexView() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {list.length === 0 && (
+              {rows.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={12} sx={{ textAlign: 'center', py: 4 }}>
                     <Typography variant='body2' color='text.secondary'>
@@ -149,7 +209,7 @@ export default function ArbitrageStatsIndexView() {
                   </TableCell>
                 </TableRow>
               )}
-              {list.map((s) => (
+              {rows.map((s) => (
                 <TableRow key={s.id} hover>
                   <TableCell>{s.id}</TableCell>
                   <TableCell>
@@ -162,9 +222,9 @@ export default function ArbitrageStatsIndexView() {
                       <Typography variant='caption'>{fmtPrice(s.pair1EntryPrice)}</Typography>
                       <Typography
                         variant='caption'
-                        color={currentPriceColor(s.currentLongPrice, s.pair1EntryPrice, true)}
+                        color={currentPriceColor(s.curLong, s.pair1EntryPrice, true)}
                       >
-                        {fmtPrice(s.currentLongPrice)}
+                        {fmtPrice(s.curLong)}
                       </Typography>
                     </Stack>
                   </TableCell>
@@ -173,9 +233,9 @@ export default function ArbitrageStatsIndexView() {
                       <Typography variant='caption'>{fmtPrice(s.pair2EntryPrice)}</Typography>
                       <Typography
                         variant='caption'
-                        color={currentPriceColor(s.currentShortPrice, s.pair2EntryPrice, false)}
+                        color={currentPriceColor(s.curShort, s.pair2EntryPrice, false)}
                       >
-                        {fmtPrice(s.currentShortPrice)}
+                        {fmtPrice(s.curShort)}
                       </Typography>
                     </Stack>
                   </TableCell>
