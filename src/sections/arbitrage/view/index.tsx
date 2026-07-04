@@ -548,6 +548,7 @@ function OpportunityRow({
                       <TableCell>Цена 2 (дороже)</TableCell>
                       <TableCell sx={{ textAlign: 'right' }}>Чистый профит</TableCell>
                       <TableCell sx={{ textAlign: 'right' }}>Профит (объём)</TableCell>
+                      <TableCell />
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -559,6 +560,20 @@ function OpportunityRow({
                         sx={{ cursor: 'pointer' }}
                       >
                         <ComboCells combo={combo} />
+                        <TableCell sx={{ textAlign: 'right' }}>
+                          <Button
+                            size='small'
+                            variant='outlined'
+                            color='success'
+                            disabled={entering}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onEnter(combo);
+                            }}
+                          >
+                            Войти
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
