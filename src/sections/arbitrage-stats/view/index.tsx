@@ -57,6 +57,7 @@ const STATUS_COLOR: Record<string, any> = {
   success: 'success',
   stoploss: 'warning',
   failed: 'error',
+  closed_manually: 'default',
 };
 
 // Mid price from a depth book ({ bids, asks } best-first). null when the book is empty.
