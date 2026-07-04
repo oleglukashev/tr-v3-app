@@ -43,6 +43,7 @@ import {
 } from "@/src/utils/orderbookDepthWebSocket";
 
 const ARB_VOLUME_STORAGE_KEY = 'arbVolumeUsd';
+const ARB_LEVERAGE_STORAGE_KEY = 'arbLeverage';
 
 type Level = [number, number]; // [price, amount(base)]
 interface DepthBook {
@@ -769,13 +770,26 @@ export default function ArbitrageIndexView() {
       window.localStorage.setItem(ARB_VOLUME_STORAGE_KEY, String(volumeUsd));
     }
   }, [volumeUsd]);
+  // Leverage used when opening positions. Persisted in localStorage.
+  const [leverage, setLeverage] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const v = Number(window.localStorage.getItem(ARB_LEVERAGE_STORAGE_KEY));
+      if (v > 0) return v;
+    }
+    return 1;
+  });
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(ARB_LEVERAGE_STORAGE_KEY, String(leverage));
+    }
+  }, [leverage]);
   // Opportunity whose order-book popup is open.
   const [selected, setSelected] = useState<Selection | null>(null);
 
   // Open a real arbitrage position: buy (long) on long.pairId, sell (short) on short.pairId.
   const handleEnter = async (combo: ArbitrageCombo) => {
     const confirmed = window.confirm(
-      `Открыть арбитраж на ${fmtUsd(volumeUsd)}/ногу?\n` +
+      `Открыть арбитраж на ${fmtUsd(volumeUsd)}/ногу ×${leverage}?\n` +
         `LONG ${combo.long.tradingServiceName} (${fmtPrice(combo.long.price)})\n` +
         `SHORT ${combo.short.tradingServiceName} (${fmtPrice(combo.short.price)})`,
     );
@@ -785,6 +799,7 @@ export default function ArbitrageIndexView() {
         longPairId: combo.long.pairId,
         shortPairId: combo.short.pairId,
         amountUsd: volumeUsd,
+        leverage: leverage > 0 ? leverage : undefined,
         // Expected fill = VWAP walking our order book for the entry volume (liquidity-aware).
         longExpectedPrice: combo.long.effPrice ?? undefined,
         shortExpectedPrice: combo.short.effPrice ?? undefined,
@@ -870,6 +885,18 @@ export default function ArbitrageIndexView() {
                 sx={{ width: 160 }}
                 InputProps={{
                   endAdornment: <InputAdornment position='end'>USDT</InputAdornment>,
+                }}
+              />
+              <TextField
+                size='small'
+                label='Плечо'
+                type='number'
+                value={leverage}
+                onChange={(e) => setLeverage(Math.max(1, Number(e.target.value) || 1))}
+                sx={{ width: 100 }}
+                inputProps={{ min: 1, step: 1 }}
+                InputProps={{
+                  endAdornment: <InputAdornment position='end'>×</InputAdornment>,
                 }}
               />
               {connectionLabel}
