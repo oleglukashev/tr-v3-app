@@ -19,5 +19,6 @@ export const arbitrageSessionApi = (new BaseApi({
 export const {
   useGetAllQuery,
   useCreateMutation,
+  useRemoveMutation,
   useGetFundingQuery,
 } = arbitrageSessionApi as any;

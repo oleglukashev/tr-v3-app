@@ -5,18 +5,25 @@ import {
   Card,
   CardContent,
   CardHeader,
+  IconButton,
   Stack,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
+  Tooltip,
   Typography,
 } from "@mui/material";
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import Box from "@mui/material/Box";
 import Label from "src/components/label";
 import moment from "moment";
-import { useGetAllQuery } from "@/lib/redux/api/arbitrageSessionApi";
+import {
+  useGetAllQuery,
+  useRemoveMutation,
+} from "@/lib/redux/api/arbitrageSessionApi";
+import { useSnackbar } from "notistack";
 
 const fmtPrice = (v: any) =>
   v == null ? '—' : Number(v).toLocaleString('en-US', { maximumFractionDigits: 8 });
@@ -34,8 +41,28 @@ export default function ArbitrageStatsIndexView() {
   // Poll — PnL is computed live server-side from current prices.
   const { data: sessions } = useGetAllQuery({}, { pollingInterval: 5000 } as any);
   const list: any[] = Array.isArray(sessions) ? sessions : [];
+  const { enqueueSnackbar } = useSnackbar();
+  const [removeSession, { isLoading: removing }] = useRemoveMutation();
 
   const totalPnl = list.reduce((acc, s) => acc + (Number(s.pnlUsd) || 0), 0);
+
+  // Deletes only the DB record — does NOT close any open exchange positions.
+  const handleDelete = async (s: any) => {
+    if (
+      !window.confirm(
+        `Удалить сессию #${s.id} (${s.name})?\nЭто удалит только запись — открытые позиции на биржах НЕ закрываются.`,
+      )
+    )
+      return;
+    try {
+      await removeSession(s.id).unwrap();
+      enqueueSnackbar('Сессия удалена', { variant: 'success' });
+    } catch (e: any) {
+      enqueueSnackbar(`Ошибка удаления: ${e?.data?.message || e?.error || 'unknown'}`, {
+        variant: 'error',
+      });
+    }
+  };
 
   return (
     <Container maxWidth='xl' sx={{ mt: 10 }}>
@@ -66,12 +93,13 @@ export default function ArbitrageStatsIndexView() {
                 <TableCell sx={{ textAlign: 'right' }}>PnL USD</TableCell>
                 <TableCell>Статус</TableCell>
                 <TableCell>Создана</TableCell>
+                <TableCell sx={{ textAlign: 'right' }} />
               </TableRow>
             </TableHead>
             <TableBody>
               {list.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={11} sx={{ textAlign: 'center', py: 4 }}>
+                  <TableCell colSpan={12} sx={{ textAlign: 'center', py: 4 }}>
                     <Typography variant='body2' color='text.secondary'>
                       Нет сессий
                     </Typography>
@@ -120,6 +148,20 @@ export default function ArbitrageStatsIndexView() {
                     <Typography variant='caption' color='text.secondary'>
                       {moment(s.createdAt).format('DD.MM HH:mm')}
                     </Typography>
+                  </TableCell>
+                  <TableCell sx={{ textAlign: 'right' }}>
+                    <Tooltip title='Удалить запись (позиции не закрываются)'>
+                      <span>
+                        <IconButton
+                          size='small'
+                          color='error'
+                          disabled={removing}
+                          onClick={() => handleDelete(s)}
+                        >
+                          <DeleteOutlineIcon fontSize='small' />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
                   </TableCell>
                 </TableRow>
               ))}
