@@ -625,6 +625,9 @@ export default function ArbitrageIndexView() {
         longPairId: combo.long.pairId,
         shortPairId: combo.short.pairId,
         amountUsd: volumeUsd,
+        // Expected fill = VWAP walking our order book for the entry volume (liquidity-aware).
+        longExpectedPrice: combo.long.effPrice ?? undefined,
+        shortExpectedPrice: combo.short.effPrice ?? undefined,
       }).unwrap();
       if (res?.status === 'failed') {
         enqueueSnackbar('Вход частично/не удался — см. статистику', { variant: 'warning' });
