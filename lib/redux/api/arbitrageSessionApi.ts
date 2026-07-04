@@ -16,6 +16,14 @@ export const arbitrageSessionApi = (new BaseApi({
     getLimits: builder.query({
       query: () => ({ url: `${collectionPath}/limits` }),
     }),
+    // Close a session by market (reverse both legs). Invalidate the list so the row refreshes.
+    closeSession: builder.mutation({
+      query: (id: number) => ({
+        url: `${collectionPath}/${id}/close`,
+        method: 'POST',
+      }),
+      invalidatesTags: [{ type: 'arbitrageSessions', id: 'LIST' }],
+    }),
   }),
 })).create();
 
@@ -25,4 +33,5 @@ export const {
   useRemoveMutation,
   useGetFundingQuery,
   useGetLimitsQuery,
+  useCloseSessionMutation,
 } = arbitrageSessionApi as any;

@@ -2,6 +2,7 @@
 
 import Container from "@mui/material/Container";
 import {
+  Button,
   Card,
   CardContent,
   CardHeader,
@@ -22,8 +23,12 @@ import moment from "moment";
 import {
   useGetAllQuery,
   useRemoveMutation,
+  useCloseSessionMutation,
 } from "@/lib/redux/api/arbitrageSessionApi";
 import { useSnackbar } from "notistack";
+
+// Statuses where positions are (or may be) open, so a market close makes sense.
+const CLOSABLE = new Set(['created', 'failed']);
 
 const fmtPrice = (v: any) =>
   v == null ? '—' : Number(v).toLocaleString('en-US', { maximumFractionDigits: 8 });
@@ -39,10 +44,11 @@ const STATUS_COLOR: Record<string, any> = {
 
 export default function ArbitrageStatsIndexView() {
   // Poll — PnL is computed live server-side from current prices.
-  const { data: sessions } = useGetAllQuery({}, { pollingInterval: 5000 } as any);
+  const { data: sessions, refetch } = useGetAllQuery({}, { pollingInterval: 5000 } as any);
   const list: any[] = Array.isArray(sessions) ? sessions : [];
   const { enqueueSnackbar } = useSnackbar();
   const [removeSession, { isLoading: removing }] = useRemoveMutation();
+  const [closeSession, { isLoading: closing }] = useCloseSessionMutation();
 
   const totalPnl = list.reduce((acc, s) => acc + (Number(s.pnlUsd) || 0), 0);
 
@@ -57,8 +63,34 @@ export default function ArbitrageStatsIndexView() {
     try {
       await removeSession(s.id).unwrap();
       enqueueSnackbar('Сессия удалена', { variant: 'success' });
+      refetch(); // ensure the row disappears immediately
     } catch (e: any) {
       enqueueSnackbar(`Ошибка удаления: ${e?.data?.message || e?.error || 'unknown'}`, {
+        variant: 'error',
+      });
+    }
+  };
+
+  // Closes BOTH legs by market (reduceOnly) and records realized PnL.
+  const handleClose = async (s: any) => {
+    if (
+      !window.confirm(
+        `Закрыть сессию #${s.id} (${s.name}) по рынку?\nБудут отправлены встречные маркет-ордера по обеим ногам.`,
+      )
+    )
+      return;
+    try {
+      const res: any = await closeSession(s.id).unwrap();
+      if (res?.status === 'failed') {
+        enqueueSnackbar('Закрытие частично не удалось — проверьте позиции на биржах', {
+          variant: 'warning',
+        });
+      } else {
+        enqueueSnackbar('Позиции закрыты', { variant: 'success' });
+      }
+      refetch();
+    } catch (e: any) {
+      enqueueSnackbar(`Ошибка закрытия: ${e?.data?.message || e?.error || 'unknown'}`, {
         variant: 'error',
       });
     }
@@ -150,18 +182,35 @@ export default function ArbitrageStatsIndexView() {
                     </Typography>
                   </TableCell>
                   <TableCell sx={{ textAlign: 'right' }}>
-                    <Tooltip title='Удалить запись (позиции не закрываются)'>
-                      <span>
-                        <IconButton
-                          size='small'
-                          color='error'
-                          disabled={removing}
-                          onClick={() => handleDelete(s)}
-                        >
-                          <DeleteOutlineIcon fontSize='small' />
-                        </IconButton>
-                      </span>
-                    </Tooltip>
+                    <Stack direction='row' spacing={0.5} justifyContent='flex-end' alignItems='center'>
+                      {CLOSABLE.has(s.status) && (
+                        <Tooltip title='Закрыть обе ноги по рынку'>
+                          <span>
+                            <Button
+                              size='small'
+                              variant='outlined'
+                              color='warning'
+                              disabled={closing}
+                              onClick={() => handleClose(s)}
+                            >
+                              Закрыть
+                            </Button>
+                          </span>
+                        </Tooltip>
+                      )}
+                      <Tooltip title='Удалить запись (позиции не закрываются)'>
+                        <span>
+                          <IconButton
+                            size='small'
+                            color='error'
+                            disabled={removing}
+                            onClick={() => handleDelete(s)}
+                          >
+                            <DeleteOutlineIcon fontSize='small' />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    </Stack>
                   </TableCell>
                 </TableRow>
               ))}
