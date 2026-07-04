@@ -31,7 +31,10 @@ import Box from "@mui/material/Box";
 import Label from "src/components/label";
 import moment from "moment";
 import { useGetAllQuery } from "@/lib/redux/api/pairApi";
-import { useCreateMutation as useCreateArbitrageSession } from "@/lib/redux/api/arbitrageSessionApi";
+import {
+  useCreateMutation as useCreateArbitrageSession,
+  useGetFundingQuery,
+} from "@/lib/redux/api/arbitrageSessionApi";
 import { useSnackbar } from "notistack";
 import {
   getOrderbookDepthWebSocketUrl,
@@ -48,6 +51,13 @@ interface DepthBook {
   asks: Level[]; // best-first (ascending)
 }
 
+interface FundingInfo {
+  rate: number | null; // fraction per interval (0.0001 = 0.01%)
+  intervalHours: number; // funding interval in hours
+  nextFundingTime: number | null;
+}
+type FundingMap = Record<number, FundingInfo>;
+
 interface ArbitrageLeg {
   tradingServiceId: number;
   tradingServiceName: string;
@@ -58,6 +68,8 @@ interface ArbitrageLeg {
   effFilled: boolean; // could the book fully absorb the volume?
   takerFee: number;
   direction: 'long' | 'short';
+  fundingRate: number | null; // fraction per interval on this exchange
+  fundingIntervalHours: number;
 }
 
 interface ArbitrageCombo {
@@ -67,6 +79,12 @@ interface ArbitrageCombo {
   short: ArbitrageLeg;
   netProfitPercent: number; // from top prices
   effProfitPercent: number | null; // from effective (VWAP) prices, minus fees
+  // Net funding while holding the position, in % of notional. Positive = we EARN, negative = we PAY.
+  // long pays fundingRate each interval; short receives it. Annualised to per-day here.
+  netFundingDayPct: number | null;
+  // Days for adverse funding to consume the captured spread (netProfitPercent). null when funding is
+  // neutral/favorable or unknown.
+  daysToEatProfit: number | null;
 }
 
 interface ArbitrageOpportunity {
@@ -85,6 +103,46 @@ const fmtUsd = (value: number | null) => {
   if (value >= 1_000) return `$${(value / 1_000).toFixed(1)}k`;
   return `$${value.toFixed(0)}`;
 };
+const fmtSignedPct = (value: number | null) =>
+  value == null ? '—' : `${value >= 0 ? '+' : '−'}${Math.abs(value).toFixed(3)}%`;
+
+// Compact funding cell: net funding per day and, if adverse, how fast it eats the spread.
+function FundingCell({ combo }: { combo: ArbitrageCombo }) {
+  const net = combo.netFundingDayPct;
+  if (net == null) {
+    return (
+      <Typography variant='caption' color='text.secondary'>
+        n/a
+      </Typography>
+    );
+  }
+  const days = combo.daysToEatProfit;
+  const eatsFast = days != null && days <= 1; // funding eats the whole spread within a day
+  return (
+    <Tooltip
+      title={
+        `LONG ${combo.long.tradingServiceName}: ${fmtSignedPct((combo.long.fundingRate ?? 0) * 100)} /${combo.long.fundingIntervalHours}ч (платим)\n` +
+        `SHORT ${combo.short.tradingServiceName}: ${fmtSignedPct((combo.short.fundingRate ?? 0) * 100)} /${combo.short.fundingIntervalHours}ч (получаем)\n` +
+        `Нетто ${net >= 0 ? 'в плюс' : 'в минус'}, приведено к суткам`
+      }
+    >
+      <Stack spacing={0.25} alignItems='flex-end'>
+        <Label color={net >= 0 ? 'success' : eatsFast ? 'error' : 'warning'}>
+          {fmtSignedPct(net)}/сут
+        </Label>
+        {days != null && (
+          <Typography
+            variant='caption'
+            color={eatsFast ? 'error.main' : 'warning.main'}
+          >
+            {eatsFast ? '⚠ ' : ''}
+            съест за {days < 1 ? '<1д' : `~${days.toFixed(1)}д`}
+          </Typography>
+        )}
+      </Stack>
+    </Tooltip>
+  );
+}
 
 /**
  * Walk one side of the book to spend `targetUsd` (quote notional) and return the volume-weighted
@@ -116,6 +174,7 @@ function toLeg(
   direction: 'long' | 'short',
   book: DepthBook | undefined,
   volumeUsd: number,
+  funding?: FundingInfo,
 ): ArbitrageLeg {
   // long = buy → asks; short = sell → bids.
   const levels = direction === 'long' ? book?.asks : book?.bids;
@@ -137,6 +196,8 @@ function toLeg(
     effFilled: eff ? eff.filled : false,
     takerFee: Number(item.service.takerFee ?? 0),
     direction,
+    fundingRate: funding?.rate ?? null,
+    fundingIntervalHours: funding?.intervalHours ?? 8,
   };
 }
 
@@ -150,6 +211,7 @@ function buildCombo(
   b: any,
   depth: Record<number, DepthBook>,
   volumeUsd: number,
+  funding: FundingMap,
 ): ArbitrageCombo {
   // Pick the profitable direction from the LIVE book: buy where the ask is low, sell where the bid
   // is high. Compare both directions' top-of-book spreads.
@@ -162,8 +224,8 @@ function buildCombo(
   const longItem = spreadLongA >= spreadLongB ? a : b;
   const shortItem = spreadLongA >= spreadLongB ? b : a;
 
-  const long = toLeg(longItem, 'long', depth[longItem.pair.id], volumeUsd);
-  const short = toLeg(shortItem, 'short', depth[shortItem.pair.id], volumeUsd);
+  const long = toLeg(longItem, 'long', depth[longItem.pair.id], volumeUsd, funding[longItem.pair.id]);
+  const short = toLeg(shortItem, 'short', depth[shortItem.pair.id], volumeUsd, funding[shortItem.pair.id]);
 
   // Executable top-of-book spread: buy at long.price (bestAsk), sell at short.price (bestBid).
   const priceDiffPercent = ((short.price - long.price) / long.price) * 100;
@@ -175,13 +237,34 @@ function buildCombo(
     effProfitPercent = effDiff - long.takerFee - short.takerFee;
   }
 
+  const netProfitPercent = priceDiffPercent - long.takerFee - short.takerFee;
+
+  // Net funding per DAY (% of notional). Long pays its rate each interval; short receives its rate.
+  //   dailyLong  = -rateLong  * (24 / intervalLong)   (a cost)
+  //   dailyShort = +rateShort * (24 / intervalShort)  (income)
+  // Positive net = we earn funding; negative = we pay. Neutral when rates match & cancel.
+  let netFundingDayPct: number | null = null;
+  if (long.fundingRate != null && short.fundingRate != null) {
+    const dailyLong = -long.fundingRate * (24 / long.fundingIntervalHours);
+    const dailyShort = short.fundingRate * (24 / short.fundingIntervalHours);
+    netFundingDayPct = (dailyShort + dailyLong) * 100;
+  }
+
+  // Days for adverse funding to eat the captured spread.
+  let daysToEatProfit: number | null = null;
+  if (netFundingDayPct != null && netFundingDayPct < 0 && netProfitPercent > 0) {
+    daysToEatProfit = netProfitPercent / Math.abs(netFundingDayPct);
+  }
+
   return {
     key: `${longItem.pair.name}-${long.tradingServiceId}-${short.tradingServiceId}`,
     priceDiffPercent,
     long,
     short,
-    netProfitPercent: priceDiffPercent - long.takerFee - short.takerFee,
+    netProfitPercent,
     effProfitPercent,
+    netFundingDayPct,
+    daysToEatProfit,
   };
 }
 
@@ -189,6 +272,7 @@ function computeOpportunities(
   pairs: any,
   depth: Record<number, DepthBook>,
   volumeUsd: number,
+  funding: FundingMap,
 ): ArbitrageOpportunity[] {
   const byName = new Map<string, any[]>();
   for (const pair of pairs || []) {
@@ -210,7 +294,7 @@ function computeOpportunities(
     for (let i = 0; i < list.length; i++) {
       for (let j = i + 1; j < list.length; j++) {
         if (list[i].pair.id === list[j].pair.id) continue;
-        combos.push(buildCombo(list[i], list[j], depth, volumeUsd));
+        combos.push(buildCombo(list[i], list[j], depth, volumeUsd, funding));
       }
     }
     if (!combos.length) continue;
@@ -276,6 +360,9 @@ function ComboCells({ combo }: { combo: ArbitrageCombo }) {
             {fmtPct(combo.effProfitPercent)}
           </Label>
         )}
+      </TableCell>
+      <TableCell sx={{ textAlign: 'right' }}>
+        <FundingCell combo={combo} />
       </TableCell>
     </>
   );
@@ -534,7 +621,7 @@ function OpportunityRow({
       </TableRow>
       {hasOthers && (
         <TableRow>
-          <TableCell sx={{ py: 0, borderBottom: 'none' }} colSpan={8}>
+          <TableCell sx={{ py: 0, borderBottom: 'none' }} colSpan={9}>
             <Collapse in={open} timeout='auto' unmountOnExit>
               <Box sx={{ my: 1, mx: 2 }}>
                 <Typography variant='caption' color='text.secondary'>
@@ -548,6 +635,7 @@ function OpportunityRow({
                       <TableCell>Цена 2 (дороже)</TableCell>
                       <TableCell sx={{ textAlign: 'right' }}>Чистый профит</TableCell>
                       <TableCell sx={{ textAlign: 'right' }}>Профит (объём)</TableCell>
+                      <TableCell sx={{ textAlign: 'right' }}>Фандинг/сут</TableCell>
                       <TableCell />
                     </TableRow>
                   </TableHead>
@@ -589,6 +677,11 @@ function OpportunityRow({
 
 export default function ArbitrageIndexView() {
   const { data: pairs } = useGetAllQuery({ activated: true });
+  // Funding rates per pairId (refetched server-side ≤60s; poll here every 30s).
+  const { data: fundingData } = useGetFundingQuery({} as any, {
+    pollingInterval: 30000,
+  });
+  const funding: FundingMap = (fundingData as any) || {};
 
   const { enqueueSnackbar } = useSnackbar();
   const [createSession, { isLoading: entering }] = useCreateArbitrageSession();
@@ -675,8 +768,8 @@ export default function ArbitrageIndexView() {
   }, []);
 
   const opportunities = useMemo(
-    () => computeOpportunities(pairs || [], depthRef.current, volumeUsd),
-    [pairs, tick, volumeUsd],
+    () => computeOpportunities(pairs || [], depthRef.current, volumeUsd, funding),
+    [pairs, tick, volumeUsd, fundingData],
   );
 
   const connectionLabel = useMemo(() => {
@@ -727,13 +820,14 @@ export default function ArbitrageIndexView() {
                 <TableCell>Цена 2 (дороже)</TableCell>
                 <TableCell sx={{ textAlign: 'right' }}>Чистый профит</TableCell>
                 <TableCell sx={{ textAlign: 'right' }}>Профит (объём)</TableCell>
+                <TableCell sx={{ textAlign: 'right' }}>Фандинг/сут</TableCell>
                 <TableCell sx={{ textAlign: 'right' }} />
               </TableRow>
             </TableHead>
             <TableBody>
               {opportunities.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} sx={{ textAlign: 'center', py: 4 }}>
+                  <TableCell colSpan={9} sx={{ textAlign: 'center', py: 4 }}>
                     <Typography variant='body2' color='text.secondary'>
                       Нет арбитражных данных
                     </Typography>

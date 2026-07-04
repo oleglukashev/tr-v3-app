@@ -6,9 +6,18 @@ export const arbitrageSessionApi = (new BaseApi({
   reducerPath: 'arbitrageSessions',
   baseQuery: customTrApiFetchBase,
   collectionPath,
+  // Extra read-only endpoint on the SAME slice — avoids adding another createApi to the store's
+  // reducer union (which RTK can no longer fully type past a certain size).
+  // GET arbitrage-sessions/funding → { [pairId]: { rate, intervalHours, nextFundingTime } }
+  extraEndpoints: (builder: any) => ({
+    getFunding: builder.query({
+      query: () => ({ url: `${collectionPath}/funding` }),
+    }),
+  }),
 })).create();
 
 export const {
   useGetAllQuery,
   useCreateMutation,
-} = arbitrageSessionApi;
+  useGetFundingQuery,
+} = arbitrageSessionApi as any;
