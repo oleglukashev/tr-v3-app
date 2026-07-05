@@ -6,13 +6,20 @@ import {
   Card,
   CardContent,
   CardHeader,
+  Checkbox,
   Collapse,
   Dialog,
   DialogContent,
   DialogTitle,
   Divider,
+  FormControl,
   IconButton,
   InputAdornment,
+  InputLabel,
+  ListItemText,
+  MenuItem,
+  OutlinedInput,
+  Select,
   Stack,
   Table,
   TableBody,
@@ -44,6 +51,7 @@ import {
 
 const ARB_VOLUME_STORAGE_KEY = 'arbVolumeUsd';
 const ARB_LEVERAGE_STORAGE_KEY = 'arbLeverage';
+const ARB_SERVICE_FILTER_STORAGE_KEY = 'arbServiceFilter';
 
 type Level = [number, number]; // [price, amount(base)]
 interface DepthBook {
@@ -302,11 +310,14 @@ function computeOpportunities(
   volumeUsd: number,
   funding: FundingMap,
   limits: LimitMap,
+  serviceFilter: Set<number>,
 ): ArbitrageOpportunity[] {
   const byName = new Map<string, any[]>();
   for (const pair of pairs || []) {
     const service = pair.tradingService;
     if (!service || service.activated === false) continue;
+    // When a filter is set, only keep pairs on the selected trading services (empty = all).
+    if (serviceFilter.size && !serviceFilter.has(service.id)) continue;
     // A pair is "live" when it has a full order book (both a bid and an ask). Prices come entirely
     // from the book now — no dependency on the klines price feed.
     const book = depth[pair.id];
@@ -783,6 +794,37 @@ export default function ArbitrageIndexView() {
       window.localStorage.setItem(ARB_LEVERAGE_STORAGE_KEY, String(leverage));
     }
   }, [leverage]);
+  // Trading-service filter (empty = show all). Persisted in localStorage.
+  const [serviceFilterIds, setServiceFilterIds] = useState<number[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = window.localStorage.getItem(ARB_SERVICE_FILTER_STORAGE_KEY);
+        const arr = raw ? JSON.parse(raw) : [];
+        if (Array.isArray(arr)) return arr.map(Number).filter((n) => n > 0);
+      } catch (_) {}
+    }
+    return [];
+  });
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(
+        ARB_SERVICE_FILTER_STORAGE_KEY,
+        JSON.stringify(serviceFilterIds),
+      );
+    }
+  }, [serviceFilterIds]);
+  const serviceFilter = useMemo(() => new Set(serviceFilterIds), [serviceFilterIds]);
+  // Distinct trading services present in the pairs, for the filter dropdown.
+  const services = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const p of (pairs as any[]) || []) {
+      const s = p.tradingService;
+      if (s?.id != null && !m.has(s.id)) m.set(s.id, s.name);
+    }
+    return [...m.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [pairs]);
   // Opportunity whose order-book popup is open.
   const [selected, setSelected] = useState<Selection | null>(null);
 
@@ -850,8 +892,8 @@ export default function ArbitrageIndexView() {
   }, []);
 
   const opportunities = useMemo(
-    () => computeOpportunities(pairs || [], depthRef.current, volumeUsd, funding, limits),
-    [pairs, tick, volumeUsd, fundingData, limitsData],
+    () => computeOpportunities(pairs || [], depthRef.current, volumeUsd, funding, limits, serviceFilter),
+    [pairs, tick, volumeUsd, fundingData, limitsData, serviceFilter],
   );
 
   const connectionLabel = useMemo(() => {
@@ -899,6 +941,36 @@ export default function ArbitrageIndexView() {
                   endAdornment: <InputAdornment position='end'>×</InputAdornment>,
                 }}
               />
+              <FormControl size='small' sx={{ width: 240 }}>
+                <InputLabel id='arb-service-filter-label'>Площадки</InputLabel>
+                <Select
+                  labelId='arb-service-filter-label'
+                  multiple
+                  value={serviceFilterIds}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setServiceFilterIds(
+                      (typeof v === 'string' ? v.split(',').map(Number) : v) as number[],
+                    );
+                  }}
+                  input={<OutlinedInput label='Площадки' />}
+                  renderValue={(selectedIds) =>
+                    (selectedIds as number[]).length === 0
+                      ? 'Все'
+                      : services
+                          .filter((s) => (selectedIds as number[]).includes(s.id))
+                          .map((s) => s.name)
+                          .join(', ')
+                  }
+                >
+                  {services.map((s) => (
+                    <MenuItem key={s.id} value={s.id}>
+                      <Checkbox checked={serviceFilterIds.includes(s.id)} />
+                      <ListItemText primary={s.name} />
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
               {connectionLabel}
             </Stack>
           }
