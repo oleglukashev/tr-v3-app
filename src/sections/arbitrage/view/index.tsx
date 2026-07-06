@@ -51,6 +51,8 @@ import {
 
 const ARB_VOLUME_STORAGE_KEY = 'arbVolumeUsd';
 const ARB_LEVERAGE_STORAGE_KEY = 'arbLeverage';
+// Max number of "other combinations" shown in the expandable list under a pair.
+const MAX_OTHER_COMBOS = 10;
 const ARB_SERVICE_FILTER_STORAGE_KEY = 'arbServiceFilter';
 
 type Level = [number, number]; // [price, amount(base)]
@@ -719,7 +721,7 @@ function OpportunityRow({
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {item.others.map((combo) => (
+                    {item.others.slice(0, MAX_OTHER_COMBOS).map((combo) => (
                       <TableRow
                         key={combo.key}
                         hover
