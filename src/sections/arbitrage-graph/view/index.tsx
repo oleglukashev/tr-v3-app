@@ -191,8 +191,8 @@ export default function ArbitrageGraphView({ name, longPairId, shortPairId }: Pr
   const fetchRange = useCallback(
     async (startTs: number, endTs: number) => {
       const [longKlines, shortKlines] = await Promise.all([
-        triggerLong({ pairId: longPairId, tf: 1, startTs, endTs } as any).unwrap(),
-        triggerShort({ pairId: shortPairId, tf: 1, startTs, endTs } as any).unwrap(),
+        triggerLong({ pairId: longPairId, tf: 1, startTs, endTs, limit: CHUNK_MINUTES } as any).unwrap(),
+        triggerShort({ pairId: shortPairId, tf: 1, startTs, endTs, limit: CHUNK_MINUTES } as any).unwrap(),
       ]);
       return { longKlines: longKlines as any[], shortKlines: shortKlines as any[] };
     },
