@@ -3,6 +3,7 @@
 import Container from "@mui/material/Container";
 import Box from "@mui/material/Box";
 import {
+  Button,
   Card,
   CardContent,
   CardHeader,
@@ -14,17 +15,7 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import moment from "moment";
-import {
-  Brush,
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip as ChartTooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { LineChart } from "@mui/x-charts/LineChart";
 import Label from "src/components/label";
 import { useSnackbar } from "notistack";
 import { useGetAllQuery } from "@/lib/redux/api/pairApi";
@@ -243,15 +234,22 @@ export default function ArbitrageGraphView({ name, longPairId, shortPairId }: Pr
       });
   }, [fetchRange]);
 
-  // When the brush window reaches the oldest loaded point, pull more history.
-  const onBrushChange = useCallback(
-    (range: any) => {
-      if (range && typeof range.startIndex === 'number' && range.startIndex <= 0) {
-        loadOlder();
-      }
+  // Scroll up over the chart to pull older history (free x-charts has no built-in brush/zoom).
+  const onWheelHistory = useCallback(
+    (e: React.WheelEvent) => {
+      if (e.deltaY < 0) loadOlder();
     },
     [loadOlder],
   );
+
+  // x-charts time axis wants Date objects.
+  const chartDataset = useMemo(
+    () => points.map((p) => ({ ...p, date: new Date(p.ts) })),
+    [points],
+  );
+
+  const numberFmt = (v: number | null) =>
+    v == null ? '' : Number(v).toLocaleString('en-US', { maximumFractionDigits: 8 });
 
   const spread = combo ? fmtPct(combo.priceDiffPercent) : '—';
 
@@ -282,63 +280,53 @@ export default function ArbitrageGraphView({ name, longPairId, shortPairId }: Pr
                   )}
                 </Box>
               ) : (
-                <ResponsiveContainer width='100%' height={460}>
-                  <LineChart data={points} margin={{ top: 8, right: 16, bottom: 8, left: 8 }}>
-                    <CartesianGrid strokeDasharray='3 3' opacity={0.15} />
-                    <XAxis
-                      dataKey='ts'
-                      type='number'
-                      scale='time'
-                      domain={['dataMin', 'dataMax']}
-                      tickFormatter={(t) => moment(t).format('DD.MM HH:mm')}
-                      minTickGap={40}
-                      tick={{ fontSize: 11 }}
-                    />
-                    <YAxis
-                      domain={['auto', 'auto']}
-                      tick={{ fontSize: 11 }}
-                      width={72}
-                      tickFormatter={(v: number) => v.toLocaleString('en-US', { maximumFractionDigits: 6 })}
-                    />
-                    <ChartTooltip
-                      labelFormatter={(t) => moment(Number(t)).format('DD.MM.YYYY HH:mm')}
-                      formatter={(value: any, key: any) => [
-                        Number(value).toLocaleString('en-US', { maximumFractionDigits: 8 }),
-                        key === 'longLow' ? 'LONG low' : 'SHORT high',
-                      ]}
-                    />
-                    <Legend />
-                    <Line
-                      type='monotone'
-                      dataKey='longLow'
-                      name='LONG low'
-                      stroke={LONG_COLOR}
-                      dot={false}
-                      isAnimationActive={false}
-                      connectNulls
-                    />
-                    <Line
-                      type='monotone'
-                      dataKey='shortHigh'
-                      name='SHORT high'
-                      stroke={SHORT_COLOR}
-                      dot={false}
-                      isAnimationActive={false}
-                      connectNulls
-                    />
-                    <Brush
-                      dataKey='ts'
-                      height={22}
-                      travellerWidth={8}
-                      tickFormatter={(t) => moment(t).format('HH:mm')}
-                      onChange={onBrushChange}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+                <Box onWheel={onWheelHistory}>
+                  <LineChart
+                    dataset={chartDataset as any}
+                    height={460}
+                    margin={{ top: 8, right: 16, bottom: 24, left: 8 }}
+                    xAxis={[
+                      {
+                        dataKey: 'date',
+                        scaleType: 'time',
+                        valueFormatter: (v: any) => moment(v).format('DD.MM HH:mm'),
+                      },
+                    ]}
+                    yAxis={[
+                      {
+                        valueFormatter: (v: number) =>
+                          Number(v).toLocaleString('en-US', { maximumFractionDigits: 6 }),
+                      },
+                    ]}
+                    series={[
+                      {
+                        dataKey: 'longLow',
+                        label: 'LONG low',
+                        color: LONG_COLOR,
+                        showMark: false,
+                        connectNulls: true,
+                        valueFormatter: (v: any) => numberFmt(v),
+                      },
+                      {
+                        dataKey: 'shortHigh',
+                        label: 'SHORT high',
+                        color: SHORT_COLOR,
+                        showMark: false,
+                        connectNulls: true,
+                        valueFormatter: (v: any) => numberFmt(v),
+                      },
+                    ]}
+                  />
+                </Box>
               )}
-              <Typography variant='caption' color='text.secondary'>
-                Прокрутите ползунок к левому краю, чтобы подгрузить историю.
-              </Typography>
+              <Stack direction='row' spacing={1} alignItems='center' justifyContent='space-between'>
+                <Typography variant='caption' color='text.secondary'>
+                  Прокрутите колесом вверх над графиком, чтобы подгрузить историю.
+                </Typography>
+                <Button size='small' onClick={loadOlder} disabled={chartLoading}>
+                  Загрузить историю
+                </Button>
+              </Stack>
             </CardContent>
           </Card>
         </Box>
