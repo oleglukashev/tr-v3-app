@@ -269,9 +269,7 @@ export default function ArbitrageIndexView() {
   const { enqueueSnackbar } = useSnackbar();
   const [createSession, { isLoading: entering }] = useCreateArbitrageSession();
 
-  const { depthRef, depthReady } = useDepthSocket();
-  const [tick, setTick] = useState(0);
-  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+  const { depthRef, depthReady, depthUpdatedAt } = useDepthSocket();
   // Entry volume (USDT notional per leg). Persisted in localStorage.
   const [volumeUsd, setVolumeUsd] = useState<number>(() => {
     if (typeof window !== 'undefined') {
@@ -362,18 +360,10 @@ export default function ArbitrageIndexView() {
     }
   };
 
-  // Recompute the table every 3 seconds from the latest order books.
-  useEffect(() => {
-    const id = setInterval(() => {
-      setTick((t) => t + 1);
-      setUpdatedAt(Date.now());
-    }, 3000);
-    return () => clearInterval(id);
-  }, []);
-
+  // Recompute the table whenever a fresh depth snapshot arrives over the WebSocket.
   const opportunities = useMemo(
     () => computeOpportunities(pairs || [], depthRef.current, volumeUsd, funding, limits, serviceFilter),
-    [pairs, tick, volumeUsd, fundingData, limitsData, serviceFilter],
+    [pairs, depthUpdatedAt, volumeUsd, fundingData, limitsData, serviceFilter],
   );
 
   const connectionLabel = useMemo(() => {
@@ -392,8 +382,8 @@ export default function ArbitrageIndexView() {
         <CardHeader
           title='Арбитраж'
           subheader={
-            updatedAt
-              ? `Обновлено: ${moment(updatedAt).format('HH:mm:ss')}`
+            depthUpdatedAt
+              ? `Обновлено: ${moment(depthUpdatedAt).format('HH:mm:ss')}`
               : 'Ожидание данных…'
           }
           action={

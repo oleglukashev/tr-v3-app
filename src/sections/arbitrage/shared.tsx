@@ -16,7 +16,7 @@ import {
   Typography,
 } from "@mui/material";
 import useWebSocket, { ReadyState } from 'react-use-websocket';
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Label from "src/components/label";
 import {
   getOrderbookDepthWebSocketUrl,
@@ -551,8 +551,11 @@ export function EnterButton({
 }
 
 // Shared depth WebSocket: subscribes to ALL order books and keeps the latest snapshot in a ref.
+// The ref holds the raw data (no re-render on mutation); `depthUpdatedAt` bumps to a fresh
+// timestamp on every snapshot so consumers re-render exactly when new data arrives.
 export function useDepthSocket() {
   const depthRef = useRef<Record<number, DepthBook>>({});
+  const [depthUpdatedAt, setDepthUpdatedAt] = useState<number | null>(null);
   const { sendJsonMessage: sendDepth, readyState: depthReady } = useWebSocket(
     getOrderbookDepthWebSocketUrl(),
     {
@@ -567,6 +570,7 @@ export function useDepthSocket() {
               next[Number(key)] = msg.data[key];
             }
             depthRef.current = next;
+            setDepthUpdatedAt(Date.now());
           }
         } catch {}
       },
@@ -575,5 +579,5 @@ export function useDepthSocket() {
   useEffect(() => {
     if (depthReady === ReadyState.OPEN) sendDepth(SUBSCRIBE_ALL_DEPTH);
   }, [depthReady]);
-  return { depthRef, depthReady, ReadyState };
+  return { depthRef, depthReady, depthUpdatedAt, ReadyState };
 }
