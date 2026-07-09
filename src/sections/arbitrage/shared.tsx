@@ -306,13 +306,19 @@ export function computeOpportunities(
       }
     }
     if (!combos.length) continue;
-    combos.sort((a, b) => b.netProfitPercent - a.netProfitPercent);
+    // Sort by profit-on-volume (VWAP-based). Combos without a book (null) sink to the bottom.
+    combos.sort((a, b) => effProfitKey(b) - effProfitKey(a));
     opportunities.push({ name, best: combos[0], others: combos.slice(1) });
   }
 
   return opportunities.sort(
-    (a, b) => b.best.netProfitPercent - a.best.netProfitPercent,
+    (a, b) => effProfitKey(b.best) - effProfitKey(a.best),
   );
+}
+
+// Sort key for "профит на объём": null (no book / no volume) ranks lowest.
+function effProfitKey(combo: ArbitrageCombo): number {
+  return combo.effProfitPercent ?? -Infinity;
 }
 
 export function LegCell({ leg }: { leg: ArbitrageLeg }) {
