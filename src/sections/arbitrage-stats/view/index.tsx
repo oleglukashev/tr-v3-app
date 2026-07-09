@@ -32,9 +32,25 @@ import {
   SUBSCRIBE_ALL_DEPTH,
 } from "@/src/utils/orderbookDepthWebSocket";
 import { useSnackbar } from "notistack";
+import { vwapForNotional } from "../../arbitrage/shared";
 
 // Statuses where positions are (or may be) open, so a market close makes sense.
 const CLOSABLE = new Set(['created', 'failed']);
+
+// Max acceptable slippage per leg (VWAP vs top-of-book) for a "cheap" exit, in percent.
+// Below this the book absorbs the exit notional without a strong price shift (as at entry).
+const MAX_EXIT_SLIPPAGE_PCT = 0.2;
+
+// Can we exit `amountUsd` on one leg without a strong price shift?
+// side 'sell' walks bids (closing a LONG), side 'buy' walks asks (closing a SHORT).
+const exitLegOk = (book: any, side: 'sell' | 'buy', amountUsd: number): boolean => {
+  const levels = side === 'sell' ? book?.bids : book?.asks;
+  const top = Number(levels?.[0]?.[0]);
+  const eff = vwapForNotional(levels as any, amountUsd);
+  if (!eff || !eff.filled || !(top > 0)) return false;
+  const slip = side === 'sell' ? (top - eff.vwap) / top : (eff.vwap - top) / top;
+  return slip * 100 <= MAX_EXIT_SLIPPAGE_PCT;
+};
 
 const fmtPrice = (v: any) =>
   v == null ? '—' : Number(v).toLocaleString('en-US', { maximumFractionDigits: 8 });
@@ -107,8 +123,10 @@ export default function ArbitrageStatsIndexView() {
       if (s.closed) {
         return { ...s, curLong: null, curShort: null }; // pnl from backend (realized)
       }
-      const curLong = midPrice(depthRef.current[s.pair1Id]);
-      const curShort = midPrice(depthRef.current[s.pair2Id]);
+      const longBook = depthRef.current[s.pair1Id];
+      const shortBook = depthRef.current[s.pair2Id];
+      const curLong = midPrice(longBook);
+      const curShort = midPrice(shortBook);
       let pnlPct: number | null = null;
       let pnlUsd: number | null = null;
       if (curLong != null && s.pair1EntryPrice && curShort != null && s.pair2EntryPrice) {
@@ -117,7 +135,13 @@ export default function ArbitrageStatsIndexView() {
         pnlPct = longPct + shortPct;
         pnlUsd = (Number(s.amountUsd) * pnlPct) / 100;
       }
-      return { ...s, curLong, curShort, pnlPct, pnlUsd };
+      // Enough depth to exit both legs without a strong price shift (as at entry)?
+      const amountUsd = Number(s.amountUsd);
+      const canExitCheap =
+        amountUsd > 0 &&
+        exitLegOk(longBook, 'sell', amountUsd) &&
+        exitLegOk(shortBook, 'buy', amountUsd);
+      return { ...s, curLong, curShort, pnlPct, pnlUsd, canExitCheap };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessions, tick]);
@@ -262,12 +286,18 @@ export default function ArbitrageStatsIndexView() {
                   <TableCell sx={{ textAlign: 'right' }}>
                     <Stack direction='row' spacing={0.5} justifyContent='flex-end' alignItems='center'>
                       {CLOSABLE.has(s.status) && (
-                        <Tooltip title='Закрыть обе ноги по рынку'>
+                        <Tooltip
+                          title={
+                            s.canExitCheap
+                              ? 'В стакане хватает объёма для выхода без сильного сдвига по цене'
+                              : 'Закрыть обе ноги по рынку (объёма в стакане может не хватить — возможен сдвиг цены)'
+                          }
+                        >
                           <span>
                             <Button
                               size='small'
-                              variant='outlined'
-                              color='warning'
+                              variant={s.canExitCheap ? 'contained' : 'outlined'}
+                              color={s.canExitCheap ? 'success' : 'warning'}
                               disabled={closing}
                               onClick={() => handleClose(s)}
                             >
