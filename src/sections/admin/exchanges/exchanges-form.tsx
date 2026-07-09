@@ -3,7 +3,7 @@ import {zodResolver} from "@hookform/resolvers/zod";
 import {boolean, object} from "zod";
 import {FormContainer, TextFieldElement, CheckboxElement} from "react-hook-form-mui";
 import {Box, Container} from "@mui/material";
-import {zodStringSchema} from "@/src/helpers/form-validation.helper";
+import {zodStringSchema, zodNumberSchema} from "@/src/helpers/form-validation.helper";
 import CustomFormButton from "@/src/components/custom-form-button/custom-form-button";
 
 export default function ExchangeForm({ defaultValues, isLoading, onSubmit }) {
@@ -17,6 +17,10 @@ export default function ExchangeForm({ defaultValues, isLoading, onSubmit }) {
       password: zodStringSchema().optional(),
       defaultType: zodStringSchema().optional(),
       timeframes: zodStringSchema().optional(),
+      // Fees are non-nullable Float(default 0) on the backend — coerce an empty field to 0 so we
+      // never POST null (which Prisma would reject on update).
+      makerFee: zodNumberSchema(true).transform((v) => v ?? 0),
+      takerFee: zodNumberSchema(true).transform((v) => v ?? 0),
       testnet: boolean(),
       activated: boolean(),
     })),
@@ -84,6 +88,26 @@ export default function ExchangeForm({ defaultValues, isLoading, onSubmit }) {
           size='small'
           sx={{ mt: 2 }}
           fullWidth
+        />
+
+        <TextFieldElement
+          name='makerFee'
+          label='Maker fee, % (напр. 0.02)'
+          type='number'
+          size='small'
+          sx={{ mt: 2 }}
+          fullWidth
+          inputProps={{ step: '0.001' }}
+        />
+
+        <TextFieldElement
+          name='takerFee'
+          label='Taker fee, % (напр. 0.055)'
+          type='number'
+          size='small'
+          sx={{ mt: 2 }}
+          fullWidth
+          inputProps={{ step: '0.001' }}
         />
 
         <Box sx={{ mt: 1 }}>
