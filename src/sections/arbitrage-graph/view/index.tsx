@@ -9,13 +9,17 @@ import {
   CardHeader,
   CircularProgress,
   InputAdornment,
+  MenuItem,
+  Paper,
   Stack,
   TextField,
   Typography,
 } from "@mui/material";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import moment from "moment";
 import { LineChart } from "@mui/x-charts/LineChart";
+import { useAxesTooltip, ChartsTooltipContainer } from "@mui/x-charts/ChartsTooltip";
 import Label from "src/components/label";
 import { useSnackbar } from "notistack";
 import { useGetAllQuery } from "@/lib/redux/api/pairApi";
@@ -76,6 +80,74 @@ function mergePoints(
   return [...map.values()].sort((a, b) => a.ts - b.ts);
 }
 
+// Tooltip content: both line prices plus the % difference between them
+// (buy at LONG low, sell at SHORT high → ((shortHigh - longLow) / longLow) * 100).
+// Rendered inside the always-mounted ChartsTooltipContainer; returns null when not hovering.
+function SpreadTooltipContent() {
+  const tooltipData = useAxesTooltip();
+  if (!tooltipData || tooltipData.length === 0) return null;
+  const { axisFormattedValue, seriesItems } = tooltipData[0];
+
+  const longVal = seriesItems.find((s) => s.seriesId === 'longLow')?.value as number | null;
+  const shortVal = seriesItems.find((s) => s.seriesId === 'shortHigh')?.value as number | null;
+  const diffPercent =
+    longVal != null && shortVal != null && longVal > 0
+      ? ((shortVal - longVal) / longVal) * 100
+      : null;
+
+  return (
+    <Paper elevation={3} sx={{ p: 1, minWidth: 170 }}>
+      <Typography variant='caption' color='text.secondary'>
+        {axisFormattedValue}
+      </Typography>
+      <Stack spacing={0.5} sx={{ mt: 0.5 }}>
+        {seriesItems.map((s) => (
+          <Stack
+            key={String(s.seriesId)}
+            direction='row'
+            justifyContent='space-between'
+            spacing={2}
+            alignItems='center'
+          >
+            <Stack direction='row' spacing={1} alignItems='center'>
+              <Box sx={{ width: 10, height: 10, borderRadius: '2px', bgcolor: s.color }} />
+              <Typography variant='body2'>{s.formattedLabel}</Typography>
+            </Stack>
+            <Typography variant='body2'>{s.formattedValue}</Typography>
+          </Stack>
+        ))}
+        <Stack
+          direction='row'
+          justifyContent='space-between'
+          spacing={2}
+          sx={{ pt: 0.5, borderTop: '1px solid', borderColor: 'divider' }}
+        >
+          <Typography variant='body2' fontWeight={600}>
+            Разница
+          </Typography>
+          <Typography
+            variant='body2'
+            fontWeight={600}
+            color={diffPercent != null && diffPercent >= 0 ? 'success.main' : 'error.main'}
+          >
+            {diffPercent != null ? `${diffPercent >= 0 ? '+' : ''}${diffPercent.toFixed(2)}%` : '—'}
+          </Typography>
+        </Stack>
+      </Stack>
+    </Paper>
+  );
+}
+
+// Custom tooltip slot: keep the default container (handles hover visibility + positioning),
+// swap only the content so we can add the "Разница" row.
+function SpreadTooltip() {
+  return (
+    <ChartsTooltipContainer trigger='axis'>
+      <SpreadTooltipContent />
+    </ChartsTooltipContainer>
+  );
+}
+
 interface Props {
   name: string;
   longPairId: number;
@@ -83,6 +155,7 @@ interface Props {
 }
 
 export default function ArbitrageGraphView({ name, longPairId, shortPairId }: Props) {
+  const router = useRouter();
   const { enqueueSnackbar } = useSnackbar();
   const { data: pairs } = useGetAllQuery({ activated: true });
   const { data: fundingData } = useGetFundingQuery({} as any, { pollingInterval: 30000 });
@@ -135,6 +208,53 @@ export default function ArbitrageGraphView({ name, longPairId, shortPairId }: Pr
       b: { pair: b, service: b.tradingService },
     };
   }, [pairs, longPairId, shortPairId]);
+
+  // ---- combination picker: same coin, all LONG→SHORT trading-service combinations ----
+  // Activated pairs of the current coin (pair.name), sorted by exchange name.
+  const legOptions = useMemo(() => {
+    const list = ((pairs as any[]) || []).filter(
+      (p) => p?.name === name && p.tradingService && p.tradingService.activated !== false,
+    );
+    list.sort((a, b) =>
+      String(a.tradingService?.name).localeCompare(String(b.tradingService?.name)),
+    );
+    return list;
+  }, [pairs, name]);
+
+  // Unordered pairs of exchanges for this coin: buildCombo picks LONG/SHORT direction from the
+  // live book, so "Bybit ↔ HTX" and "HTX ↔ Bybit" are the same combination — list each once.
+  // Value is the two pair ids sorted ascending, so it matches regardless of URL leg order.
+  const comboOptions = useMemo(() => {
+    const opts: { value: string; label: string }[] = [];
+    for (let i = 0; i < legOptions.length; i++) {
+      for (let j = i + 1; j < legOptions.length; j++) {
+        const a = legOptions[i];
+        const b = legOptions[j];
+        const [lo, hi] = a.id < b.id ? [a.id, b.id] : [b.id, a.id];
+        opts.push({
+          value: `${lo}:${hi}`,
+          label: `${a.tradingService?.name} ↔ ${b.tradingService?.name}`,
+        });
+      }
+    }
+    return opts;
+  }, [legOptions]);
+
+  const currentComboValue = useMemo(() => {
+    const [lo, hi] =
+      longPairId < shortPairId ? [longPairId, shortPairId] : [shortPairId, longPairId];
+    return `${lo}:${hi}`;
+  }, [longPairId, shortPairId]);
+
+  const onComboChange = useCallback(
+    (value: string) => {
+      const [longId, shortId] = value.split(':').map(Number);
+      router.push(
+        `/arbitrage-graph?name=${encodeURIComponent(name)}&longPairId=${longId}&shortPairId=${shortId}`,
+      );
+    },
+    [router, name],
+  );
 
   // Live combo, recomputed from the latest order books every tick.
   const combo: ArbitrageCombo | null = useMemo(() => {
@@ -273,6 +393,21 @@ export default function ArbitrageGraphView({ name, longPairId, shortPairId }: Pr
               }
             />
             <CardContent>
+              {/* Combination picker: same coin, other LONG→SHORT trading-service combos. */}
+              <TextField
+                select
+                size='small'
+                label={`Комбинация (${name})`}
+                value={comboOptions.some((o) => o.value === currentComboValue) ? currentComboValue : ''}
+                onChange={(e) => onComboChange(e.target.value)}
+                sx={{ minWidth: 260, mb: 2 }}
+              >
+                {comboOptions.map((o) => (
+                  <MenuItem key={o.value} value={o.value}>
+                    {o.label}
+                  </MenuItem>
+                ))}
+              </TextField>
               {points.length === 0 ? (
                 <Box sx={{ height: 460, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {chartLoading ? <CircularProgress /> : (
@@ -300,6 +435,7 @@ export default function ArbitrageGraphView({ name, longPairId, shortPairId }: Pr
                     ]}
                     series={[
                       {
+                        id: 'longLow',
                         dataKey: 'longLow',
                         label: 'LONG low',
                         color: LONG_COLOR,
@@ -308,6 +444,7 @@ export default function ArbitrageGraphView({ name, longPairId, shortPairId }: Pr
                         valueFormatter: (v: any) => numberFmt(v),
                       },
                       {
+                        id: 'shortHigh',
                         dataKey: 'shortHigh',
                         label: 'SHORT high',
                         color: SHORT_COLOR,
@@ -316,6 +453,7 @@ export default function ArbitrageGraphView({ name, longPairId, shortPairId }: Pr
                         valueFormatter: (v: any) => numberFmt(v),
                       },
                     ]}
+                    slots={{ tooltip: SpreadTooltip }}
                   />
                 </Box>
               )}
