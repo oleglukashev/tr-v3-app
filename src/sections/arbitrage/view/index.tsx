@@ -51,6 +51,7 @@ import {
   MAX_OTHER_COMBOS,
   ArbitrageCombo,
   ArbitrageOpportunity,
+  ComboAgeLabel,
   ComboCells,
   DepthBook,
   EnterButton,
@@ -104,6 +105,7 @@ function ArbitrageDepthDialog({
           <DialogTitle>
             <Stack direction='row' spacing={1.5} alignItems='center' flexWrap='wrap'>
               <Typography variant='h6'>{selection!.name}</Typography>
+              <ComboAgeLabel combo={combo} />
               <Label color='info'>Разница {fmtPct(combo.priceDiffPercent)}</Label>
               <Label color={combo.netProfitPercent > 0 ? 'success' : 'error'}>
                 Профит {fmtPct(combo.netProfitPercent)}

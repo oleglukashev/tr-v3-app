@@ -65,6 +65,7 @@ export interface ArbitrageLeg {
   direction: 'long' | 'short';
   fundingRate: number | null; // fraction per interval on this exchange
   fundingIntervalHours: number;
+  ts: number | null; // freshness of THIS leg's book (ms epoch, relay-stamped); null = no book
 }
 
 export interface ArbitrageCombo {
@@ -77,6 +78,9 @@ export interface ArbitrageCombo {
   netFundingDayPct: number | null;
   daysToEatProfit: number | null;
   minVolumeUsd: number | null;
+  // Freshness of the underlying books (ms epoch), governed by the STALER leg. The relay stamps this
+  // at forward time; the page shows (now − dataTs) as the data age. null when a leg has no book.
+  dataTs: number | null;
 }
 
 export interface ArbitrageOpportunity {
@@ -190,6 +194,7 @@ export function toLeg(
     direction,
     fundingRate: funding?.rate ?? null,
     fundingIntervalHours: funding?.intervalHours ?? 8,
+    ts: book?.ts ?? null,
   };
 }
 
@@ -261,6 +266,12 @@ export function buildCombo(
   );
   const minVolumeUsd = legMins.length ? Math.max(...legMins) : null;
 
+  // Data age is governed by whichever leg's book is older (the combo is only as fresh as its stalest leg).
+  const longTs = depth[longItem.pair.id]?.ts ?? null;
+  const shortTs = depth[shortItem.pair.id]?.ts ?? null;
+  const dataTs =
+    longTs != null && shortTs != null ? Math.min(longTs, shortTs) : longTs ?? shortTs;
+
   return {
     key: `${longItem.pair.name}-${long.tradingServiceId}-${short.tradingServiceId}`,
     priceDiffPercent,
@@ -271,6 +282,7 @@ export function buildCombo(
     netFundingDayPct,
     daysToEatProfit,
     minVolumeUsd,
+    dataTs,
   };
 }
 
@@ -321,6 +333,41 @@ function effProfitKey(combo: ArbitrageCombo): number {
   return combo.effProfitPercent ?? -Infinity;
 }
 
+// Re-renders every second so relative ages tick even when no new snapshot arrives (i.e. stale data).
+export function useNow(intervalMs = 1000): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return now;
+}
+
+const fmtAge = (ms: number): string => {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return `${s}с назад`;
+  const m = Math.floor(s / 60);
+  return `${m}м ${s % 60}с назад`;
+};
+
+// Per-leg freshness counter (now − this leg's book ts). Green ≤3s, amber ≤10s, red beyond.
+export function LegAge({ ts }: { ts: number | null }) {
+  const now = useNow(1000);
+  if (ts == null) {
+    return (
+      <Typography variant='caption' color='text.secondary'>нет данных</Typography>
+    );
+  }
+  const ageMs = now - ts;
+  const ageSec = ageMs / 1000;
+  const color = ageSec <= 3 ? 'success.main' : ageSec <= 10 ? 'warning.main' : 'error.main';
+  return (
+    <Tooltip title={`Обновлено ${new Date(ts).toLocaleTimeString()}`}>
+      <Typography variant='caption' sx={{ color }}>⏱ {fmtAge(ageMs)}</Typography>
+    </Tooltip>
+  );
+}
+
 export function LegCell({ leg }: { leg: ArbitrageLeg }) {
   const isLong = leg.direction === 'long';
   return (
@@ -334,6 +381,7 @@ export function LegCell({ leg }: { leg: ArbitrageLeg }) {
       <Typography variant='caption' color='text.secondary'>
         {fmtPrice(leg.price)} · fee {fmtPct(leg.takerFee)}
       </Typography>
+      <LegAge ts={leg.ts} />
       {/* Effective (VWAP) price for the chosen volume. */}
       <Tooltip title={leg.effFilled ? 'Средняя цена исполнения на выбранный объём' : 'Стакана не хватает на весь объём — цена по доступной глубине'}>
         <Typography
@@ -345,6 +393,16 @@ export function LegCell({ leg }: { leg: ArbitrageLeg }) {
       </Tooltip>
     </Stack>
   );
+}
+
+// Combo-level age summary (min of both legs) as a standalone Label — used in the depth dialog header.
+export function ComboAgeLabel({ combo }: { combo: ArbitrageCombo }) {
+  const now = useNow(1000);
+  if (combo.dataTs == null) return null;
+  const ageMs = now - combo.dataTs;
+  const ageSec = ageMs / 1000;
+  const color = ageSec <= 3 ? 'success' : ageSec <= 10 ? 'warning' : 'error';
+  return <Label color={color as any}>данные: {fmtAge(ageMs)}</Label>;
 }
 
 export function ComboCells({ combo }: { combo: ArbitrageCombo }) {
@@ -435,6 +493,8 @@ export function LegDepthPanel({ leg, book, volumeUsd }: { leg: ArbitrageLeg; boo
         <Stack direction='row' spacing={1} alignItems='center' sx={{ mb: 1 }}>
           <Label color={side as any}>{isLong ? 'LONG · BUY' : 'SHORT · SELL'}</Label>
           <Typography variant='subtitle2'>{leg.tradingServiceName}</Typography>
+          <Box sx={{ flexGrow: 1 }} />
+          <LegAge ts={leg.ts} />
         </Stack>
 
         <Table size='small' sx={{ '& td': { py: 0.25, border: 0 } }}>
