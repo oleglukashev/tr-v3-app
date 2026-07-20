@@ -136,6 +136,31 @@ export default function Header() {
   }, [pair]);
   const showChartSettingsButton = ['dhm-graph', 'dhm3-graph', 'dzm-graph', 'range-xv-graph'].includes(page?.url ?? '');
 
+  // R, сохранённый графиком для текущей пары. Читаем тот же ключ localStorage,
+  // что и range-xv-graph view, — иначе подпись на кнопке расходится с тем, что
+  // реально загружено, когда R нет в URL.
+  // Синхронно, а не в эффекте: иначе на рендере, где pair только появился,
+  // редирект ниже успевал сработать со старым значением и затирал сохранённый R.
+  const savedR = useMemo(() => {
+    if (!isRangeXv || !pair || typeof window === 'undefined') { return null; }
+    try {
+      const raw = localStorage.getItem(`rangeXvGraphSettings_${pair.id}`);
+      const parsed = raw ? JSON.parse(raw) : null;
+      return parsed?.r != null && parsed.r !== '' ? String(parsed.r) : null;
+    } catch {
+      return null;
+    }
+  }, [isRangeXv, pair]);
+
+  // Если R не задан ни в URL, ни в localStorage, view не грузит ни бары, ни WS —
+  // страница молча пустая. Дописываем первый доступный R в путь.
+  // Когда сохранённый R есть, view поднимет его сам: редирект тут только вызвал бы
+  // повторный маунт графика и лишнюю загрузку баров.
+  React.useEffect(() => {
+    if (!isRangeXv || !pair || r || savedR || rOptions.length === 0) { return; }
+    router.replace(`/${page?.url}/${pair.id}/${rOptions[0]}`);
+  }, [isRangeXv, pair, r, savedR, rOptions, page?.url, router]);
+
   // Trading services are derived from the pairs list — /pairs already returns
   // tradingServiceId plus the nested tradingService, so no extra request.
   const tradingServices = useMemo(() => {
@@ -377,7 +402,7 @@ export default function Header() {
                     aria-expanded={openR ? 'true' : undefined}
                     onClick={handleRClick}
                   >
-                    {mounted ? `R: ${r ?? rOptions[0]}` : ''}
+                    {mounted ? `R: ${r ?? savedR ?? rOptions[0]}` : ''}
                   </Button>
                   <Menu
                     anchorEl={anchorREl}
