@@ -181,22 +181,34 @@ export default function Header() {
     [tradingServices, serviceId],
   );
 
-  // Pair names repeat across services (each service has its own AAVEUSDT), so on
-  // Range XV the pair menu is scoped to the selected service. Other pages keep
-  // the full list.
-  const visiblePairs = useMemo(() => {
-    if (!isRangeXv || serviceId == null) { return (pairs || []) as any[]; }
-    return ((pairs || []) as any[]).filter((item) => item?.tradingServiceId === serviceId);
-  }, [pairs, isRangeXv, serviceId]);
+  // Страницы с селектором торгового сервиса. Range XV держит R в пути
+  // (/{pairId}/{r}), dhm-graph — таймфрейм (/{pairId}/{tf}), поэтому переходы
+  // между парами строятся по-разному.
+  const showServiceSelector = isRangeXv || page?.url === 'dhm-graph';
 
-  // Range XV needs a pair with configured R sizes, so prefer one when switching
-  // service; fall back to the first pair if this service has none.
+  // Pair names repeat across services (each service has its own AAVEUSDT), so the
+  // pair menu is scoped to the selected service wherever the selector is shown.
+  // Other pages keep the full list.
+  const visiblePairs = useMemo(() => {
+    if (!showServiceSelector || serviceId == null) { return (pairs || []) as any[]; }
+    return ((pairs || []) as any[]).filter((item) => item?.tradingServiceId === serviceId);
+  }, [pairs, showServiceSelector, serviceId]);
+
+  // При смене сервиса выбираем осмысленную пару: на Range XV — с заполненным xvR
+  // (без него страница пустая), на dhm-graph — помеченную isDhm. Если таких нет,
+  // берём первую пару сервиса.
   const onSelectService = React.useCallback((id: number) => {
     handleServiceClose();
     const list = ((pairs || []) as any[]).filter((item) => item?.tradingServiceId === id);
-    const next = list.find((item) => typeof item?.xvR === 'string' && item.xvR.trim()) || list[0];
-    if (next) { router.replace(`/${page?.url}/${next.id}`); }
-  }, [pairs, page?.url, router]);
+    if (list.length === 0) { return; }
+    if (isRangeXv) {
+      const next = list.find((item) => typeof item?.xvR === 'string' && item.xvR.trim()) || list[0];
+      router.replace(`/${page?.url}/${next.id}`);
+      return;
+    }
+    const next = list.find((item) => item?.isDhm) || list[0];
+    router.replace(`/${page?.url}/${next.id}/${tf?.id || tfs[0].id}${ts ? `?ts=${ts}` : ''}`);
+  }, [pairs, isRangeXv, page?.url, tf?.id, tfs, ts, router]);
 
   const rawPairId = pathname.split('/')[2] || null;
   const rawTf = pathname.split('/')[3] || null;
@@ -283,7 +295,7 @@ export default function Header() {
                 ))}
               </Menu>
               <Divider sx={{ mx: 1 }} orientation="vertical" flexItem />
-              {isRangeXv && tradingServices.length > 0 && (
+              {showServiceSelector && tradingServices.length > 0 && (
                 <>
                   <Button
                     variant="text"
