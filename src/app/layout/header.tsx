@@ -69,6 +69,14 @@ export default function Header() {
   const handleRClose = () => {
     setAnchorREl(null);
   };
+  const [anchorServiceEl, setAnchorServiceEl] = React.useState<null | HTMLElement>(null);
+  const openService = Boolean(anchorServiceEl);
+  const handleServiceClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    setAnchorServiceEl(event.currentTarget);
+  };
+  const handleServiceClose = () => {
+    setAnchorServiceEl(null);
+  };
   const [anchorSessionsEl, setAnchorSessionsEl] = React.useState<null | HTMLElement>(null);
   const [sessionsTab, setSessionsTab] = React.useState<string>('all');
   const openSessions = Boolean(anchorSessionsEl);
@@ -127,6 +135,43 @@ export default function Header() {
       : [];
   }, [pair]);
   const showChartSettingsButton = ['dhm-graph', 'dhm3-graph', 'dzm-graph', 'range-xv-graph'].includes(page?.url ?? '');
+
+  // Trading services are derived from the pairs list — /pairs already returns
+  // tradingServiceId plus the nested tradingService, so no extra request.
+  const tradingServices = useMemo(() => {
+    const byId = new Map<number, { id: number; name: string }>();
+    for (const item of (pairs || []) as any[]) {
+      const id = item?.tradingServiceId;
+      if (id == null || byId.has(id)) { continue; }
+      byId.set(id, { id, name: item?.tradingService?.name || `#${id}` });
+    }
+    return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [pairs]);
+
+  // Selected service follows the pair from the URL; picking a service in the menu
+  // jumps to a pair of that service, which brings this back in sync.
+  const serviceId = (pair as any)?.tradingServiceId ?? null;
+  const service = useMemo(
+    () => tradingServices.find((item) => item.id === serviceId) || null,
+    [tradingServices, serviceId],
+  );
+
+  // Pair names repeat across services (each service has its own AAVEUSDT), so on
+  // Range XV the pair menu is scoped to the selected service. Other pages keep
+  // the full list.
+  const visiblePairs = useMemo(() => {
+    if (!isRangeXv || serviceId == null) { return (pairs || []) as any[]; }
+    return ((pairs || []) as any[]).filter((item) => item?.tradingServiceId === serviceId);
+  }, [pairs, isRangeXv, serviceId]);
+
+  // Range XV needs a pair with configured R sizes, so prefer one when switching
+  // service; fall back to the first pair if this service has none.
+  const onSelectService = React.useCallback((id: number) => {
+    handleServiceClose();
+    const list = ((pairs || []) as any[]).filter((item) => item?.tradingServiceId === id);
+    const next = list.find((item) => typeof item?.xvR === 'string' && item.xvR.trim()) || list[0];
+    if (next) { router.replace(`/${page?.url}/${next.id}`); }
+  }, [pairs, page?.url, router]);
 
   const rawPairId = pathname.split('/')[2] || null;
   const rawTf = pathname.split('/')[3] || null;
@@ -213,6 +258,42 @@ export default function Header() {
                 ))}
               </Menu>
               <Divider sx={{ mx: 1 }} orientation="vertical" flexItem />
+              {isRangeXv && tradingServices.length > 0 && (
+                <>
+                  <Button
+                    variant="text"
+                    sx={{
+                      '&:hover': {
+                        background: 'none',
+                      },
+                    }}
+                    aria-haspopup="true"
+                    aria-expanded={openService ? 'true' : undefined}
+                    onClick={handleServiceClick}
+                  >
+                    {mounted ? (service?.name ?? '—') : ''}
+                  </Button>
+                  <Menu
+                    anchorEl={anchorServiceEl}
+                    open={openService}
+                    onClose={handleServiceClose}
+                    MenuListProps={{
+                      'aria-labelledby': 'basic-button',
+                    }}
+                  >
+                    {tradingServices.map((item) => (
+                      <MenuItem
+                        key={item.id}
+                        selected={item.id === serviceId}
+                        onClick={() => onSelectService(item.id)}
+                      >
+                        {item.name}
+                      </MenuItem>
+                    ))}
+                  </Menu>
+                  <Divider sx={{ mx: 1 }} orientation="vertical" flexItem />
+                </>
+              )}
               <Button
                 variant="text"
                 sx={{
@@ -236,7 +317,7 @@ export default function Header() {
                   'aria-labelledby': 'basic-button',
                 }}
               >
-                {(pairs || []).map((item: any) => (
+                {visiblePairs.map((item: any) => (
                   <MenuItem sx={{
                     backgroundColor: item.isDhm ? theme.palette.primary.main : 'white',
                     color: item.isDhm ? 'white' : theme.palette.text.primary,
