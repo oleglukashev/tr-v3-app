@@ -548,7 +548,12 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
       if (!Number.isFinite(last) || last >= now) { d.callback([], false); return; }
       setLoading(true);
       fetchXvPage(rv, { startTs: last + 1, endTs: now })
-        .then((bars) => {
+        .then((page) => {
+          // klinecharts concats a 'backward' page onto the data list as-is (only
+          // the single-bar 'update' path merges by ts), so anything not strictly
+          // newer than the last bar would show up as a second candle on the same
+          // ts — e.g. the forming brick we already hold from the WS.
+          const bars = page.filter((b) => b.timestamp > last);
           mergeBars(bars);
           if (bars.length) { setKlinesVersion((v) => v + 1); }
           d.callback(bars, false);
