@@ -943,62 +943,6 @@ export function clusterKline(data?: any) {
         i++;
       }
 
-      const generalBv = sortedData.reduce((cur, item) => parseFloat(item.bv) + cur, 0);
-      const generalSv = sortedData.reduce((cur, item) => parseFloat(item.sv) + cur, 0);
-      const deltaValue = sortedData.reduce((cur, item) => parseFloat(delta(item)) + cur, 0);
-      const absDeltaValue = Math.abs(deltaValue);
-      const delimeter = absDeltaValue >= 1000 ? absDeltaValue >= 1000000 ? 1000000 : 1000 : 1;
-
-      const deltaText = `${Math.round(deltaValue / delimeter)}${delimeter === 1000000 ? 'm' : delimeter === 1000 ? 'k' : ''}`;
-      const buyValueText = `${Math.round(generalBv / delimeter)}${delimeter === 1000000 ? 'm' : delimeter === 1000 ? 'k' : ''}`;
-      const sellValueText = `${Math.round(generalSv / delimeter)}${delimeter === 1000000 ? 'm' : delimeter === 1000 ? 'k' : ''}`;
-
-      const text = `${deltaText} (${buyValueText}x${sellValueText})`;
-      const bgColorIndex = getColorIndex(0, maxDelta, absDeltaValue);
-
-      result.push({
-        type: 'rect',
-        attrs: {
-          x: blockX,
-          y: coordinates[0].y + ((keyCount + 1) * clusterLevelHeight),
-          width: blockWidth,
-          height: clusterLevelHeight,
-        },
-        styles: {
-          style: 'stroke_fill',
-          color: generalBv > generalSv ? greenColors[bgColorIndex] : redColors[bgColorIndex],
-          backgroundColor: generalBv > generalSv ? greenColors[bgColorIndex] : redColors[bgColorIndex],
-          //borderColor: '#fff',
-          //borderStyle: 'solid',
-          borderSize: 0,
-        }
-      })
-      if (showClusterText) {
-        result.push({
-          type: 'text',
-          attrs: {
-            x: blockX,
-            y: coordinates[0].y + ((keyCount + 1) * clusterLevelHeight) + (clusterLevelHeight / 2),
-            text,
-            width: blockWidth,
-            height: clusterLevelHeight - 1,
-            baseline: 'middle',
-          },
-          styles: {
-            backgroundColor: 'transparent',
-            color: '#fff',
-            size: cellTextSize,
-            weight: 'bold',
-            borderColor: '#fff',
-            //borderStyle: 'solid',
-            borderSize: 0,
-            paddingTop: 0,
-            paddingBottom: 0,
-            paddingLeft: cellTextPaddingLeft,
-            paddingRight: 0,
-          }
-        })
-      }
       // Spike circles — drawn last so they render on top of cluster bars
       if (showSpike && sortedData.length >= 2) {
         const volumes = sortedData.map((l: any) => parseFloat(l.v)).filter((v: number) => Number.isFinite(v) && v > 0);
