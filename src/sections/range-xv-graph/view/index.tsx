@@ -407,11 +407,6 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   // callback (there's no public updateData in v10). We capture it here and push
   // bars from our own XV websocket into it.
   const barCallbackRef = useRef<((bar: any) => void) | null>(null);
-  // Display ts of the last *finalized* live brick. The forming brick is shown one
-  // slot ahead (lastFinalTs + 1); on close it replaces that slot and we advance.
-  // klinecharts spaces bars by index, so using +1 sequential ts keeps the live
-  // brick updating in place (replace on equal ts) without disturbing layout.
-  const lastFinalTsRef = useRef<number>(0);
 
   const [r, setR] = useState<string>('');           // range size R, set in settings
   const rRef = useRef<string>('');
@@ -449,14 +444,11 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   const [showStacked, setShowStacked] = useState<boolean>(DEFAULT_STACKED.showStacked);
   const [stackedRunN, setStackedRunN] = useState<number>(DEFAULT_STACKED.stackedRunN);
   const [stackedRatioM, setStackedRatioM] = useState<number>(DEFAULT_STACKED.stackedRatioM);
-  // Footprint per brick, keyed by the *bar timestamp* the chart uses (real ts for
-  // REST bricks, synthetic slot ts for live WS bricks). Redraw is index-based via
-  // drawClusterKlinesForVisible, so this key matches each visible candle.
+  // Footprint per brick, keyed by the bar timestamp — the same real ts the brick
+  // and its footprint are both born with, over REST and WS alike. Redraw is
+  // index-based via drawClusterKlinesForVisible, so this key matches each candle.
   const [clustersByTs, setClustersByTs] = useState<Record<string, any>>({});
   const [clustersTick, setClustersTick] = useState<number>(0);
-  // Live WS delivers brick and footprint as separate messages; correlate them by
-  // the brick's position so the footprint lands on the same slot ts as its bar.
-  const slotByPositionRef = useRef<Record<number, number>>({});
 
   // MapTools needs the chart as a reactive value (the ref above does not re-render),
   // plus a "first bars loaded" gate before it creates/restores drawing overlays.
@@ -497,6 +489,9 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
         low: parseFloat(it.low),
         close: parseFloat(it.close),
         volume: parseFloat(it.volume),
+        // The API appends the still-forming brick to the newest page; it must not
+        // count towards the "more pages" check below.
+        forming: Boolean(it.forming),
       }))
       .filter((b) => Number.isFinite(b.timestamp) && Number.isFinite(b.open));
   }, [pairId]);
@@ -555,9 +550,6 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
       fetchXvPage(rv, { startTs: last + 1, endTs: now })
         .then((bars) => {
           mergeBars(bars);
-          for (const b of bars) {
-            if (b.timestamp > lastFinalTsRef.current) { lastFinalTsRef.current = b.timestamp; }
-          }
           if (bars.length) { setKlinesVersion((v) => v + 1); }
           d.callback(bars, false);
         })
@@ -581,27 +573,10 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
       .then((bars) => {
         mergeBars(bars);
         if (bars.length) { setKlinesVersion((v) => v + 1); }
-        // Anchor the live-brick slot to the newest loaded bar.
-        let newest: any = null;
-        for (const b of bars) {
-          if (b.timestamp > lastFinalTsRef.current) { lastFinalTsRef.current = b.timestamp; }
-          if (!newest || b.timestamp > newest.timestamp) { newest = b; }
-        }
         // A full page implies more older bricks remain; a short page is the start.
-        const more = bars.length >= PAGE_SIZE;
-        // REST only has *closed* bricks; the current forming brick is WS-only and
-        // may lag until the next tick. Seed a flat placeholder at the forming slot
-        // (lastFinal + 1) from the newest close so a "current" bar shows immediately.
-        // The WS forming/final update reuses the same slot and replaces it in place.
-        if (d.type === 'init' && newest) {
-          const seed = {
-            timestamp: lastFinalTsRef.current + 1,
-            open: newest.close, high: newest.close, low: newest.close, close: newest.close,
-            volume: 0,
-          };
-          d.callback([...bars, seed], more);
-          return;
-        }
+        // The forming brick the API appends to the newest page is not a stored
+        // brick, so it must not inflate the count.
+        const more = bars.filter((b) => !b.forming).length >= PAGE_SIZE;
         d.callback(bars, more);
       })
       .catch((e) => { console.error('xv load failed:', e?.message); d.callback([], false); })
@@ -645,10 +620,8 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     const chart = chartRef.current;
     if (!chart) return;
     allBarsRef.current.clear();
-    lastFinalTsRef.current = 0;
     // Footprints are per (pair, r); drop them so a new R starts clean.
     setClustersByTs({});
-    slotByPositionRef.current = {};
     chart.setDataLoader({
       getBars,
       subscribeBar: (params: any) => { barCallbackRef.current = params.callback; },
@@ -693,17 +666,13 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
           const isForming = msg.type === 'xvForming';
           const isCluster = msg.type === 'xvCluster' || msg.type === 'xvClusterForming';
           if ((!isFinal && !isForming && !isCluster) || !Array.isArray(msg.data)) { return; }
-          // Footprints arrive after their brick (backend emits brick then cluster),
-          // so the position→slot map is already set; key the footprint to that slot.
+          // A footprint carries the same ts as its brick (both fixed when the brick
+          // opened), so it keys straight into clustersByTs — no correlation needed.
           if (isCluster) {
-            const out: any[] = [];
-            for (const it of msg.data) {
-              if (Number(it.pairId) !== Number(pairId) || String(it.r) !== String(r)) { continue; }
-              const slot = slotByPositionRef.current[Number(it.position)];
-              if (slot == null) { continue; }
-              out.push({ data: it.data, ts: String(slot) });
-            }
-            mergeClusters(out, (it) => it.ts);
+            const out = msg.data.filter(
+              (it: any) => Number(it.pairId) === Number(pairId) && String(it.r) === String(r),
+            );
+            mergeClusters(out, (it: any) => String(it.ts));
             return;
           }
           for (const it of msg.data) {
@@ -714,24 +683,16 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
             const c = parseFloat(it.close);
             const v = parseFloat(it.volume);
             if (![o, h, l, c].every(Number.isFinite)) { continue; }
-            // Anchor the live slot to real time on the first bar if no history loaded.
-            if (lastFinalTsRef.current <= 0) {
-              const realTs = parseInt(it.ts, 10);
-              lastFinalTsRef.current = Number.isFinite(realTs) && realTs > 0 ? realTs : 1;
-            }
-            // Forming brick sits in the next slot; the final brick replaces that
-            // same slot (equal ts → klinecharts replaces in place) and advances.
-            const slotTs = lastFinalTsRef.current + 1;
-            const bar = { timestamp: slotTs, open: o, high: h, low: l, close: c, volume: v };
+            const ts = parseInt(it.ts, 10);
+            if (!Number.isFinite(ts)) { continue; }
+            // A brick keeps the ts it opened with, so the forming ticks and the
+            // final bar share it — klinecharts replaces the bar in place.
+            const bar = { timestamp: ts, open: o, high: h, low: l, close: c, volume: v };
             mergeBars([bar]);
             barCallbackRef.current?.(bar);
-            // Correlate this brick's position with its slot ts so the matching
-            // footprint (separate xvCluster* message) lands on the same bar.
-            const pos = Number(it.position);
-            if (Number.isFinite(pos)) { slotByPositionRef.current[pos] = slotTs; }
             // A closed brick can add a new swing → recompute strong levels.
-            // Forming ticks don't (they reuse the same slot), so skip those.
-            if (isFinal) { lastFinalTsRef.current = slotTs; setKlinesVersion((v2) => v2 + 1); }
+            // Forming ticks don't (they update the same bar), so skip those.
+            if (isFinal) { setKlinesVersion((v2) => v2 + 1); }
           }
         } catch {
           /* ignore */
