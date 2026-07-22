@@ -229,6 +229,11 @@ const DEFAULT_LIQUIDATIONS = {
   showLiquidations: true,
 };
 
+// Sweep markers (up/down per brick) defaults.
+const DEFAULT_SWEEPS = {
+  showSweeps: true,
+};
+
 // Draw the 20/80 reference lines on the RSI pane. Returns false so the default
 // RSI line(s) still render on top (klinecharts skips defaults only when draw
 // returns true). The pane scale is pinned to 0–100 so the bands stay in view.
@@ -278,6 +283,12 @@ const xvDeltaConfig: { byTs: Record<string, number> } = { byTs: {} };
 const xvLiqConfig: { byTs: Record<string, { up: number; down: number }> } = { byTs: {} };
 const LIQ_UP_COLOR = '#26a69a';   // up count, drawn below the brick low
 const LIQ_DOWN_COLOR = '#ef5350'; // down count, drawn above the brick high
+
+// Per-brick sweep counts keyed by bar ts, read by the XV_SWEEPS indicator.
+// up = buy sweeps (taker bought through levels → price up), down = sell sweeps.
+const xvSweepConfig: { byTs: Record<string, { up: number; down: number }> } = { byTs: {} };
+const SWEEP_UP_COLOR = '#00897b';   // buy sweep marker, below the brick low
+const SWEEP_DOWN_COLOR = '#d32f2f'; // sell sweep marker, above the brick high
 
 function pct(arr: number[], p: number): number {
   if (arr.length === 0) return 0;
@@ -453,6 +464,71 @@ function registerXvLiquidationsIndicator() {
   } as any);
 }
 
+// Sweep markers drawn on the candle pane: a small triangle per brick where a
+// single market order swept several price levels — buy sweeps (△, green) below
+// the low, sell sweeps (▽, red) above the high, with the sweep count. Drawn
+// further from the wick than the liquidation counts so they don't overlap.
+let sweepIndicatorRegistered = false;
+function registerXvSweepsIndicator() {
+  if (sweepIndicatorRegistered) return;
+  sweepIndicatorRegistered = true;
+  const triangle = (ctx: any, x: number, y: number, size: number, up: boolean) => {
+    ctx.beginPath();
+    if (up) {
+      ctx.moveTo(x, y - size);
+      ctx.lineTo(x - size, y + size);
+      ctx.lineTo(x + size, y + size);
+    } else {
+      ctx.moveTo(x, y + size);
+      ctx.lineTo(x - size, y - size);
+      ctx.lineTo(x + size, y - size);
+    }
+    ctx.closePath();
+    ctx.fill();
+  };
+  registerIndicator({
+    name: 'XV_SWEEPS',
+    shortName: 'Sweep',
+    series: 'price',
+    shouldUpdate: () => true,
+    calc: (dataList: any[]) => dataList.map(() => ({})),
+    draw: ({ ctx, chart, xAxis, yAxis }: any) => {
+      const dataList = chart.getDataList();
+      const vr = chart.getVisibleRange();
+      ctx.save();
+      ctx.font = '10px sans-serif';
+      ctx.textAlign = 'center';
+      for (let i = vr.from; i < vr.to; i++) {
+        const d = dataList[i];
+        if (!d) continue;
+        const counts = xvSweepConfig.byTs[String(d.timestamp)];
+        if (!counts) continue;
+        const x = xAxis.convertToPixel(i);
+        if (counts.down > 0) {
+          const yH = yAxis.convertToPixel(d.high);
+          ctx.fillStyle = SWEEP_DOWN_COLOR;
+          triangle(ctx, x, yH - 16, 4, false);
+          if (counts.down > 1) {
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(String(counts.down), x, yH - 22);
+          }
+        }
+        if (counts.up > 0) {
+          const yL = yAxis.convertToPixel(d.low);
+          ctx.fillStyle = SWEEP_UP_COLOR;
+          triangle(ctx, x, yL + 16, 4, true);
+          if (counts.up > 1) {
+            ctx.textBaseline = 'top';
+            ctx.fillText(String(counts.up), x, yL + 22);
+          }
+        }
+      }
+      ctx.restore();
+      return true;
+    },
+  } as any);
+}
+
 export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   // Chart display/indicator settings are shared across ALL pairs (one global
   // key), so RSI/delta/clusters/imbalance prefs carry over when switching pair.
@@ -484,6 +560,11 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   const [showLiquidations, setShowLiquidations] = useState<boolean>(DEFAULT_LIQUIDATIONS.showLiquidations);
   const liquidationsRef = useRef<Map<string, { ts: number; position: string }>>(new Map());
   const [liqVersion, setLiqVersion] = useState<number>(0);
+  // Sweep markers per brick (buy below / sell above). Deduped by composite key so
+  // a sweep seen over both REST and the live WS is counted once.
+  const [showSweeps, setShowSweeps] = useState<boolean>(DEFAULT_SWEEPS.showSweeps);
+  const sweepsRef = useRef<Map<string, { ts: number; side: string }>>(new Map());
+  const [sweepVersion, setSweepVersion] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(false);
   const [openChartSettings, setOpenChartSettings] = useState<boolean>(false);
 
@@ -626,6 +707,34 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     if (changed) setLiqVersion((v) => v + 1);
   }, [pairId]);
 
+  // Sweeps for a ts range (the graph buckets them per brick).
+  const fetchSweeps = useCallback(async (startTs: number, endTs: number) => {
+    const url = `${KLINES_API_BASE}/sweeps?pairId=${pairId}&startTs=${startTs}&endTs=${endTs}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const raw = await res.json();
+    return Array.isArray(raw) ? raw : [];
+  }, [pairId]);
+
+  // Add sweeps to the deduped store (REST + live WS share the same key), then
+  // bump the version so counts recompute. Filters out foreign pairs.
+  const addSweeps = useCallback((items: any[]) => {
+    if (!items?.length) return;
+    let changed = false;
+    for (const it of items) {
+      if (Number(it.pairId) !== Number(pairId)) continue;
+      const ts = Number(it.ts);
+      const side = String(it.side);
+      if (!Number.isFinite(ts)) continue;
+      const key = `${ts}:${side}:${it.priceStart}:${it.priceEnd}:${it.levels}`;
+      if (!sweepsRef.current.has(key)) {
+        sweepsRef.current.set(key, { ts, side });
+        changed = true;
+      }
+    }
+    if (changed) setSweepVersion((v) => v + 1);
+  }, [pairId]);
+
   // setDataLoader getBars: cursor pagination by COUNT (init/forward = older,
   // backward = newer). Each older page is the newest PAGE_SIZE bricks before the
   // oldest loaded bar — sparse XV pages cleanly, no empty-window scanning.
@@ -688,6 +797,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     registerRangeXvIndicator();
     registerXvDeltaIndicator();
     registerXvLiquidationsIndicator();
+    registerXvSweepsIndicator();
     const chart = init(containerRef.current);
     chartRef.current = chart;
     setChart(chart);
@@ -726,6 +836,8 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     // with R, so drop them too and refetch for the new brick range.
     liquidationsRef.current.clear();
     setLiqVersion((v) => v + 1);
+    sweepsRef.current.clear();
+    setSweepVersion((v) => v + 1);
     chart.setDataLoader({
       getBars,
       subscribeBar: (params: any) => { barCallbackRef.current = params.callback; },
@@ -766,6 +878,10 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
           type: 'subscribeLiquidationsByPairId',
           pairId: Number(pairId),
         }));
+        socket?.send(JSON.stringify({
+          type: 'subscribeSweepsByPairId',
+          pairId: Number(pairId),
+        }));
       };
       socket.onmessage = (ev) => {
         try {
@@ -776,6 +892,11 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
           const isLiquidation = msg.type === 'liquidations';
           if (isLiquidation && Array.isArray(msg.data)) {
             addLiquidations(msg.data);
+            return;
+          }
+          const isSweep = msg.type === 'sweeps';
+          if (isSweep && Array.isArray(msg.data)) {
+            addSweeps(msg.data);
             return;
           }
           if ((!isFinal && !isForming && !isCluster) || !Array.isArray(msg.data)) { return; }
@@ -830,7 +951,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
       }
       socket?.close();
     };
-  }, [pairId, r, mergeBars, mergeClusters, addLiquidations]);
+  }, [pairId, r, mergeBars, mergeClusters, addLiquidations, addSweeps]);
 
   // Render mode: OFF = native candles (always render); ON = custom variable-width draw.
   useEffect(() => {
@@ -906,6 +1027,16 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     }
   }, [chart, showLiquidations]);
 
+  // Sweep markers overlay on the candle pane: create/remove on toggle only.
+  useEffect(() => {
+    if (!chart) { return; }
+    if (showSweeps) {
+      chart.createIndicator?.('XV_SWEEPS', true, { id: 'candle_pane' });
+    } else {
+      chart.removeIndicator?.({ paneId: 'candle_pane', name: 'XV_SWEEPS' });
+    }
+  }, [chart, showSweeps]);
+
   // Rebuild the per-ts delta map from footprints (cheap, no layout) on every
   // change, but THROTTLE the recompute+relayout: live xvClusterForming ticks
   // arrive continuously, and overrideIndicator triggers a full chart layout —
@@ -978,6 +1109,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
         setRsiPeriod(Number(parsed.rsiPeriod) || DEFAULT_RSI.rsiPeriod);
         setShowDelta(!!parsed.showDelta);
         setShowLiquidations(parsed.showLiquidations !== false);
+        setShowSweeps(parsed.showSweeps !== false);
         setShowStrongLevels(parsed.showStrongLevels !== false);
         setStrongLevelsLookback(Number(parsed.strongLevelsLookback) || DEFAULT_STRONG_LEVELS.strongLevelsLookback);
         setStrongLevelsTolerance(Number(parsed.strongLevelsTolerance) || DEFAULT_STRONG_LEVELS.strongLevelsTolerance);
@@ -1094,6 +1226,43 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     chart.overrideIndicator?.({ name: 'XV_LIQUIDATIONS' });
   }, [chart, showLiquidations, liqVersion, klinesVersion]);
 
+  // Fetch sweeps for the loaded brick range (deduped in addSweeps).
+  useEffect(() => {
+    if (!chart || !showSweeps || !pairId) { return; }
+    const dl = chart.getDataList?.();
+    if (!dl?.length) { return; }
+    const minTs = Number(dl[0].timestamp);
+    if (!Number.isFinite(minTs)) { return; }
+    fetchSweeps(minTs, Date.now() + 1)
+      .then((items) => addSweeps(items))
+      .catch((e) => console.error('sweeps load failed:', e?.message));
+  }, [chart, showSweeps, klinesVersion, pairId, fetchSweeps, addSweeps]);
+
+  // Bucket sweeps into bricks (same [brick.ts, nextBrick.ts) logic as liquidations)
+  // and push per-ts counts into xvSweepConfig, then redraw the overlay.
+  useEffect(() => {
+    if (!chart || !showSweeps) { return; }
+    const dl = chart.getDataList?.();
+    const byTs: Record<string, { up: number; down: number }> = {};
+    if (dl?.length) {
+      const times = dl.map((b: any) => Number(b.timestamp));
+      for (const { ts, side } of sweepsRef.current.values()) {
+        if (ts < times[0]) { continue; }
+        let lo = 0;
+        let hi = times.length - 1;
+        while (lo < hi) {
+          const mid = (lo + hi + 1) >> 1;
+          if (times[mid] <= ts) { lo = mid; } else { hi = mid - 1; }
+        }
+        const key = String(times[lo]);
+        const bucket = byTs[key] ?? (byTs[key] = { up: 0, down: 0 });
+        if (side === 'sell') { bucket.down += 1; } else { bucket.up += 1; }
+      }
+    }
+    xvSweepConfig.byTs = byTs;
+    chart.overrideIndicator?.({ name: 'XV_SWEEPS' });
+  }, [chart, showSweeps, sweepVersion, klinesVersion]);
+
   // Cluster overlays are per visible candle, so redraw on zoom/scroll too.
   useEffect(() => {
     if (!chart) { return; }
@@ -1163,6 +1332,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     const nextRsiPeriod = Number(values.rsiPeriod) || DEFAULT_RSI.rsiPeriod;
     const nextShowDelta = !!values.showDelta;
     const nextShowLiquidations = values.showLiquidations !== false;
+    const nextShowSweeps = values.showSweeps !== false;
     const nextR = values.r != null ? String(values.r) : '';
     const nextShowStrongLevels = values.showStrongLevels !== false;
     const nextLookback = Number(values.strongLevelsLookback) || DEFAULT_STRONG_LEVELS.strongLevelsLookback;
@@ -1184,6 +1354,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     setRsiPeriod(nextRsiPeriod);
     setShowDelta(nextShowDelta);
     setShowLiquidations(nextShowLiquidations);
+    setShowSweeps(nextShowSweeps);
     setR(nextR);
     setShowStrongLevels(nextShowStrongLevels);
     setStrongLevelsLookback(nextLookback);
@@ -1213,6 +1384,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
             showRsi: nextShowRsi,
             showDelta: nextShowDelta,
             showLiquidations: nextShowLiquidations,
+            showSweeps: nextShowSweeps,
             rsiPeriod: nextRsiPeriod,
             showStrongLevels: nextShowStrongLevels,
             strongLevelsLookback: nextLookback,
@@ -1364,6 +1536,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
               rsiPeriod,
               showDelta,
               showLiquidations,
+              showSweeps,
               showStrongLevels,
               strongLevelsLookback,
               strongLevelsTolerance,
