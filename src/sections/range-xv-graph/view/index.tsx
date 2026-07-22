@@ -279,10 +279,15 @@ const xvConfig = { volumeWidth: false, volP5: 0, volP95: 1 };
 const xvDeltaConfig: { byTs: Record<string, number> } = { byTs: {} };
 
 // Per-brick liquidated-contract sums keyed by bar ts, read by the XV_LIQUIDATIONS
-// indicator. up = buy-side liqs (Σ contracts), down = sell-side liqs (Σ contracts).
-const xvLiqConfig: { byTs: Record<string, { up: number; down: number }> } = { byTs: {} };
-const LIQ_UP_COLOR = '#26a69a';   // up sum, drawn below the brick low
-const LIQ_DOWN_COLOR = '#ef5350'; // down sum, drawn above the brick high
+// indicator. Like sweeps, each brick holds a list of price levels (snapped to the
+// footprint row grid) with the Σ contracts for up (buy-side) and down (sell-side)
+// liquidations; drawn to the LEFT of the footprint. row/rows snap onto the grid
+// (row = -1 when there's no footprint to align to).
+const xvLiqConfig: {
+  byTs: Record<string, Array<{ price: number; up: number; down: number; row: number; rows: number }>>;
+} = { byTs: {} };
+const LIQ_UP_COLOR = '#26a69a';   // up (buy-side) Σ contracts
+const LIQ_DOWN_COLOR = '#ef5350'; // down (sell-side) Σ contracts
 
 /** Compact number for on-chart labels: 12.3K / 4.5M, integers under 1000 as-is. */
 function fmtCompact(n: number): string {
@@ -433,10 +438,10 @@ function registerXvDeltaIndicator() {
   } as any);
 }
 
-// Liquidation counts drawn on the candle pane: for each brick, the number of
-// DOWN liquidations above its high (red) and UP liquidations below its low
-// (green). Counts come from xvLiqConfig.byTs (bucketed from loaded liquidations);
-// calc is trivial, draw renders text over the visible bricks.
+// Liquidation Σ-contracts drawn on the candle pane, per price level snapped to the
+// footprint row grid, to the LEFT of the footprint block (sweeps take the right).
+// Per level: down (red, sell-side) then up (green, buy-side), right-aligned so the
+// group ends at the footprint's left edge (≈ bar*0.3 left of the bar centre).
 let liqIndicatorRegistered = false;
 function registerXvLiquidationsIndicator() {
   if (liqIndicatorRegistered) return;
@@ -445,33 +450,42 @@ function registerXvLiquidationsIndicator() {
     name: 'XV_LIQUIDATIONS',
     shortName: 'Liq',
     series: 'price',
-    // Counts live outside klinecharts' data, so overrideIndicator() must always
+    // Values live outside klinecharts' data, so overrideIndicator() must always
     // recompute/redraw (default would no-op when the bar data is unchanged).
     shouldUpdate: () => true,
     calc: (dataList: any[]) => dataList.map(() => ({})),
     draw: ({ ctx, chart, xAxis, yAxis }: any) => {
       const dataList = chart.getDataList();
       const vr = chart.getVisibleRange();
+      const bar = Number(chart.getBarSpace()?.bar) || 0;
+      const leftX = -(bar * 0.3) - 4; // footprint left edge minus a small pad
       ctx.save();
       ctx.font = '10px sans-serif';
-      ctx.textAlign = 'center';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
       for (let i = vr.from; i < vr.to; i++) {
         const d = dataList[i];
         if (!d) continue;
-        const counts = xvLiqConfig.byTs[String(d.timestamp)];
-        if (!counts) continue;
+        const levels = xvLiqConfig.byTs[String(d.timestamp)];
+        if (!levels || !levels.length) continue;
         const x = xAxis.convertToPixel(i);
-        if (counts.down > 0) {
-          const yH = yAxis.convertToPixel(d.high);
-          ctx.fillStyle = LIQ_DOWN_COLOR;
-          ctx.textBaseline = 'bottom';
-          ctx.fillText(fmtCompact(counts.down), x, yH - 3);
-        }
-        if (counts.up > 0) {
-          const yL = yAxis.convertToPixel(d.low);
-          ctx.fillStyle = LIQ_UP_COLOR;
-          ctx.textBaseline = 'top';
-          ctx.fillText(fmtCompact(counts.up), x, yL + 3);
+        const yH = yAxis.convertToPixel(d.high);
+        const yL = yAxis.convertToPixel(d.low);
+        for (const lv of levels) {
+          const y = lv.rows > 0 && lv.row >= 0
+            ? yH + (lv.row + 0.5) * ((yL - yH) / lv.rows)
+            : yAxis.convertToPixel(lv.price);
+          let anchor = x + leftX;
+          if (lv.up > 0) {
+            ctx.fillStyle = LIQ_UP_COLOR;
+            const t = fmtCompact(lv.up);
+            ctx.fillText(t, anchor, y);
+            anchor -= ctx.measureText(t).width + 5;
+          }
+          if (lv.down > 0) {
+            ctx.fillStyle = LIQ_DOWN_COLOR;
+            ctx.fillText(fmtCompact(lv.down), anchor, y);
+          }
         }
       }
       ctx.restore();
@@ -583,7 +597,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   // Liquidation counts per brick (up below / down above). Deduped by a composite
   // key so a liquidation seen over both REST and the live WS is counted once.
   const [showLiquidations, setShowLiquidations] = useState<boolean>(DEFAULT_LIQUIDATIONS.showLiquidations);
-  const liquidationsRef = useRef<Map<string, { ts: number; position: string; contracts: number }>>(new Map());
+  const liquidationsRef = useRef<Map<string, { ts: number; position: string; contracts: number; price: number }>>(new Map());
   const [liqVersion, setLiqVersion] = useState<number>(0);
   // Sweep markers per brick (buy below / sell above). Deduped by composite key so
   // a sweep seen over both REST and the live WS is counted once.
@@ -723,10 +737,11 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
       const ts = Number(it.ts);
       const position = String(it.position);
       const contracts = Number(it.contracts) || 0;
+      const price = Number(it.price);
       if (!Number.isFinite(ts)) continue;
       const key = `${ts}:${it.price}:${it.contracts}:${position}`;
       if (!liquidationsRef.current.has(key)) {
-        liquidationsRef.current.set(key, { ts, position, contracts });
+        liquidationsRef.current.set(key, { ts, position, contracts, price });
         changed = true;
       }
     }
@@ -1071,6 +1086,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   // forming-bar redraw (mergeBars) already refreshes the pane between throttles.
   const deltaThrottleRef = useRef<{ last: number; timer: any }>({ last: 0, timer: null });
   const sweepThrottleRef = useRef<{ last: number; timer: any }>({ last: 0, timer: null });
+  const liqThrottleRef = useRef<{ last: number; timer: any }>({ last: 0, timer: null });
   useEffect(() => {
     if (!chart || !showDelta) { return; }
     const map: Record<string, number> = {};
@@ -1200,9 +1216,9 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   // changes or clusters are toggled on. REST footprints share the brick ts, so
   // they key straight into clustersByTs; live updates arrive via the WS stream.
   useEffect(() => {
-    // showSweeps also needs footprints — the sweep counts snap onto the footprint
-    // row grid even when the cluster bars themselves aren't drawn.
-    if (!chart || !(showClusters || showReversal || showDelta || showSweeps) || !r) { return; }
+    // showSweeps / showLiquidations also need footprints — their counts snap onto
+    // the footprint row grid even when the cluster bars themselves aren't drawn.
+    if (!chart || !(showClusters || showReversal || showDelta || showSweeps || showLiquidations) || !r) { return; }
     const dl = chart.getDataList?.();
     if (!dl?.length) { return; }
     const minTs = Number(dl[0].timestamp);
@@ -1211,7 +1227,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     fetchXvClusters(r, minTs, maxTs + 1)
       .then((items) => mergeClusters(items, (it) => String(it.ts)))
       .catch((e) => console.error('xv clusters load failed:', e?.message));
-  }, [chart, showClusters, showReversal, showDelta, showSweeps, klinesVersion, r, fetchXvClusters, mergeClusters]);
+  }, [chart, showClusters, showReversal, showDelta, showSweeps, showLiquidations, klinesVersion, r, fetchXvClusters, mergeClusters]);
 
   // Fetch liquidations for the loaded brick range whenever the dataset changes
   // or the overlay is toggled on. Deduped in addLiquidations, so overlapping
@@ -1228,18 +1244,19 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
       .catch((e) => console.error('liquidations load failed:', e?.message));
   }, [chart, showLiquidations, klinesVersion, pairId, fetchLiquidations, addLiquidations]);
 
-  // Bucket liquidations into bricks (ts interval [brick.ts, nextBrick.ts)) and
-  // push the per-ts counts into xvLiqConfig, then redraw the overlay. Runs on new
-  // liquidations or a changed brick set; the draw itself follows zoom/scroll.
+  // Bucket liquidations into bricks (ts interval [brick.ts, nextBrick.ts)), tally
+  // Σ contracts per start-price level split up/down, then snap each level onto the
+  // footprint row grid (merging levels that land on the same row) — same as sweeps.
   useEffect(() => {
     if (!chart || !showLiquidations) { return; }
     const dl = chart.getDataList?.();
-    const byTs: Record<string, { up: number; down: number }> = {};
+    const byTs: Record<string, Array<{ price: number; up: number; down: number; row: number; rows: number }>> = {};
     if (dl?.length) {
-      // Brick open timestamps, ascending — binary-search each liquidation into
-      // the brick whose interval contains it (last brick catches the tail).
       const times = dl.map((b: any) => Number(b.timestamp));
-      for (const { ts, position, contracts } of liquidationsRef.current.values()) {
+      // ts -> price -> { up, down } (Σ contracts)
+      const tmp: Record<string, Map<number, { up: number; down: number }>> = {};
+      for (const { ts, position, contracts, price } of liquidationsRef.current.values()) {
+        if (!Number.isFinite(price)) { continue; }
         if (ts < times[0]) { continue; }
         let lo = 0;
         let hi = times.length - 1;
@@ -1248,14 +1265,59 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
           if (times[mid] <= ts) { lo = mid; } else { hi = mid - 1; }
         }
         const key = String(times[lo]);
-        const bucket = byTs[key] ?? (byTs[key] = { up: 0, down: 0 });
-        // Sum of liquidated contracts per direction (not event count).
-        if (position === 'down') { bucket.down += contracts; } else { bucket.up += contracts; }
+        let levels = tmp[key];
+        if (!levels) { levels = new Map(); tmp[key] = levels; }
+        let e = levels.get(price);
+        if (!e) { e = { up: 0, down: 0 }; levels.set(price, e); }
+        if (position === 'down') { e.down += contracts; } else { e.up += contracts; }
+      }
+      for (const key in tmp) {
+        const fpData = clustersByTs[key]?.data;
+        const fpPrices: number[] = (fpData && typeof fpData === 'object')
+          ? Object.values(fpData)
+              .map((v: any) => parseFloat(v?.p))
+              .filter((n: number) => Number.isFinite(n))
+              .sort((a: number, b: number) => b - a)
+          : [];
+        const rows = fpPrices.length;
+        const merged = new Map<string, { price: number; up: number; down: number; row: number; rows: number }>();
+        for (const [price, e] of tmp[key]) {
+          let row = -1;
+          if (rows > 0) {
+            let best = 0;
+            let bestD = Infinity;
+            for (let j = 0; j < rows; j++) {
+              const dpx = Math.abs(fpPrices[j] - price);
+              if (dpx < bestD) { bestD = dpx; best = j; }
+            }
+            row = best;
+          }
+          const mergeKey = rows > 0 ? `r${row}` : `p${price}`;
+          let m = merged.get(mergeKey);
+          if (!m) {
+            m = { price: rows > 0 ? fpPrices[row] : price, up: 0, down: 0, row, rows };
+            merged.set(mergeKey, m);
+          }
+          m.up += e.up;
+          m.down += e.down;
+        }
+        byTs[key] = Array.from(merged.values());
       }
     }
     xvLiqConfig.byTs = byTs;
-    chart.overrideIndicator?.({ name: 'XV_LIQUIDATIONS' });
-  }, [chart, showLiquidations, liqVersion, klinesVersion]);
+    // Throttle the layout-heavy redraw like sweeps/delta (depends on clustersByTs).
+    const th = liqThrottleRef.current;
+    const fire = () => { th.last = Date.now(); th.timer = null; chart.overrideIndicator?.({ name: 'XV_LIQUIDATIONS' }); };
+    const elapsed = Date.now() - th.last;
+    if (elapsed >= 500) { fire(); }
+    else if (th.timer == null) { th.timer = setTimeout(fire, 500 - elapsed); }
+  }, [chart, showLiquidations, liqVersion, klinesVersion, clustersByTs]);
+
+  // Clear any pending throttled liquidation recompute on unmount.
+  useEffect(() => () => {
+    const th = liqThrottleRef.current;
+    if (th.timer != null) { clearTimeout(th.timer); th.timer = null; }
+  }, []);
 
   // Fetch sweeps for the loaded brick range (deduped in addSweeps).
   useEffect(() => {
