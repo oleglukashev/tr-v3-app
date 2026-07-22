@@ -224,6 +224,11 @@ const DEFAULT_DELTA = {
   showDelta: false,
 };
 
+// Liquidation counts (up/down per brick) defaults.
+const DEFAULT_LIQUIDATIONS = {
+  showLiquidations: true,
+};
+
 // Draw the 20/80 reference lines on the RSI pane. Returns false so the default
 // RSI line(s) still render on top (klinecharts skips defaults only when draw
 // returns true). The pane scale is pinned to 0–100 so the bands stay in view.
@@ -267,6 +272,12 @@ const xvConfig = { volumeWidth: false, volP5: 0, volP95: 1 };
 
 // Per-brick delta (Σbv − Σsv) keyed by bar ts, read by the XV_DELTA indicator.
 const xvDeltaConfig: { byTs: Record<string, number> } = { byTs: {} };
+
+// Per-brick liquidation counts keyed by bar ts, read by the XV_LIQUIDATIONS
+// indicator. up = long liqs (buy side), down = short liqs (sell side).
+const xvLiqConfig: { byTs: Record<string, { up: number; down: number }> } = { byTs: {} };
+const LIQ_UP_COLOR = '#26a69a';   // up count, drawn below the brick low
+const LIQ_DOWN_COLOR = '#ef5350'; // down count, drawn above the brick high
 
 function pct(arr: number[], p: number): number {
   if (arr.length === 0) return 0;
@@ -395,6 +406,53 @@ function registerXvDeltaIndicator() {
   } as any);
 }
 
+// Liquidation counts drawn on the candle pane: for each brick, the number of
+// DOWN liquidations above its high (red) and UP liquidations below its low
+// (green). Counts come from xvLiqConfig.byTs (bucketed from loaded liquidations);
+// calc is trivial, draw renders text over the visible bricks.
+let liqIndicatorRegistered = false;
+function registerXvLiquidationsIndicator() {
+  if (liqIndicatorRegistered) return;
+  liqIndicatorRegistered = true;
+  registerIndicator({
+    name: 'XV_LIQUIDATIONS',
+    shortName: 'Liq',
+    series: 'price',
+    // Counts live outside klinecharts' data, so overrideIndicator() must always
+    // recompute/redraw (default would no-op when the bar data is unchanged).
+    shouldUpdate: () => true,
+    calc: (dataList: any[]) => dataList.map(() => ({})),
+    draw: ({ ctx, chart, xAxis, yAxis }: any) => {
+      const dataList = chart.getDataList();
+      const vr = chart.getVisibleRange();
+      ctx.save();
+      ctx.font = '10px sans-serif';
+      ctx.textAlign = 'center';
+      for (let i = vr.from; i < vr.to; i++) {
+        const d = dataList[i];
+        if (!d) continue;
+        const counts = xvLiqConfig.byTs[String(d.timestamp)];
+        if (!counts) continue;
+        const x = xAxis.convertToPixel(i);
+        if (counts.down > 0) {
+          const yH = yAxis.convertToPixel(d.high);
+          ctx.fillStyle = LIQ_DOWN_COLOR;
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(String(counts.down), x, yH - 3);
+        }
+        if (counts.up > 0) {
+          const yL = yAxis.convertToPixel(d.low);
+          ctx.fillStyle = LIQ_UP_COLOR;
+          ctx.textBaseline = 'top';
+          ctx.fillText(String(counts.up), x, yL + 3);
+        }
+      }
+      ctx.restore();
+      return true;
+    },
+  } as any);
+}
+
 export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   // Chart display/indicator settings are shared across ALL pairs (one global
   // key), so RSI/delta/clusters/imbalance prefs carry over when switching pair.
@@ -421,6 +479,11 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   const [rsiPeriod, setRsiPeriod] = useState<number>(DEFAULT_RSI.rsiPeriod);
   // Footprint delta sub-pane (uses footprints, like the imbalance highlight).
   const [showDelta, setShowDelta] = useState<boolean>(DEFAULT_DELTA.showDelta);
+  // Liquidation counts per brick (up below / down above). Deduped by a composite
+  // key so a liquidation seen over both REST and the live WS is counted once.
+  const [showLiquidations, setShowLiquidations] = useState<boolean>(DEFAULT_LIQUIDATIONS.showLiquidations);
+  const liquidationsRef = useRef<Map<string, { ts: number; position: string }>>(new Map());
+  const [liqVersion, setLiqVersion] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(false);
   const [openChartSettings, setOpenChartSettings] = useState<boolean>(false);
 
@@ -535,6 +598,34 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     setClustersTick((t) => t + 1);
   }, []);
 
+  // Liquidations for a ts range (raw events; the graph buckets them per brick).
+  const fetchLiquidations = useCallback(async (startTs: number, endTs: number) => {
+    const url = `${KLINES_API_BASE}/liquidations?pairId=${pairId}&startTs=${startTs}&endTs=${endTs}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const raw = await res.json();
+    return Array.isArray(raw) ? raw : [];
+  }, [pairId]);
+
+  // Add liquidations to the deduped store (REST + live WS share the same key),
+  // then bump the version so counts recompute. Filters out foreign pairs.
+  const addLiquidations = useCallback((items: any[]) => {
+    if (!items?.length) return;
+    let changed = false;
+    for (const it of items) {
+      if (Number(it.pairId) !== Number(pairId)) continue;
+      const ts = Number(it.ts);
+      const position = String(it.position);
+      if (!Number.isFinite(ts)) continue;
+      const key = `${ts}:${it.price}:${it.contracts}:${position}`;
+      if (!liquidationsRef.current.has(key)) {
+        liquidationsRef.current.set(key, { ts, position });
+        changed = true;
+      }
+    }
+    if (changed) setLiqVersion((v) => v + 1);
+  }, [pairId]);
+
   // setDataLoader getBars: cursor pagination by COUNT (init/forward = older,
   // backward = newer). Each older page is the newest PAGE_SIZE bricks before the
   // oldest loaded bar — sparse XV pages cleanly, no empty-window scanning.
@@ -596,6 +687,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     if (!containerRef.current) return;
     registerRangeXvIndicator();
     registerXvDeltaIndicator();
+    registerXvLiquidationsIndicator();
     const chart = init(containerRef.current);
     chartRef.current = chart;
     setChart(chart);
@@ -630,6 +722,10 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     allBarsRef.current.clear();
     // Footprints are per (pair, r); drop them so a new R starts clean.
     setClustersByTs({});
+    // Liquidations are per pair (R-independent), but the brick buckets change
+    // with R, so drop them too and refetch for the new brick range.
+    liquidationsRef.current.clear();
+    setLiqVersion((v) => v + 1);
     chart.setDataLoader({
       getBars,
       subscribeBar: (params: any) => { barCallbackRef.current = params.callback; },
@@ -666,6 +762,10 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
           pairId: Number(pairId),
           r: String(r),
         }));
+        socket?.send(JSON.stringify({
+          type: 'subscribeLiquidationsByPairId',
+          pairId: Number(pairId),
+        }));
       };
       socket.onmessage = (ev) => {
         try {
@@ -673,6 +773,11 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
           const isFinal = msg.type === 'xv';
           const isForming = msg.type === 'xvForming';
           const isCluster = msg.type === 'xvCluster' || msg.type === 'xvClusterForming';
+          const isLiquidation = msg.type === 'liquidations';
+          if (isLiquidation && Array.isArray(msg.data)) {
+            addLiquidations(msg.data);
+            return;
+          }
           if ((!isFinal && !isForming && !isCluster) || !Array.isArray(msg.data)) { return; }
           // A footprint carries the same ts as its brick (both fixed when the brick
           // opened), so it keys straight into clustersByTs — no correlation needed.
@@ -725,7 +830,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
       }
       socket?.close();
     };
-  }, [pairId, r, mergeBars, mergeClusters]);
+  }, [pairId, r, mergeBars, mergeClusters, addLiquidations]);
 
   // Render mode: OFF = native candles (always render); ON = custom variable-width draw.
   useEffect(() => {
@@ -790,6 +895,16 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
       chart.removeIndicator?.({ paneId: 'xv_delta_pane', name: 'XV_DELTA' });
     }
   }, [chart, showDelta]);
+
+  // Liquidation counts overlay on the candle pane: create/remove on toggle only.
+  useEffect(() => {
+    if (!chart) { return; }
+    if (showLiquidations) {
+      chart.createIndicator?.('XV_LIQUIDATIONS', true, { id: 'candle_pane' });
+    } else {
+      chart.removeIndicator?.({ paneId: 'candle_pane', name: 'XV_LIQUIDATIONS' });
+    }
+  }, [chart, showLiquidations]);
 
   // Rebuild the per-ts delta map from footprints (cheap, no layout) on every
   // change, but THROTTLE the recompute+relayout: live xvClusterForming ticks
@@ -862,6 +977,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
         setShowRsi(parsed.showRsi !== false);
         setRsiPeriod(Number(parsed.rsiPeriod) || DEFAULT_RSI.rsiPeriod);
         setShowDelta(!!parsed.showDelta);
+        setShowLiquidations(parsed.showLiquidations !== false);
         setShowStrongLevels(parsed.showStrongLevels !== false);
         setStrongLevelsLookback(Number(parsed.strongLevelsLookback) || DEFAULT_STRONG_LEVELS.strongLevelsLookback);
         setStrongLevelsTolerance(Number(parsed.strongLevelsTolerance) || DEFAULT_STRONG_LEVELS.strongLevelsTolerance);
@@ -935,6 +1051,49 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
       .catch((e) => console.error('xv clusters load failed:', e?.message));
   }, [chart, showClusters, showReversal, showDelta, klinesVersion, r, fetchXvClusters, mergeClusters]);
 
+  // Fetch liquidations for the loaded brick range whenever the dataset changes
+  // or the overlay is toggled on. Deduped in addLiquidations, so overlapping
+  // refetches (and the live WS) don't double-count.
+  useEffect(() => {
+    if (!chart || !showLiquidations || !pairId) { return; }
+    const dl = chart.getDataList?.();
+    if (!dl?.length) { return; }
+    const minTs = Number(dl[0].timestamp);
+    const maxTs = Number(dl[dl.length - 1].timestamp);
+    if (!Number.isFinite(minTs) || !Number.isFinite(maxTs)) { return; }
+    fetchLiquidations(minTs, Date.now() + 1)
+      .then((items) => addLiquidations(items))
+      .catch((e) => console.error('liquidations load failed:', e?.message));
+  }, [chart, showLiquidations, klinesVersion, pairId, fetchLiquidations, addLiquidations]);
+
+  // Bucket liquidations into bricks (ts interval [brick.ts, nextBrick.ts)) and
+  // push the per-ts counts into xvLiqConfig, then redraw the overlay. Runs on new
+  // liquidations or a changed brick set; the draw itself follows zoom/scroll.
+  useEffect(() => {
+    if (!chart || !showLiquidations) { return; }
+    const dl = chart.getDataList?.();
+    const byTs: Record<string, { up: number; down: number }> = {};
+    if (dl?.length) {
+      // Brick open timestamps, ascending — binary-search each liquidation into
+      // the brick whose interval contains it (last brick catches the tail).
+      const times = dl.map((b: any) => Number(b.timestamp));
+      for (const { ts, position } of liquidationsRef.current.values()) {
+        if (ts < times[0]) { continue; }
+        let lo = 0;
+        let hi = times.length - 1;
+        while (lo < hi) {
+          const mid = (lo + hi + 1) >> 1;
+          if (times[mid] <= ts) { lo = mid; } else { hi = mid - 1; }
+        }
+        const key = String(times[lo]);
+        const bucket = byTs[key] ?? (byTs[key] = { up: 0, down: 0 });
+        if (position === 'down') { bucket.down += 1; } else { bucket.up += 1; }
+      }
+    }
+    xvLiqConfig.byTs = byTs;
+    chart.overrideIndicator?.({ name: 'XV_LIQUIDATIONS' });
+  }, [chart, showLiquidations, liqVersion, klinesVersion]);
+
   // Cluster overlays are per visible candle, so redraw on zoom/scroll too.
   useEffect(() => {
     if (!chart) { return; }
@@ -1003,6 +1162,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     const nextShowRsi = !!values.showRsi;
     const nextRsiPeriod = Number(values.rsiPeriod) || DEFAULT_RSI.rsiPeriod;
     const nextShowDelta = !!values.showDelta;
+    const nextShowLiquidations = values.showLiquidations !== false;
     const nextR = values.r != null ? String(values.r) : '';
     const nextShowStrongLevels = values.showStrongLevels !== false;
     const nextLookback = Number(values.strongLevelsLookback) || DEFAULT_STRONG_LEVELS.strongLevelsLookback;
@@ -1023,6 +1183,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     setShowRsi(nextShowRsi);
     setRsiPeriod(nextRsiPeriod);
     setShowDelta(nextShowDelta);
+    setShowLiquidations(nextShowLiquidations);
     setR(nextR);
     setShowStrongLevels(nextShowStrongLevels);
     setStrongLevelsLookback(nextLookback);
@@ -1051,6 +1212,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
             volumeWidth: nextVolumeWidth,
             showRsi: nextShowRsi,
             showDelta: nextShowDelta,
+            showLiquidations: nextShowLiquidations,
             rsiPeriod: nextRsiPeriod,
             showStrongLevels: nextShowStrongLevels,
             strongLevelsLookback: nextLookback,
@@ -1201,6 +1363,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
               showRsi,
               rsiPeriod,
               showDelta,
+              showLiquidations,
               showStrongLevels,
               strongLevelsLookback,
               strongLevelsTolerance,
