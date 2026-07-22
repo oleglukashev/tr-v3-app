@@ -296,14 +296,15 @@ function fmtCompact(n: number): string {
 }
 
 // Per-brick sweep tallies keyed by bar ts, read by the XV_SWEEPS indicator. Each
-// brick holds a list of price levels (the sweeps' start price) with the count of
-// sweeps that started there and the dominant side, drawn to the right of the
-// footprint at each level's y.
+// brick holds a list of levels keyed by the sweeps' start price, split into sell
+// and buy counts. `row`/`rows` snap the level onto the footprint's grid (clusterKline
+// draws `rows` equal rows between high and low, so row index — not true price —
+// aligns with a footprint row); row = -1 when there's no footprint to align to.
 const xvSweepConfig: {
-  byTs: Record<string, Array<{ price: number; count: number; side: string }>>;
+  byTs: Record<string, Array<{ price: number; sell: number; buy: number; row: number; rows: number }>>;
 } = { byTs: {} };
-const SWEEP_BUY_COLOR = '#00897b';  // buy-dominant level
-const SWEEP_SELL_COLOR = '#d32f2f'; // sell-dominant level
+const SWEEP_BUY_COLOR = '#00897b';  // buy sweeps (△)
+const SWEEP_SELL_COLOR = '#d32f2f'; // sell sweeps (▽)
 
 function pct(arr: number[], p: number): number {
   if (arr.length === 0) return 0;
@@ -479,15 +480,31 @@ function registerXvLiquidationsIndicator() {
   } as any);
 }
 
-// Sweep tally drawn on the candle pane: at each price level where sweeps started
-// (bucketed per brick), the count of sweeps is drawn to the RIGHT of the brick's
-// footprint at that level's y — coloured by the dominant side (buy green / sell
-// red). Mirrors where clusterKline draws its footprint block (right edge ≈
-// bar*0.4 from the bar centre).
+// Sweep tally drawn on the candle pane: at each price level where sweeps started,
+// snapped onto the footprint's row grid (same size/levels as clusterKline), the
+// sell and buy counts are drawn in a row to the RIGHT of the footprint block —
+// ▽ sells first (red), then △ buys (green). Right edge of the block ≈ bar*0.4
+// from the bar centre (clusterKline insets 10% on the right).
 let sweepIndicatorRegistered = false;
 function registerXvSweepsIndicator() {
   if (sweepIndicatorRegistered) return;
   sweepIndicatorRegistered = true;
+  const triUp = (ctx: any, cx: number, cy: number, s: number) => {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - s);
+    ctx.lineTo(cx - s, cy + s);
+    ctx.lineTo(cx + s, cy + s);
+    ctx.closePath();
+    ctx.fill();
+  };
+  const triDown = (ctx: any, cx: number, cy: number, s: number) => {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy + s);
+    ctx.lineTo(cx - s, cy - s);
+    ctx.lineTo(cx + s, cy - s);
+    ctx.closePath();
+    ctx.fill();
+  };
   registerIndicator({
     name: 'XV_SWEEPS',
     shortName: 'Sweep',
@@ -498,9 +515,7 @@ function registerXvSweepsIndicator() {
       const dataList = chart.getDataList();
       const vr = chart.getVisibleRange();
       const bar = Number(chart.getBarSpace()?.bar) || 0;
-      // Right edge of the footprint block, relative to the bar centre:
-      // clusterKline insets 10% on the right, so it ends ~bar*0.4 from centre.
-      const rightX = bar * 0.4 + 3;
+      const rightX = bar * 0.4 + 4;
       ctx.save();
       ctx.font = '10px sans-serif';
       ctx.textAlign = 'left';
@@ -511,10 +526,26 @@ function registerXvSweepsIndicator() {
         const levels = xvSweepConfig.byTs[String(d.timestamp)];
         if (!levels || !levels.length) continue;
         const x = xAxis.convertToPixel(i);
+        const yH = yAxis.convertToPixel(d.high);
+        const yL = yAxis.convertToPixel(d.low);
         for (const lv of levels) {
-          const y = yAxis.convertToPixel(lv.price);
-          ctx.fillStyle = lv.side === 'sell' ? SWEEP_SELL_COLOR : SWEEP_BUY_COLOR;
-          ctx.fillText(String(lv.count), x + rightX, y);
+          // Snap to the footprint row grid; fall back to true price when no grid.
+          const y = lv.rows > 0 && lv.row >= 0
+            ? yH + (lv.row + 0.5) * ((yL - yH) / lv.rows)
+            : yAxis.convertToPixel(lv.price);
+          let cx = x + rightX;
+          if (lv.sell > 0) {
+            ctx.fillStyle = SWEEP_SELL_COLOR;
+            triDown(ctx, cx + 3, y, 3);
+            const t = String(lv.sell);
+            ctx.fillText(t, cx + 8, y);
+            cx += 8 + ctx.measureText(t).width + 7;
+          }
+          if (lv.buy > 0) {
+            ctx.fillStyle = SWEEP_BUY_COLOR;
+            triUp(ctx, cx + 3, y, 3);
+            ctx.fillText(String(lv.buy), cx + 8, y);
+          }
         }
       }
       ctx.restore();
@@ -1039,6 +1070,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   // doing that per websocket message is what re-renders the whole chart. The
   // forming-bar redraw (mergeBars) already refreshes the pane between throttles.
   const deltaThrottleRef = useRef<{ last: number; timer: any }>({ last: 0, timer: null });
+  const sweepThrottleRef = useRef<{ last: number; timer: any }>({ last: 0, timer: null });
   useEffect(() => {
     if (!chart || !showDelta) { return; }
     const map: Record<string, number> = {};
@@ -1168,7 +1200,9 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   // changes or clusters are toggled on. REST footprints share the brick ts, so
   // they key straight into clustersByTs; live updates arrive via the WS stream.
   useEffect(() => {
-    if (!chart || !(showClusters || showReversal || showDelta) || !r) { return; }
+    // showSweeps also needs footprints — the sweep counts snap onto the footprint
+    // row grid even when the cluster bars themselves aren't drawn.
+    if (!chart || !(showClusters || showReversal || showDelta || showSweeps) || !r) { return; }
     const dl = chart.getDataList?.();
     if (!dl?.length) { return; }
     const minTs = Number(dl[0].timestamp);
@@ -1177,7 +1211,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     fetchXvClusters(r, minTs, maxTs + 1)
       .then((items) => mergeClusters(items, (it) => String(it.ts)))
       .catch((e) => console.error('xv clusters load failed:', e?.message));
-  }, [chart, showClusters, showReversal, showDelta, klinesVersion, r, fetchXvClusters, mergeClusters]);
+  }, [chart, showClusters, showReversal, showDelta, showSweeps, klinesVersion, r, fetchXvClusters, mergeClusters]);
 
   // Fetch liquidations for the loaded brick range whenever the dataset changes
   // or the overlay is toggled on. Deduped in addLiquidations, so overlapping
@@ -1236,16 +1270,18 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   }, [chart, showSweeps, klinesVersion, pairId, fetchSweeps, addSweeps]);
 
   // Bucket sweeps into bricks (same [brick.ts, nextBrick.ts) logic as liquidations),
-  // then within each brick tally by start-price level (count + dominant side), and
-  // push the per-level list into xvSweepConfig for the right-of-footprint overlay.
+  // tally each brick by start-price level (sell/buy split), then snap each level
+  // onto that brick's footprint row grid (clusterKline draws N equal rows between
+  // high and low, so we map the price to a row index). Push the per-level list into
+  // xvSweepConfig for the right-of-footprint overlay.
   useEffect(() => {
     if (!chart || !showSweeps) { return; }
     const dl = chart.getDataList?.();
-    const byTs: Record<string, Array<{ price: number; count: number; side: string }>> = {};
+    const byTs: Record<string, Array<{ price: number; sell: number; buy: number; row: number; rows: number }>> = {};
     if (dl?.length) {
       const times = dl.map((b: any) => Number(b.timestamp));
-      // ts -> price -> { buy, sell }
-      const tmp: Record<string, Map<number, { buy: number; sell: number }>> = {};
+      // ts -> price -> { sell, buy }
+      const tmp: Record<string, Map<number, { sell: number; buy: number }>> = {};
       for (const { ts, side, price } of sweepsRef.current.values()) {
         if (!Number.isFinite(price)) { continue; }
         if (ts < times[0]) { continue; }
@@ -1259,20 +1295,51 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
         let levels = tmp[key];
         if (!levels) { levels = new Map(); tmp[key] = levels; }
         let e = levels.get(price);
-        if (!e) { e = { buy: 0, sell: 0 }; levels.set(price, e); }
+        if (!e) { e = { sell: 0, buy: 0 }; levels.set(price, e); }
         if (side === 'sell') { e.sell += 1; } else { e.buy += 1; }
       }
       for (const key in tmp) {
-        const arr: Array<{ price: number; count: number; side: string }> = [];
+        // Footprint prices for this brick, sorted desc — the clusterKline row order.
+        const fpData = clustersByTs[key]?.data;
+        const fpPrices: number[] = (fpData && typeof fpData === 'object')
+          ? Object.values(fpData)
+              .map((v: any) => parseFloat(v?.p))
+              .filter((n: number) => Number.isFinite(n))
+              .sort((a: number, b: number) => b - a)
+          : [];
+        const rows = fpPrices.length;
+        const arr: Array<{ price: number; sell: number; buy: number; row: number; rows: number }> = [];
         for (const [price, e] of tmp[key]) {
-          arr.push({ price, count: e.buy + e.sell, side: e.sell > e.buy ? 'sell' : 'buy' });
+          let row = -1;
+          if (rows > 0) {
+            let best = 0;
+            let bestD = Infinity;
+            for (let j = 0; j < rows; j++) {
+              const dpx = Math.abs(fpPrices[j] - price);
+              if (dpx < bestD) { bestD = dpx; best = j; }
+            }
+            row = best;
+          }
+          arr.push({ price, sell: e.sell, buy: e.buy, row, rows });
         }
         byTs[key] = arr;
       }
     }
     xvSweepConfig.byTs = byTs;
-    chart.overrideIndicator?.({ name: 'XV_SWEEPS' });
-  }, [chart, showSweeps, sweepVersion, klinesVersion]);
+    // Throttle the layout-heavy redraw like the delta pane (clustersByTs ticks live);
+    // the config above is already updated for the next natural repaint.
+    const th = sweepThrottleRef.current;
+    const fire = () => { th.last = Date.now(); th.timer = null; chart.overrideIndicator?.({ name: 'XV_SWEEPS' }); };
+    const elapsed = Date.now() - th.last;
+    if (elapsed >= 500) { fire(); }
+    else if (th.timer == null) { th.timer = setTimeout(fire, 500 - elapsed); }
+  }, [chart, showSweeps, sweepVersion, klinesVersion, clustersByTs]);
+
+  // Clear any pending throttled sweep recompute on unmount.
+  useEffect(() => () => {
+    const th = sweepThrottleRef.current;
+    if (th.timer != null) { clearTimeout(th.timer); th.timer = null; }
+  }, []);
 
   // Cluster overlays are per visible candle, so redraw on zoom/scroll too.
   useEffect(() => {
