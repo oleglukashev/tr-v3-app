@@ -295,11 +295,15 @@ function fmtCompact(n: number): string {
   return n.toFixed(3).replace(/\.?0+$/, ''); // small fractional contract sums
 }
 
-// Per-brick sweep counts keyed by bar ts, read by the XV_SWEEPS indicator.
-// up = buy sweeps (taker bought through levels → price up), down = sell sweeps.
-const xvSweepConfig: { byTs: Record<string, { up: number; down: number }> } = { byTs: {} };
-const SWEEP_UP_COLOR = '#00897b';   // buy sweep marker, below the brick low
-const SWEEP_DOWN_COLOR = '#d32f2f'; // sell sweep marker, above the brick high
+// Per-brick sweep tallies keyed by bar ts, read by the XV_SWEEPS indicator. Each
+// brick holds a list of price levels (the sweeps' start price) with the count of
+// sweeps that started there and the dominant side, drawn to the right of the
+// footprint at each level's y.
+const xvSweepConfig: {
+  byTs: Record<string, Array<{ price: number; count: number; side: string }>>;
+} = { byTs: {} };
+const SWEEP_BUY_COLOR = '#00897b';  // buy-dominant level
+const SWEEP_SELL_COLOR = '#d32f2f'; // sell-dominant level
 
 function pct(arr: number[], p: number): number {
   if (arr.length === 0) return 0;
@@ -475,28 +479,15 @@ function registerXvLiquidationsIndicator() {
   } as any);
 }
 
-// Sweep markers drawn on the candle pane: a small triangle per brick where a
-// single market order swept several price levels — buy sweeps (△, green) below
-// the low, sell sweeps (▽, red) above the high, with the sweep count. Drawn
-// further from the wick than the liquidation counts so they don't overlap.
+// Sweep tally drawn on the candle pane: at each price level where sweeps started
+// (bucketed per brick), the count of sweeps is drawn to the RIGHT of the brick's
+// footprint at that level's y — coloured by the dominant side (buy green / sell
+// red). Mirrors where clusterKline draws its footprint block (right edge ≈
+// bar*0.4 from the bar centre).
 let sweepIndicatorRegistered = false;
 function registerXvSweepsIndicator() {
   if (sweepIndicatorRegistered) return;
   sweepIndicatorRegistered = true;
-  const triangle = (ctx: any, x: number, y: number, size: number, up: boolean) => {
-    ctx.beginPath();
-    if (up) {
-      ctx.moveTo(x, y - size);
-      ctx.lineTo(x - size, y + size);
-      ctx.lineTo(x + size, y + size);
-    } else {
-      ctx.moveTo(x, y + size);
-      ctx.lineTo(x - size, y - size);
-      ctx.lineTo(x + size, y - size);
-    }
-    ctx.closePath();
-    ctx.fill();
-  };
   registerIndicator({
     name: 'XV_SWEEPS',
     shortName: 'Sweep',
@@ -506,32 +497,24 @@ function registerXvSweepsIndicator() {
     draw: ({ ctx, chart, xAxis, yAxis }: any) => {
       const dataList = chart.getDataList();
       const vr = chart.getVisibleRange();
+      const bar = Number(chart.getBarSpace()?.bar) || 0;
+      // Right edge of the footprint block, relative to the bar centre:
+      // clusterKline insets 10% on the right, so it ends ~bar*0.4 from centre.
+      const rightX = bar * 0.4 + 3;
       ctx.save();
       ctx.font = '10px sans-serif';
-      ctx.textAlign = 'center';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
       for (let i = vr.from; i < vr.to; i++) {
         const d = dataList[i];
         if (!d) continue;
-        const counts = xvSweepConfig.byTs[String(d.timestamp)];
-        if (!counts) continue;
+        const levels = xvSweepConfig.byTs[String(d.timestamp)];
+        if (!levels || !levels.length) continue;
         const x = xAxis.convertToPixel(i);
-        if (counts.down > 0) {
-          const yH = yAxis.convertToPixel(d.high);
-          ctx.fillStyle = SWEEP_DOWN_COLOR;
-          triangle(ctx, x, yH - 16, 4, false);
-          if (counts.down > 1) {
-            ctx.textBaseline = 'bottom';
-            ctx.fillText(String(counts.down), x, yH - 22);
-          }
-        }
-        if (counts.up > 0) {
-          const yL = yAxis.convertToPixel(d.low);
-          ctx.fillStyle = SWEEP_UP_COLOR;
-          triangle(ctx, x, yL + 16, 4, true);
-          if (counts.up > 1) {
-            ctx.textBaseline = 'top';
-            ctx.fillText(String(counts.up), x, yL + 22);
-          }
+        for (const lv of levels) {
+          const y = yAxis.convertToPixel(lv.price);
+          ctx.fillStyle = lv.side === 'sell' ? SWEEP_SELL_COLOR : SWEEP_BUY_COLOR;
+          ctx.fillText(String(lv.count), x + rightX, y);
         }
       }
       ctx.restore();
@@ -574,7 +557,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   // Sweep markers per brick (buy below / sell above). Deduped by composite key so
   // a sweep seen over both REST and the live WS is counted once.
   const [showSweeps, setShowSweeps] = useState<boolean>(DEFAULT_SWEEPS.showSweeps);
-  const sweepsRef = useRef<Map<string, { ts: number; side: string }>>(new Map());
+  const sweepsRef = useRef<Map<string, { ts: number; side: string; price: number }>>(new Map());
   const [sweepVersion, setSweepVersion] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(false);
   const [openChartSettings, setOpenChartSettings] = useState<boolean>(false);
@@ -737,10 +720,11 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
       if (Number(it.pairId) !== Number(pairId)) continue;
       const ts = Number(it.ts);
       const side = String(it.side);
+      const price = Number(it.priceStart);
       if (!Number.isFinite(ts)) continue;
       const key = `${ts}:${side}:${it.priceStart}:${it.priceEnd}:${it.levels}`;
       if (!sweepsRef.current.has(key)) {
-        sweepsRef.current.set(key, { ts, side });
+        sweepsRef.current.set(key, { ts, side, price });
         changed = true;
       }
     }
@@ -1251,15 +1235,19 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
       .catch((e) => console.error('sweeps load failed:', e?.message));
   }, [chart, showSweeps, klinesVersion, pairId, fetchSweeps, addSweeps]);
 
-  // Bucket sweeps into bricks (same [brick.ts, nextBrick.ts) logic as liquidations)
-  // and push per-ts counts into xvSweepConfig, then redraw the overlay.
+  // Bucket sweeps into bricks (same [brick.ts, nextBrick.ts) logic as liquidations),
+  // then within each brick tally by start-price level (count + dominant side), and
+  // push the per-level list into xvSweepConfig for the right-of-footprint overlay.
   useEffect(() => {
     if (!chart || !showSweeps) { return; }
     const dl = chart.getDataList?.();
-    const byTs: Record<string, { up: number; down: number }> = {};
+    const byTs: Record<string, Array<{ price: number; count: number; side: string }>> = {};
     if (dl?.length) {
       const times = dl.map((b: any) => Number(b.timestamp));
-      for (const { ts, side } of sweepsRef.current.values()) {
+      // ts -> price -> { buy, sell }
+      const tmp: Record<string, Map<number, { buy: number; sell: number }>> = {};
+      for (const { ts, side, price } of sweepsRef.current.values()) {
+        if (!Number.isFinite(price)) { continue; }
         if (ts < times[0]) { continue; }
         let lo = 0;
         let hi = times.length - 1;
@@ -1268,8 +1256,18 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
           if (times[mid] <= ts) { lo = mid; } else { hi = mid - 1; }
         }
         const key = String(times[lo]);
-        const bucket = byTs[key] ?? (byTs[key] = { up: 0, down: 0 });
-        if (side === 'sell') { bucket.down += 1; } else { bucket.up += 1; }
+        let levels = tmp[key];
+        if (!levels) { levels = new Map(); tmp[key] = levels; }
+        let e = levels.get(price);
+        if (!e) { e = { buy: 0, sell: 0 }; levels.set(price, e); }
+        if (side === 'sell') { e.sell += 1; } else { e.buy += 1; }
+      }
+      for (const key in tmp) {
+        const arr: Array<{ price: number; count: number; side: string }> = [];
+        for (const [price, e] of tmp[key]) {
+          arr.push({ price, count: e.buy + e.sell, side: e.sell > e.buy ? 'sell' : 'buy' });
+        }
+        byTs[key] = arr;
       }
     }
     xvSweepConfig.byTs = byTs;
