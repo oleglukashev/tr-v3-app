@@ -1308,7 +1308,9 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
               .sort((a: number, b: number) => b - a)
           : [];
         const rows = fpPrices.length;
-        const arr: Array<{ price: number; sell: number; buy: number; row: number; rows: number }> = [];
+        // Merge every sweep that snaps to the same footprint row into one cell so
+        // adjacent prices don't stack two overlapping triangles at the same spot.
+        const merged = new Map<string, { price: number; sell: number; buy: number; row: number; rows: number }>();
         for (const [price, e] of tmp[key]) {
           let row = -1;
           if (rows > 0) {
@@ -1320,9 +1322,16 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
             }
             row = best;
           }
-          arr.push({ price, sell: e.sell, buy: e.buy, row, rows });
+          const mergeKey = rows > 0 ? `r${row}` : `p${price}`;
+          let m = merged.get(mergeKey);
+          if (!m) {
+            m = { price: rows > 0 ? fpPrices[row] : price, sell: 0, buy: 0, row, rows };
+            merged.set(mergeKey, m);
+          }
+          m.sell += e.sell;
+          m.buy += e.buy;
         }
-        byTs[key] = arr;
+        byTs[key] = Array.from(merged.values());
       }
     }
     xvSweepConfig.byTs = byTs;
