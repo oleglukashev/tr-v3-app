@@ -396,9 +396,12 @@ function registerXvDeltaIndicator() {
 }
 
 export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
-  // Persist chart settings per pair (R is price-scale specific to each pair),
-  // mirroring how the dhm graph stores its global settings in localStorage.
-  const SETTINGS_STORAGE_KEY = `rangeXvGraphSettings_${pairId}`;
+  // Chart display/indicator settings are shared across ALL pairs (one global
+  // key), so RSI/delta/clusters/imbalance prefs carry over when switching pair.
+  // Only R (the range size) stays per-pair — it's price-scale specific to each
+  // symbol (BTC R=100 vs KAS R=0.001), so it can't be shared.
+  const SETTINGS_STORAGE_KEY = `rangeXvGraphSettings`;
+  const R_STORAGE_KEY = `rangeXvGraphR_${pairId}`;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<any>(null);
   const xvIndicatorOnRef = useRef<boolean>(false);
@@ -842,13 +845,19 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   useEffect(() => {
     if (typeof window === 'undefined') { return; }
     try {
+      // Per-pair R (price-scale specific). Skip when the URL already specifies it.
+      if (rFromUrl == null || rFromUrl === '') {
+        const savedR = localStorage.getItem(R_STORAGE_KEY);
+        if (savedR != null) {
+          const parsedR = JSON.parse(savedR);
+          setR(parsedR && parsedR.r != null ? String(parsedR.r) : '');
+        }
+      }
+      // Global display/indicator settings (shared across all pairs).
       const saved = localStorage.getItem(SETTINGS_STORAGE_KEY);
       if (!saved) { return; }
       const parsed = JSON.parse(saved);
       if (parsed && typeof parsed === 'object') {
-        if (rFromUrl == null || rFromUrl === '') {
-          setR(parsed.r != null ? String(parsed.r) : '');
-        }
         setVolumeWidth(!!parsed.volumeWidth);
         setShowRsi(parsed.showRsi !== false);
         setRsiPeriod(Number(parsed.rsiPeriod) || DEFAULT_RSI.rsiPeriod);
@@ -870,7 +879,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
         setStackedRatioM(Number(parsed.stackedRatioM) || DEFAULT_STACKED.stackedRatioM);
       }
     } catch {}
-  }, [SETTINGS_STORAGE_KEY, rFromUrl]);
+  }, [SETTINGS_STORAGE_KEY, R_STORAGE_KEY, rFromUrl]);
 
   // Chart settings is opened from the header's chart-line icon (same as dhm graph).
   useEffect(() => {
@@ -1033,10 +1042,12 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     setOpenChartSettings(false);
     if (typeof window !== 'undefined') {
       try {
+        // R is per-pair (price-scale specific).
+        localStorage.setItem(R_STORAGE_KEY, JSON.stringify({ r: nextR }));
+        // Everything else is shared across all pairs (global key).
         localStorage.setItem(
           SETTINGS_STORAGE_KEY,
           JSON.stringify({
-            r: nextR,
             volumeWidth: nextVolumeWidth,
             showRsi: nextShowRsi,
             showDelta: nextShowDelta,
@@ -1060,7 +1071,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
         );
       } catch {}
     }
-  }, [SETTINGS_STORAGE_KEY]);
+  }, [SETTINGS_STORAGE_KEY, R_STORAGE_KEY]);
 
   // Restore saved backtest settings (per pair).
   useEffect(() => {
