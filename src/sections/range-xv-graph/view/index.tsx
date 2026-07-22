@@ -232,6 +232,10 @@ const DEFAULT_LIQUIDATIONS = {
 // Sweep markers (up/down per brick) defaults.
 const DEFAULT_SWEEPS = {
   showSweeps: true,
+  // Display filters (0 = show every received sweep). Collection thresholds live
+  // in the client (all-sweeps.js); these only restrict what's drawn.
+  sweepMinLevels: 0,
+  sweepMinAmount: 0,
 };
 
 // Draw the 20/80 reference lines on the RSI pane. Returns false so the default
@@ -288,6 +292,10 @@ const xvLiqConfig: {
 } = { byTs: {} };
 const LIQ_UP_COLOR = '#26a69a';   // up (buy-side) Σ contracts
 const LIQ_DOWN_COLOR = '#ef5350'; // down (sell-side) Σ contracts
+
+// Only draw the sweep/liquidation level tallies when the footprint is wide enough
+// to show its own per-level values — clusterKline gates that text on barWidth > 80.
+const CLUSTER_VALUE_MIN_BAR = 80;
 
 /** Compact number for on-chart labels: 12.3K / 4.5M, integers under 1000 as-is. */
 function fmtCompact(n: number): string {
@@ -458,6 +466,7 @@ function registerXvLiquidationsIndicator() {
       const dataList = chart.getDataList();
       const vr = chart.getVisibleRange();
       const bar = Number(chart.getBarSpace()?.bar) || 0;
+      if (bar <= CLUSTER_VALUE_MIN_BAR) return true; // only when footprint shows values
       const leftX = -(bar * 0.3) - 4; // footprint left edge minus a small pad
       ctx.save();
       ctx.font = '10px sans-serif';
@@ -529,6 +538,7 @@ function registerXvSweepsIndicator() {
       const dataList = chart.getDataList();
       const vr = chart.getVisibleRange();
       const bar = Number(chart.getBarSpace()?.bar) || 0;
+      if (bar <= CLUSTER_VALUE_MIN_BAR) return true; // only when footprint shows values
       const rightX = bar * 0.4 + 4;
       ctx.save();
       ctx.font = '10px sans-serif';
@@ -602,7 +612,9 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   // Sweep markers per brick (buy below / sell above). Deduped by composite key so
   // a sweep seen over both REST and the live WS is counted once.
   const [showSweeps, setShowSweeps] = useState<boolean>(DEFAULT_SWEEPS.showSweeps);
-  const sweepsRef = useRef<Map<string, { ts: number; side: string; price: number }>>(new Map());
+  const [sweepMinLevels, setSweepMinLevels] = useState<number>(DEFAULT_SWEEPS.sweepMinLevels);
+  const [sweepMinAmount, setSweepMinAmount] = useState<number>(DEFAULT_SWEEPS.sweepMinAmount);
+  const sweepsRef = useRef<Map<string, { ts: number; side: string; price: number; levels: number; quoteVolume: number }>>(new Map());
   const [sweepVersion, setSweepVersion] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(false);
   const [openChartSettings, setOpenChartSettings] = useState<boolean>(false);
@@ -767,10 +779,12 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
       const ts = Number(it.ts);
       const side = String(it.side);
       const price = Number(it.priceStart);
+      const levels = Number(it.levels) || 0;
+      const quoteVolume = Number(it.quoteVolume) || 0;
       if (!Number.isFinite(ts)) continue;
       const key = `${ts}:${side}:${it.priceStart}:${it.priceEnd}:${it.levels}`;
       if (!sweepsRef.current.has(key)) {
-        sweepsRef.current.set(key, { ts, side, price });
+        sweepsRef.current.set(key, { ts, side, price, levels, quoteVolume });
         changed = true;
       }
     }
@@ -1154,6 +1168,8 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
         setShowDelta(!!parsed.showDelta);
         setShowLiquidations(parsed.showLiquidations !== false);
         setShowSweeps(parsed.showSweeps !== false);
+        setSweepMinLevels(Math.max(0, Number(parsed.sweepMinLevels) || 0));
+        setSweepMinAmount(Math.max(0, Number(parsed.sweepMinAmount) || 0));
         setShowStrongLevels(parsed.showStrongLevels !== false);
         setStrongLevelsLookback(Number(parsed.strongLevelsLookback) || DEFAULT_STRONG_LEVELS.strongLevelsLookback);
         setStrongLevelsTolerance(Number(parsed.strongLevelsTolerance) || DEFAULT_STRONG_LEVELS.strongLevelsTolerance);
@@ -1344,8 +1360,10 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
       const times = dl.map((b: any) => Number(b.timestamp));
       // ts -> price -> { sell, buy }
       const tmp: Record<string, Map<number, { sell: number; buy: number }>> = {};
-      for (const { ts, side, price } of sweepsRef.current.values()) {
+      for (const { ts, side, price, levels: swLevels, quoteVolume } of sweepsRef.current.values()) {
         if (!Number.isFinite(price)) { continue; }
+        // Display filters (min levels / min quote volume in USD).
+        if (swLevels < sweepMinLevels || quoteVolume < sweepMinAmount) { continue; }
         if (ts < times[0]) { continue; }
         let lo = 0;
         let hi = times.length - 1;
@@ -1404,7 +1422,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     const elapsed = Date.now() - th.last;
     if (elapsed >= 500) { fire(); }
     else if (th.timer == null) { th.timer = setTimeout(fire, 500 - elapsed); }
-  }, [chart, showSweeps, sweepVersion, klinesVersion, clustersByTs]);
+  }, [chart, showSweeps, sweepMinLevels, sweepMinAmount, sweepVersion, klinesVersion, clustersByTs]);
 
   // Clear any pending throttled sweep recompute on unmount.
   useEffect(() => () => {
@@ -1482,6 +1500,8 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     const nextShowDelta = !!values.showDelta;
     const nextShowLiquidations = values.showLiquidations !== false;
     const nextShowSweeps = values.showSweeps !== false;
+    const nextSweepMinLevels = Math.max(0, Number(values.sweepMinLevels) || 0);
+    const nextSweepMinAmount = Math.max(0, Number(values.sweepMinAmount) || 0);
     const nextR = values.r != null ? String(values.r) : '';
     const nextShowStrongLevels = values.showStrongLevels !== false;
     const nextLookback = Number(values.strongLevelsLookback) || DEFAULT_STRONG_LEVELS.strongLevelsLookback;
@@ -1504,6 +1524,8 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     setShowDelta(nextShowDelta);
     setShowLiquidations(nextShowLiquidations);
     setShowSweeps(nextShowSweeps);
+    setSweepMinLevels(nextSweepMinLevels);
+    setSweepMinAmount(nextSweepMinAmount);
     setR(nextR);
     setShowStrongLevels(nextShowStrongLevels);
     setStrongLevelsLookback(nextLookback);
@@ -1534,6 +1556,8 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
             showDelta: nextShowDelta,
             showLiquidations: nextShowLiquidations,
             showSweeps: nextShowSweeps,
+            sweepMinLevels: nextSweepMinLevels,
+            sweepMinAmount: nextSweepMinAmount,
             rsiPeriod: nextRsiPeriod,
             showStrongLevels: nextShowStrongLevels,
             strongLevelsLookback: nextLookback,
@@ -1686,6 +1710,8 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
               showDelta,
               showLiquidations,
               showSweeps,
+              sweepMinLevels,
+              sweepMinAmount,
               showStrongLevels,
               strongLevelsLookback,
               strongLevelsTolerance,

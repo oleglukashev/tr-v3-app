@@ -31,6 +31,22 @@ export function RangeXvSettingsForm({ defaultValues, onSubmit }: any) {
             <CheckboxElement name='showDelta' label='Показывать дельту (footprint, Δ bid/ask)?' />
             <CheckboxElement name='showLiquidations' label='Показывать ликвидации (Σ контрактов по уровням слева от футпринта)?' />
             <CheckboxElement name='showSweeps' label='Показывать sweeps (крупный игрок, счётчик по уровням справа от футпринта)?' />
+            <TextFieldElement
+              name='sweepMinLevels'
+              label='Sweeps: мин. уровней (0 = все)'
+              type='number'
+              inputProps={{ min: 0, step: 1 }}
+              size='small'
+              fullWidth
+            />
+            <TextFieldElement
+              name='sweepMinAmount'
+              label='Sweeps: мин. объём USD (quoteVolume, 0 = все)'
+              type='number'
+              inputProps={{ min: 0, step: 1 }}
+              size='small'
+              fullWidth
+            />
             <CheckboxElement name='showStrongLevels' label='Показывать сильные уровни (S/R)?' />
             <TextFieldElement
               name='strongLevelsLookback'
