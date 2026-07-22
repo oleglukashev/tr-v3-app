@@ -278,11 +278,22 @@ const xvConfig = { volumeWidth: false, volP5: 0, volP95: 1 };
 // Per-brick delta (Σbv − Σsv) keyed by bar ts, read by the XV_DELTA indicator.
 const xvDeltaConfig: { byTs: Record<string, number> } = { byTs: {} };
 
-// Per-brick liquidation counts keyed by bar ts, read by the XV_LIQUIDATIONS
-// indicator. up = long liqs (buy side), down = short liqs (sell side).
+// Per-brick liquidated-contract sums keyed by bar ts, read by the XV_LIQUIDATIONS
+// indicator. up = buy-side liqs (Σ contracts), down = sell-side liqs (Σ contracts).
 const xvLiqConfig: { byTs: Record<string, { up: number; down: number }> } = { byTs: {} };
-const LIQ_UP_COLOR = '#26a69a';   // up count, drawn below the brick low
-const LIQ_DOWN_COLOR = '#ef5350'; // down count, drawn above the brick high
+const LIQ_UP_COLOR = '#26a69a';   // up sum, drawn below the brick low
+const LIQ_DOWN_COLOR = '#ef5350'; // down sum, drawn above the brick high
+
+/** Compact number for on-chart labels: 12.3K / 4.5M, integers under 1000 as-is. */
+function fmtCompact(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return '';
+  if (n >= 1e9) return (n / 1e9).toFixed(1).replace(/\.0$/, '') + 'B';
+  if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K';
+  if (n >= 100) return String(Math.round(n));
+  if (n >= 1) return n.toFixed(1).replace(/\.0$/, '');
+  return n.toFixed(3).replace(/\.?0+$/, ''); // small fractional contract sums
+}
 
 // Per-brick sweep counts keyed by bar ts, read by the XV_SWEEPS indicator.
 // up = buy sweeps (taker bought through levels → price up), down = sell sweeps.
@@ -449,13 +460,13 @@ function registerXvLiquidationsIndicator() {
           const yH = yAxis.convertToPixel(d.high);
           ctx.fillStyle = LIQ_DOWN_COLOR;
           ctx.textBaseline = 'bottom';
-          ctx.fillText(String(counts.down), x, yH - 3);
+          ctx.fillText(fmtCompact(counts.down), x, yH - 3);
         }
         if (counts.up > 0) {
           const yL = yAxis.convertToPixel(d.low);
           ctx.fillStyle = LIQ_UP_COLOR;
           ctx.textBaseline = 'top';
-          ctx.fillText(String(counts.up), x, yL + 3);
+          ctx.fillText(fmtCompact(counts.up), x, yL + 3);
         }
       }
       ctx.restore();
@@ -558,7 +569,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   // Liquidation counts per brick (up below / down above). Deduped by a composite
   // key so a liquidation seen over both REST and the live WS is counted once.
   const [showLiquidations, setShowLiquidations] = useState<boolean>(DEFAULT_LIQUIDATIONS.showLiquidations);
-  const liquidationsRef = useRef<Map<string, { ts: number; position: string }>>(new Map());
+  const liquidationsRef = useRef<Map<string, { ts: number; position: string; contracts: number }>>(new Map());
   const [liqVersion, setLiqVersion] = useState<number>(0);
   // Sweep markers per brick (buy below / sell above). Deduped by composite key so
   // a sweep seen over both REST and the live WS is counted once.
@@ -697,10 +708,11 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
       if (Number(it.pairId) !== Number(pairId)) continue;
       const ts = Number(it.ts);
       const position = String(it.position);
+      const contracts = Number(it.contracts) || 0;
       if (!Number.isFinite(ts)) continue;
       const key = `${ts}:${it.price}:${it.contracts}:${position}`;
       if (!liquidationsRef.current.has(key)) {
-        liquidationsRef.current.set(key, { ts, position });
+        liquidationsRef.current.set(key, { ts, position, contracts });
         changed = true;
       }
     }
@@ -1209,7 +1221,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
       // Brick open timestamps, ascending — binary-search each liquidation into
       // the brick whose interval contains it (last brick catches the tail).
       const times = dl.map((b: any) => Number(b.timestamp));
-      for (const { ts, position } of liquidationsRef.current.values()) {
+      for (const { ts, position, contracts } of liquidationsRef.current.values()) {
         if (ts < times[0]) { continue; }
         let lo = 0;
         let hi = times.length - 1;
@@ -1219,7 +1231,8 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
         }
         const key = String(times[lo]);
         const bucket = byTs[key] ?? (byTs[key] = { up: 0, down: 0 });
-        if (position === 'down') { bucket.down += 1; } else { bucket.up += 1; }
+        // Sum of liquidated contracts per direction (not event count).
+        if (position === 'down') { bucket.down += contracts; } else { bucket.up += contracts; }
       }
     }
     xvLiqConfig.byTs = byTs;

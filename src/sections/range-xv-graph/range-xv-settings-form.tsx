@@ -29,7 +29,7 @@ export function RangeXvSettingsForm({ defaultValues, onSubmit }: any) {
               fullWidth
             />
             <CheckboxElement name='showDelta' label='Показывать дельту (footprint, Δ bid/ask)?' />
-            <CheckboxElement name='showLiquidations' label='Показывать ликвидации (кол-во под/над баром)?' />
+            <CheckboxElement name='showLiquidations' label='Показывать ликвидации (сумма контрактов под/над баром)?' />
             <CheckboxElement name='showSweeps' label='Показывать sweeps (крупный игрок, △/▽ под/над баром)?' />
             <CheckboxElement name='showStrongLevels' label='Показывать сильные уровни (S/R)?' />
             <TextFieldElement
