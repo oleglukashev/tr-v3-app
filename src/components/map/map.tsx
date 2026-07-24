@@ -248,9 +248,9 @@ export default function Map({
     });
     chart.setStyles({
       separator: {
-        size: 1,
-        color: 'rgba(150, 150, 150, 0.3)',
-        fill: false,
+        size: 2,
+        color: 'rgba(120, 144, 156, 0.9)',
+        fill: true,
       },
     });
     //chart.setPrecision({ price: 5 })

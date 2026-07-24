@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { init, dispose, registerIndicator, registerOverlay } from "klinecharts";
+import { paneHeightsKey, applySavedPaneHeight, subscribePaneHeights } from "@/src/utils/pane-heights";
 import { Box, Drawer, Button, Tabs, Tab, Chip, Typography, Divider } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import moment from "moment";
@@ -579,10 +580,11 @@ function registerXvSweepsIndicator() {
 export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   // Chart display/indicator settings are shared across ALL pairs (one global
   // key), so RSI/delta/clusters/imbalance prefs carry over when switching pair.
-  // Only R (the range size) stays per-pair — it's price-scale specific to each
-  // symbol (BTC R=100 vs KAS R=0.001), so it can't be shared.
+  // R (the range size) is not persisted at all — it lives solely in the URL.
   const SETTINGS_STORAGE_KEY = `rangeXvGraphSettings`;
-  const R_STORAGE_KEY = `rangeXvGraphR_${pairId}`;
+  // Persist the height of resizable sub-panes (rsi_pane, xv_delta_pane) so a
+  // separator drag survives reloads and indicator re-creation.
+  const PANE_HEIGHTS_KEY = paneHeightsKey('rangeXv', pairId);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<any>(null);
   const xvIndicatorOnRef = useRef<boolean>(false);
@@ -856,10 +858,23 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     registerXvDeltaIndicator();
     registerXvLiquidationsIndicator();
     registerXvSweepsIndicator();
+    // Defensive: on client-side navigation the container element can be reused
+    // and re-init'd without the previous chart being disposed, stacking a second
+    // klinecharts instance in the same box (16 canvases instead of ~8) — the new
+    // chart ends up behind/overlapped and nothing renders. Dispose any leftover
+    // chart on this element first so exactly one instance exists.
+    try { dispose(containerRef.current); } catch {}
     const chart = init(containerRef.current);
     chartRef.current = chart;
     setChart(chart);
-    chart?.setStyles({ indicator: { tooltip: { show: false } } } as any);
+    chart?.setStyles({
+      indicator: { tooltip: { show: false } },
+      separator: {
+        size: 2,
+        color: 'rgba(120, 144, 156, 0.9)',
+        fill: true,
+      },
+    } as any);
     // klinecharts only invokes the data loader once symbol+period are set
     // (see StoreImp._processDataLoad). XV is range-based, not time-based, so
     // the period is a placeholder — bars carry their own real timestamps.
@@ -870,9 +885,12 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
       subscribeBar: (params: any) => { barCallbackRef.current = params.callback; },
       unsubscribeBar: () => { barCallbackRef.current = null; },
     } as any);
+    // Persist sub-pane heights whenever the user drags a separator.
+    const unsubscribePaneHeights = subscribePaneHeights(chart, PANE_HEIGHTS_KEY);
     // Adapt to window resize (same as dhm Map).
     const resizeCleanup = resizeChart(chart);
     return () => {
+      unsubscribePaneHeights();
       if (resizeCleanup) resizeCleanup();
       if (containerRef.current) dispose(containerRef.current);
       chartRef.current = null;
@@ -1013,7 +1031,6 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
 
   // Render mode: OFF = native candles (always render); ON = custom variable-width draw.
   useEffect(() => {
-    const chart = chartRef.current;
     if (!chart) return;
     xvConfig.volumeWidth = volumeWidth;
     if (volumeWidth) {
@@ -1026,15 +1043,16 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
           },
         },
       } as any);
-      if (!xvIndicatorOnRef.current) {
-        chart.createIndicator('RANGE_XV', true, { id: 'candle_pane' });
-        xvIndicatorOnRef.current = true;
-      }
+      // Recreate against THIS chart instance. The previous ref-guard could stay
+      // true across a chart re-init (client-side nav), leaving the new chart with
+      // transparent candles but no RANGE_XV to draw them — a blank chart. Remove
+      // first so we never stack duplicates.
+      chart.removeIndicator?.({ paneId: 'candle_pane', name: 'RANGE_XV' });
+      chart.createIndicator('RANGE_XV', true, { id: 'candle_pane' });
+      xvIndicatorOnRef.current = true;
     } else {
-      if (xvIndicatorOnRef.current) {
-        chart.removeIndicator?.({ paneId: 'candle_pane', name: 'RANGE_XV' });
-        xvIndicatorOnRef.current = false;
-      }
+      chart.removeIndicator?.({ paneId: 'candle_pane', name: 'RANGE_XV' });
+      xvIndicatorOnRef.current = false;
       chart.setStyles({
         candle: {
           bar: {
@@ -1045,7 +1063,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
         },
       } as any);
     }
-  }, [volumeWidth]);
+  }, [chart, volumeWidth]);
 
   // RSI in its own sub-pane. Recreated on period change (calcParams), removed
   // when toggled off. Built-in klinecharts 'RSI' indicator — no registration.
@@ -1060,8 +1078,9 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
         false,
         { id: 'rsi_pane' },
       );
+      applySavedPaneHeight(chart, PANE_HEIGHTS_KEY, 'rsi_pane');
     }
-  }, [chart, showRsi, rsiPeriod]);
+  }, [chart, showRsi, rsiPeriod, PANE_HEIGHTS_KEY]);
 
   // Footprint delta sub-pane: create/remove on toggle only. Recreating the
   // indicator on data changes would destroy the pane (and its resized height)
@@ -1070,10 +1089,11 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     if (!chart) { return; }
     if (showDelta) {
       chart.createIndicator?.('XV_DELTA', false, { id: 'xv_delta_pane' });
+      applySavedPaneHeight(chart, PANE_HEIGHTS_KEY, 'xv_delta_pane');
     } else {
       chart.removeIndicator?.({ paneId: 'xv_delta_pane', name: 'XV_DELTA' });
     }
-  }, [chart, showDelta]);
+  }, [chart, showDelta, PANE_HEIGHTS_KEY]);
 
   // Liquidation counts overlay on the candle pane: create/remove on toggle only.
   useEffect(() => {
@@ -1144,20 +1164,12 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     if (rFromUrl != null && rFromUrl !== '') { setR(String(rFromUrl)); }
   }, [rFromUrl]);
 
-  // Restore saved settings on mount / pair change. Setting `r` retriggers the
-  // reload effect below, so the chart loads with the persisted range size.
-  // Skip restoring `r` when the URL already specifies it.
+  // Restore saved display/indicator settings on mount / pair change. R itself is
+  // NOT auto-restored — it comes solely from the URL (/{pairId}/{r}); with no R
+  // in the path the chart stays empty until one is picked from the R menu.
   useEffect(() => {
     if (typeof window === 'undefined') { return; }
     try {
-      // Per-pair R (price-scale specific). Skip when the URL already specifies it.
-      if (rFromUrl == null || rFromUrl === '') {
-        const savedR = localStorage.getItem(R_STORAGE_KEY);
-        if (savedR != null) {
-          const parsedR = JSON.parse(savedR);
-          setR(parsedR && parsedR.r != null ? String(parsedR.r) : '');
-        }
-      }
       // Global display/indicator settings (shared across all pairs).
       const saved = localStorage.getItem(SETTINGS_STORAGE_KEY);
       if (!saved) { return; }
@@ -1188,7 +1200,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
         setStackedRatioM(Number(parsed.stackedRatioM) || DEFAULT_STACKED.stackedRatioM);
       }
     } catch {}
-  }, [SETTINGS_STORAGE_KEY, R_STORAGE_KEY, rFromUrl]);
+  }, [SETTINGS_STORAGE_KEY]);
 
   // Chart settings is opened from the header's chart-line icon (same as dhm graph).
   useEffect(() => {
@@ -1532,8 +1544,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     setOpenChartSettings(false);
     if (typeof window !== 'undefined') {
       try {
-        // R is per-pair (price-scale specific).
-        localStorage.setItem(R_STORAGE_KEY, JSON.stringify({ r: nextR }));
+        // R is not persisted — it lives solely in the URL (/{pairId}/{r}).
         // Everything else is shared across all pairs (global key).
         localStorage.setItem(
           SETTINGS_STORAGE_KEY,
@@ -1565,7 +1576,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
         );
       } catch {}
     }
-  }, [SETTINGS_STORAGE_KEY, R_STORAGE_KEY]);
+  }, [SETTINGS_STORAGE_KEY]);
 
   // Restore saved backtest settings (per pair).
   useEffect(() => {

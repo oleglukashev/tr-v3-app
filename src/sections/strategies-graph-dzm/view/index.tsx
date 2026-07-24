@@ -40,6 +40,7 @@ import {
   blueSession, drawBlueSessionOverlays,
 } from "@/src/helpers/klinecharts.helper";
 import Map from "@/src/components/map/map";
+import { paneHeightsKey, applySavedPaneHeight, subscribePaneHeights } from "@/src/utils/pane-heights";
 import {useTheme} from "@mui/material/styles";
 import rect from "@/src/components/klinecharts-rect/klinecharts-rect";
 import stopPosition from "@/src/components/klinecharts-stop-position/klinecharts-stop-position";
@@ -180,6 +181,8 @@ export default function DzmIndexView({ tf, pairId }: any) {
   const LEGACY_PAIR_SETTINGS_STORAGE_KEY = `settings${pairId}`;
   const LEGACY_FPP_FILTERS_STORAGE_KEY = `fppFilter${pairId}`;
   const [chart, setChart] = useState<any>(null);
+  // Persist sub-pane (vol_pane) height on separator drag.
+  const PANE_HEIGHTS_KEY = paneHeightsKey('dzm', pairId);
   const [page, setPage] = useState<number>(1);
   const [klinesUpdatedAt, setKlinesUpdatedAt] = useState<number | null>(null);
   const [currentKlineFpp, setCurrentKlineFpp] = useState<any[]>(null);
@@ -688,6 +691,12 @@ export default function DzmIndexView({ tf, pairId }: any) {
     drawBlueSessionOverlays(chart, klines);
   }, [chart, klinesUpdatedAt, showSessions]);
 
+  // Persist sub-pane heights whenever the user drags a separator.
+  useEffect(() => {
+    if (!chart) { return; }
+    return subscribePaneHeights(chart, PANE_HEIGHTS_KEY);
+  }, [chart, PANE_HEIGHTS_KEY]);
+
   useEffect((): void => {
     if (!chart) { return; }
     if (!showVolume) {
@@ -697,6 +706,7 @@ export default function DzmIndexView({ tf, pairId }: any) {
     const klines = chart.getDataList();
     if (!klines?.length) { return; }
     chart.createIndicator('VOL', false, { id: 'vol_pane', height: 80 });
+    applySavedPaneHeight(chart, PANE_HEIGHTS_KEY, 'vol_pane');
     chart.overrideIndicator({
       name: 'VOL',
       styles: {

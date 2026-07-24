@@ -145,6 +145,9 @@ export function StrategiesDhmGlobalSettingsForm({ defaultValues, onSubmit }: any
             <CheckboxElement name='showZigzag' label='Показывать ZigZag?' />
           </Grid>
           <Grid item size={12}>
+            <CheckboxElement name='showBollinger' label='Показывать Боллинджер (BOLL)?' />
+          </Grid>
+          <Grid item size={12}>
             <CheckboxElement name='showClusterSpike' label='Показывать кластерные выбросы объёма?' />
           </Grid>
           <Grid item size={12}>
@@ -156,6 +159,9 @@ export function StrategiesDhmGlobalSettingsForm({ defaultValues, onSubmit }: any
               size='small'
               fullWidth
             />
+          </Grid>
+          <Grid item size={12}>
+            <CheckboxElement name='showDelta' label='Показывать дельту (footprint, Δ bid/ask)?' />
           </Grid>
           <Grid item size={12}>
             <CheckboxElement name='showDrawingElements' label='Показывать элементы рисования?' />

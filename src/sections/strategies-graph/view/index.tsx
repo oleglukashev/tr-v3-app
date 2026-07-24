@@ -41,6 +41,7 @@ import {
   strongLevel,
 } from "@/src/helpers/klinecharts.helper";
 import Map from "@/src/components/map/map";
+import { paneHeightsKey, applySavedPaneHeight, subscribePaneHeights } from "@/src/utils/pane-heights";
 import {useTheme} from "@mui/material/styles";
 import rect from "@/src/components/klinecharts-rect/klinecharts-rect";
 import stopPosition from "@/src/components/klinecharts-stop-position/klinecharts-stop-position";
@@ -115,8 +116,10 @@ const DEFAULT_GLOBAL_SETTINGS = {
   showVolume: true,
   volumeWidth: false,
   showZigzag: false,
+  showBollinger: false,
   showClusterSpike: false,
   clusterSpikeMultiplier: 3,
+  showDelta: false,
   showDrawingElements: true,
   dhmVisibleStatuses: ['created', 'waiting', 'triggered', 'finished', 'finished_by_lose', 'finished_by_size'],
   showStrongLevels: true,
@@ -212,6 +215,85 @@ function registerDhmVolumeWidthIndicator() {
 }
 registerDhmVolumeWidthIndicator();
 
+// Footprint delta sub-pane: per-brick delta (Σbv − Σsv) keyed by kline ts, read
+// by the DHM_DELTA indicator. Values are rebuilt from the loaded bidask
+// footprints; mirrors the Range XV graph's delta pane.
+const dhmDeltaConfig: { byTs: Record<string, number> } = { byTs: {} };
+const DHM_DELTA_UP = '#26a69a';
+const DHM_DELTA_DOWN = '#ef5350';
+
+let dhmDeltaIndicatorRegistered = false;
+function registerDhmDeltaIndicator() {
+  if (dhmDeltaIndicatorRegistered) { return; }
+  dhmDeltaIndicatorRegistered = true;
+  registerIndicator({
+    name: 'DHM_DELTA',
+    shortName: 'Delta',
+    // Footprint deltas live outside klinecharts' data, so an explicit
+    // overrideIndicator() must always recompute (default would no-op).
+    shouldUpdate: () => true,
+    calc: (dataList: any[]) => {
+      let cum = 0;
+      return dataList.map((d) => {
+        const delta = dhmDeltaConfig.byTs[String(d.timestamp)] ?? 0;
+        cum += delta;
+        return { delta, cum };
+      });
+    },
+    figures: [
+      { key: 'delta', title: 'Δ: ', type: 'bar' },
+      { key: 'cum', title: 'ΣΔ: ', type: 'line' },
+    ],
+    draw: ({ ctx, chart, indicator, xAxis, yAxis, bounding }: any) => {
+      // Use the precomputed calc result (refreshed via overrideIndicator) rather
+      // than rebuilding the cumulative array every frame — keeps resize cheap.
+      const vals = indicator?.result || [];
+      const vr = chart.getVisibleRange();
+      const slot = chart.getBarSpace().bar;
+      const y0 = yAxis.convertToPixel(0);
+      ctx.save();
+      // zero line
+      ctx.setLineDash([3, 3]);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(150,150,150,0.45)';
+      ctx.beginPath();
+      ctx.moveTo(0, y0);
+      ctx.lineTo(bounding.width, y0);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // per-brick delta histogram
+      const w = Math.max(1, slot * 0.7);
+      for (let i = vr.from; i < vr.to; i++) {
+        const rr = vals[i];
+        if (!rr) { continue; }
+        const x = xAxis.convertToPixel(i);
+        const yv = yAxis.convertToPixel(rr.delta);
+        ctx.fillStyle = rr.delta >= 0 ? DHM_DELTA_UP : DHM_DELTA_DOWN;
+        const top = Math.min(y0, yv);
+        let h = Math.abs(yv - y0);
+        if (h < 1) { h = 1; }
+        ctx.fillRect(x - w / 2, top, w, h);
+      }
+      // cumulative delta line
+      ctx.beginPath();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#2962ff';
+      let started = false;
+      for (let i = vr.from; i < vr.to; i++) {
+        const rr = vals[i];
+        if (!rr) { continue; }
+        const x = xAxis.convertToPixel(i);
+        const y = yAxis.convertToPixel(rr.cum);
+        if (!started) { ctx.moveTo(x, y); started = true; } else { ctx.lineTo(x, y); }
+      }
+      ctx.stroke();
+      ctx.restore();
+      return true;
+    },
+  } as any);
+}
+registerDhmDeltaIndicator();
+
 // DHM test sessions are always built on 60-minute data, regardless of
 // which timeframe the user is currently viewing in the chart URL. That
 // way switching the chart to e.g. 5m doesn't hide hourly sessions —
@@ -247,6 +329,8 @@ export default function DhmIndexView({ tf, pairId }: any) {
   const LEGACY_PAIR_SETTINGS_STORAGE_KEY = `settings${pairId}`;
   const LEGACY_FPP_FILTERS_STORAGE_KEY = `fppFilter${pairId}`;
   const [chart, setChart] = useState<any>(null);
+  // Persist sub-pane (vol_pane / dhm_delta_pane) heights on separator drag.
+  const PANE_HEIGHTS_KEY = paneHeightsKey('strategies', pairId);
   const [page, setPage] = useState<number>(1);
   const [klinesUpdatedAt, setKlinesUpdatedAt] = useState<number | null>(null);
   const [currentKlineFpp, setCurrentKlineFpp] = useState<any[]>(null);
@@ -285,8 +369,10 @@ export default function DhmIndexView({ tf, pairId }: any) {
     showVolume,
     volumeWidth,
     showZigzag,
+    showBollinger,
     showClusterSpike,
     clusterSpikeMultiplier,
+    showDelta,
     showDrawingElements,
     dhmVisibleStatuses,
     showStrongLevels,
@@ -526,8 +612,10 @@ export default function DhmIndexView({ tf, pairId }: any) {
       showVolume: values.showVolume !== false,
       volumeWidth: !!values.volumeWidth,
       showZigzag: !!values.showZigzag,
+      showBollinger: !!values.showBollinger,
       showClusterSpike: !!values.showClusterSpike,
       clusterSpikeMultiplier: Number(values.clusterSpikeMultiplier) || 3,
+      showDelta: !!values.showDelta,
       showDrawingElements: values.showDrawingElements !== false,
       dhmVisibleStatuses: values.dhmVisibleStatuses || [],
       showStrongLevels: values.showStrongLevels !== false,
@@ -776,6 +864,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
     const klines = chart.getDataList();
     if (!klines?.length) { return; }
     chart.createIndicator('VOL', false, { id: 'vol_pane', height: 80 });
+    applySavedPaneHeight(chart, PANE_HEIGHTS_KEY, 'vol_pane');
     chart.overrideIndicator({
       name: 'VOL',
       styles: {
@@ -796,6 +885,15 @@ export default function DhmIndexView({ tf, pairId }: any) {
     }
     chart.createIndicator('ZIGZAG', true, { id: 'candle_pane' });
   }, [chart, showZigzag]);
+
+  useEffect((): void => {
+    if (!chart) { return; }
+    if (!showBollinger) {
+      chart.removeIndicator('candle_pane', 'BOLL');
+      return;
+    }
+    chart.createIndicator('BOLL', true, { id: 'candle_pane' });
+  }, [chart, showBollinger]);
 
   // Render mode: OFF = native candles; ON = variable-width bodies scaled by volume.
   const volWidthOnRef = useRef(false);
@@ -854,6 +952,65 @@ export default function DhmIndexView({ tf, pairId }: any) {
       maxCount: strongLevelsMaxCount,
     });
   }, [chart, klinesUpdatedAt, showStrongLevels, strongLevelsLookback, strongLevelsTolerance, strongLevelsMinTouches, strongLevelsMaxCount]);
+
+  // Footprint delta sub-pane: create/remove on toggle only. Recreating the
+  // indicator on data changes would destroy the pane (and its resized height)
+  // and force a full relayout — so data refreshes go through overrideIndicator.
+  useEffect(() => {
+    if (!chart) { return; }
+    if (showDelta) {
+      chart.createIndicator?.('DHM_DELTA', false, { id: 'dhm_delta_pane' });
+      applySavedPaneHeight(chart, PANE_HEIGHTS_KEY, 'dhm_delta_pane');
+    } else {
+      chart.removeIndicator?.({ paneId: 'dhm_delta_pane', name: 'DHM_DELTA' });
+    }
+  }, [chart, showDelta, PANE_HEIGHTS_KEY]);
+
+  // Persist sub-pane heights whenever the user drags a separator.
+  useEffect(() => {
+    if (!chart) { return; }
+    return subscribePaneHeights(chart, PANE_HEIGHTS_KEY);
+  }, [chart, PANE_HEIGHTS_KEY]);
+
+  // Rebuild the per-ts delta map from bidask footprints (cheap, no layout) on
+  // every change, but THROTTLE the recompute+relayout: live cluster ticks arrive
+  // continuously and overrideIndicator triggers a full chart layout — doing that
+  // per websocket message is what re-renders the whole chart.
+  const deltaThrottleRef = useRef<{ last: number; timer: any }>({ last: 0, timer: null });
+  useEffect(() => {
+    if (!chart || !showDelta) { return; }
+    const map: Record<string, number> = {};
+    for (const ts in bidaskClustersByTs) {
+      const data = bidaskClustersByTs[ts]?.data;
+      if (!data || typeof data !== 'object') { continue; }
+      let bid = 0;
+      let ask = 0;
+      for (const k in data) {
+        bid += Number(data[k]?.bv) || 0;
+        ask += Number(data[k]?.sv) || 0;
+      }
+      map[ts] = bid - ask;
+    }
+    dhmDeltaConfig.byTs = map;
+    const th = deltaThrottleRef.current;
+    const fire = () => {
+      th.last = Date.now();
+      th.timer = null;
+      chart.overrideIndicator?.({ name: 'DHM_DELTA' });
+    };
+    const elapsed = Date.now() - th.last;
+    if (elapsed >= 700) {
+      fire();
+    } else if (th.timer == null) {
+      th.timer = setTimeout(fire, 700 - elapsed);
+    }
+  }, [chart, showDelta, bidaskClustersByTs, klinesUpdatedAt, heatmapTick]);
+
+  // Clear any pending throttled delta recompute on unmount.
+  useEffect(() => () => {
+    const th = deltaThrottleRef.current;
+    if (th.timer != null) { clearTimeout(th.timer); th.timer = null; }
+  }, []);
 
   // Refs so click handler always reads latest values without being a dep of the overlay effect
   const isTestPanelOpenRef = useRef(isTestPanelOpen);
@@ -1029,7 +1186,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
         }}
         setDataLoaderCallback={setDataLoaderCallback}
         onBidasksChunk={onBidasksChunk}
-        enableBidasksClusters={showBidasks}
+        enableBidasksClusters={showBidasks || showDelta}
       />
 
       <IconButton key='settings' sx={{
