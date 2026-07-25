@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Box, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import {
@@ -17,7 +17,10 @@ interface Book {
 const ASK_COLOR = "#ef5350"; // asks (sell)
 const BID_COLOR = "#26a69a"; // bids (buy)
 const PANEL_WIDTH = 232;
-const ROW_H = 20;
+// Row text only fits when a row is at least this tall; below it, rows render as
+// bare heatmap bars so the whole book (e.g. 200+200) fits with no scroll.
+const TEXT_MIN_ROW_H = 13;
+const MAX_ROW_H = 22; // don't let a shallow book render absurdly tall rows
 
 /** Compact size: 12.3K / 4.5M, small values with a few decimals. */
 function fmtSize(n: number): string {
@@ -39,16 +42,16 @@ function decimalsOf(v: number): number {
 
 /**
  * Standalone order-book ("стакан") panel pinned to the right of the XV graph. Classic DOM layout:
- * asks on top (red, highest price first) → spread → bids below (green, best first). Each row shows
- * price + size with a size-proportional background bar. Live via the per-pair depth WS
- * (subscribeDepthByPairId → depthSnapshot). Independent of the chart's price axis.
+ * asks on top (red, highest price first) → thin spread divider → bids below (green, best first).
+ * Rows auto-fit the panel height so the ENTIRE book is visible without scrolling; price/size text
+ * shows only when rows are tall enough, otherwise rows are heatmap bars sized by volume. Live via
+ * the per-pair depth WS (subscribeDepthByPairId → depthSnapshot). Independent of the chart's axis.
  */
 export function OrderbookLadder({ pairId }: { pairId: number | string }) {
   const theme = useTheme();
   const [book, setBook] = useState<Book | null>(null);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const spreadRef = useRef<HTMLDivElement | null>(null);
-  const centeredForRef = useRef<string | null>(null);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const [bodyH, setBodyH] = useState(0);
 
   // One WS per pair: (re)subscribe when the pair changes, reconnect on drop.
   useEffect(() => {
@@ -58,7 +61,6 @@ export function OrderbookLadder({ pairId }: { pairId: number | string }) {
     let cancelled = false;
     let reconnectTimer: number | undefined;
     setBook(null);
-    centeredForRef.current = null;
 
     const connect = () => {
       if (cancelled) return;
@@ -96,6 +98,17 @@ export function OrderbookLadder({ pairId }: { pairId: number | string }) {
     };
   }, [pairId]);
 
+  // Track the ladder body's pixel height so we can size rows to fit exactly.
+  useLayoutEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const measure = () => setBodyH(el.clientHeight);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const view = useMemo(() => {
     const bids = (book?.bids || []).filter(
       (l) => Number.isFinite(l[0]) && l[1] > 0,
@@ -109,28 +122,20 @@ export function OrderbookLadder({ pairId }: { pairId: number | string }) {
     for (const l of bids) if (l[1] > maxAmt) maxAmt = l[1];
     for (const l of asks) if (l[1] > maxAmt) maxAmt = l[1];
     const dec = Math.max(decimalsOf(bestBid ?? 0), decimalsOf(bestAsk ?? 0));
-    const spread =
-      bestBid != null && bestAsk != null ? bestAsk - bestBid : null;
-    const mid =
-      bestBid != null && bestAsk != null ? (bestBid + bestAsk) / 2 : null;
+    const spread = bestBid != null && bestAsk != null ? bestAsk - bestBid : null;
+    const mid = bestBid != null && bestAsk != null ? (bestBid + bestAsk) / 2 : null;
     const spreadPct = spread != null && mid ? (spread / mid) * 100 : null;
     // asks come best-first (ascending); show highest price at the very top.
     const asksTop = asks.slice().reverse();
     return { bids, asksTop, maxAmt, dec, spread, mid, spreadPct };
   }, [book]);
 
-  // Center the view on the spread the first time data arrives for a pair.
-  useEffect(() => {
-    if (!book) return;
-    const key = String(pairId);
-    if (centeredForRef.current === key) return;
-    const sc = scrollRef.current;
-    const sp = spreadRef.current;
-    if (sc && sp && sc.clientHeight > 0) {
-      centeredForRef.current = key;
-      sc.scrollTop = sp.offsetTop - sc.clientHeight / 2 + sp.clientHeight / 2;
-    }
-  }, [book, pairId]);
+  const total = view.asksTop.length + view.bids.length;
+  // Fit every level into the body: rowH = bodyH / total, capped so a shallow book
+  // doesn't get huge rows. overflow is hidden, so rounding never causes a scroll.
+  const rowH =
+    total > 0 && bodyH > 0 ? Math.min(MAX_ROW_H, bodyH / total) : MAX_ROW_H;
+  const showText = rowH >= TEXT_MIN_ROW_H;
 
   return (
     <Box
@@ -157,18 +162,26 @@ export function OrderbookLadder({ pairId }: { pairId: number | string }) {
           flexShrink: 0,
         }}
       >
-        <Typography sx={{ fontSize: 11, fontWeight: 700 }}>Стакан</Typography>
+        <Box sx={{ display: "flex", alignItems: "baseline", gap: 1 }}>
+          <Typography sx={{ fontSize: 11, fontWeight: 700 }}>Стакан</Typography>
+          {view.mid != null && (
+            <Typography sx={{ fontSize: 11, color: theme.palette.text.primary }}>
+              {view.mid.toFixed(view.dec)}
+            </Typography>
+          )}
+        </Box>
         <Typography sx={{ fontSize: 10, color: theme.palette.text.secondary }}>
-          {view.bids.length + view.asksTop.length
-            ? `${view.bids.length + view.asksTop.length} ур.`
-            : "—"}
+          {view.spread != null
+            ? `спред ${view.spread.toFixed(view.dec)}${
+                view.spreadPct != null ? ` · ${view.spreadPct.toFixed(3)}%` : ""
+              }`
+            : total
+              ? `${total} ур.`
+              : "—"}
         </Typography>
       </Box>
 
-      <Box
-        ref={scrollRef}
-        sx={{ position: "relative", flex: 1, overflowY: "auto", overflowX: "hidden" }}
-      >
+      <Box ref={bodyRef} sx={{ flex: 1, overflow: "hidden", position: "relative" }}>
         {view.asksTop.map((l, i) => (
           <LadderRow
             key={`a${i}`}
@@ -177,36 +190,11 @@ export function OrderbookLadder({ pairId }: { pairId: number | string }) {
             dec={view.dec}
             maxAmt={view.maxAmt}
             color={ASK_COLOR}
+            h={rowH}
+            showText={showText}
+            boundary={false}
           />
         ))}
-
-        <Box
-          ref={spreadRef}
-          sx={{
-            height: ROW_H + 4,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            px: 1,
-            bgcolor: theme.palette.action.hover,
-            borderTop: `1px solid ${theme.palette.divider}`,
-            borderBottom: `1px solid ${theme.palette.divider}`,
-          }}
-        >
-          <span style={{ color: theme.palette.text.secondary }}>
-            {view.mid != null ? view.mid.toFixed(view.dec) : "—"}
-          </span>
-          <span style={{ color: theme.palette.text.disabled }}>
-            {view.spread != null
-              ? `${view.spread.toFixed(view.dec)}${
-                  view.spreadPct != null
-                    ? " · " + view.spreadPct.toFixed(3) + "%"
-                    : ""
-                }`
-              : ""}
-          </span>
-        </Box>
-
         {view.bids.map((l, i) => (
           <LadderRow
             key={`b${i}`}
@@ -215,6 +203,9 @@ export function OrderbookLadder({ pairId }: { pairId: number | string }) {
             dec={view.dec}
             maxAmt={view.maxAmt}
             color={BID_COLOR}
+            h={rowH}
+            showText={showText}
+            boundary={i === 0}
           />
         ))}
 
@@ -234,24 +225,34 @@ function LadderRow({
   dec,
   maxAmt,
   color,
+  h,
+  showText,
+  boundary,
 }: {
   price: number;
   amt: number;
   dec: number;
   maxAmt: number;
   color: string;
+  h: number;
+  showText: boolean;
+  boundary: boolean;
 }) {
   const pctW = maxAmt > 0 ? Math.max(1, (amt / maxAmt) * 100) : 0;
   return (
     <Box
       sx={{
         position: "relative",
-        height: ROW_H,
+        height: h,
+        minHeight: 0,
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
         px: 1,
-        lineHeight: `${ROW_H}px`,
+        lineHeight: `${h}px`,
+        overflow: "hidden",
+        // best bid/ask boundary marker (top of the bids block)
+        borderTop: boundary ? "1px solid rgba(128,128,128,0.55)" : undefined,
       }}
     >
       <Box
@@ -262,16 +263,20 @@ function LadderRow({
           bottom: 0,
           width: `${pctW}%`,
           bgcolor: color,
-          opacity: 0.16,
+          opacity: showText ? 0.16 : 0.5,
           pointerEvents: "none",
         }}
       />
-      <span style={{ position: "relative", color, fontVariantNumeric: "tabular-nums" }}>
-        {price.toFixed(dec)}
-      </span>
-      <span style={{ position: "relative", fontVariantNumeric: "tabular-nums" }}>
-        {fmtSize(amt)}
-      </span>
+      {showText && (
+        <>
+          <span style={{ position: "relative", color, fontVariantNumeric: "tabular-nums" }}>
+            {price.toFixed(dec)}
+          </span>
+          <span style={{ position: "relative", fontVariantNumeric: "tabular-nums" }}>
+            {fmtSize(amt)}
+          </span>
+        </>
+      )}
     </Box>
   );
 }
