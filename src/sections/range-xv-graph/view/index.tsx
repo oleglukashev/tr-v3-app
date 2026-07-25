@@ -345,7 +345,7 @@ function registerXvDepthIndicator() {
     series: 'price',
     shouldUpdate: () => true,
     calc: (dataList: any[]) => dataList.map(() => ({})),
-    draw: ({ ctx, chart, xAxis, yAxis }: any) => {
+    draw: ({ ctx, chart, bounding, xAxis, yAxis }: any) => {
       const book = xvDepthConfig.book;
       const bids = book?.bids || [];
       const asks = book?.asks || [];
@@ -358,9 +358,17 @@ function registerXvDepthIndicator() {
       if (lastIndex < vr.from || lastIndex >= vr.to) return true;
       const bar = Number(chart.getBarSpace()?.bar) || 0;
       if (bar <= 0) return true;
+      // Fixed pixel width so the column is visible at any zoom (bars can be a few
+      // px wide). Anchored just right of the active candle, shifted left if there
+      // isn't room before the pane's right edge so it always fits fully.
+      const MAX_LEN_PX = 90;
+      const paneW = Number(bounding?.width) || 0;
       const x = xAxis.convertToPixel(lastIndex);
-      const leftEdge = x - bar * 0.5 + 1;
-      const maxLen = bar - 2;
+      let startX = x + bar * 0.5 + 2;
+      if (paneW > 0) {
+        startX = Math.min(startX, paneW - MAX_LEN_PX - 2);
+      }
+      startX = Math.max(startX, 0);
       // Normalize bar length by the largest amount across both sides.
       let maxAmt = 0;
       for (const l of bids) { if (l[1] > maxAmt) maxAmt = l[1]; }
@@ -372,14 +380,13 @@ function registerXvDepthIndicator() {
           const amt = Number(levels[i]?.[1]);
           if (!Number.isFinite(price) || !(amt > 0)) continue;
           const y = yAxis.convertToPixel(price);
-          // Row thickness = pixel gap to the neighbouring level (fallback 2px).
+          // Row thickness = pixel gap to the neighbour, clamped to a readable 2–8px.
           const next = levels[i + 1];
-          const th = next
-            ? Math.max(1, Math.abs(yAxis.convertToPixel(Number(next[0])) - y))
-            : 2;
-          const len = (amt / maxAmt) * maxLen;
-          ctx.fillStyle = `rgba(${rgb},0.35)`;
-          ctx.fillRect(leftEdge, y - th / 2, len, th);
+          const gap = next ? Math.abs(yAxis.convertToPixel(Number(next[0])) - y) : 3;
+          const th = Math.min(8, Math.max(2, gap));
+          const len = Math.max(3, (amt / maxAmt) * MAX_LEN_PX);
+          ctx.fillStyle = `rgba(${rgb},0.45)`;
+          ctx.fillRect(startX, y - th / 2, len, th);
         }
       };
       ctx.save();
