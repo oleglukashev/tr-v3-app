@@ -31,7 +31,7 @@ export function RangeXvSettingsForm({ defaultValues, onSubmit }: any) {
             <CheckboxElement name='showDelta' label='Показывать дельту (footprint, Δ bid/ask)?' />
             <CheckboxElement name='showLiquidations' label='Показывать ликвидации (Σ контрактов: лонги над свечой, шорты под)?' />
             <CheckboxElement name='showSweeps' label='Показывать sweeps (крупный игрок, счётчик по уровням справа от футпринта)?' />
-            <CheckboxElement name='showDepth' label='Показывать стакан (фоновый столбец на активной свече)?' />
+            <CheckboxElement name='showDepth' label='Показывать стакан (панель справа)?' />
             <TextFieldElement
               name='sweepMinLevels'
               label='Sweeps: мин. уровней (0 = все)'

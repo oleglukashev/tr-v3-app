@@ -13,7 +13,7 @@ import { RangeXvSettingsForm } from "@/src/sections/range-xv-graph/range-xv-sett
 import { XvBacktestForm, DEFAULT_XV_BACKTEST_VALUES } from "@/src/sections/range-xv-graph-test/xv-backtest-form";
 import { runXvBacktestForUI } from "@/src/utils/xv-backtest";
 import { getBidasksWebSocketUrl } from "@/src/utils/bidasksWebSocket";
-import { getOrderbookDepthWebSocketUrl, subscribeDepthByPairId } from "@/src/utils/orderbookDepthWebSocket";
+import { OrderbookLadder } from "@/src/sections/range-xv-graph/orderbook-ladder";
 import MapTools from "@/src/components/map-tools/map-tools";
 import { useMapDrawingOverlayRef } from "@/src/components/map-tools/use-map-drawing-overlay-ref";
 
@@ -320,83 +320,10 @@ const xvSweepConfig: {
 const SWEEP_BUY_COLOR = '#00897b';  // buy sweeps (△)
 const SWEEP_SELL_COLOR = '#d32f2f'; // sell sweeps (▽)
 
-// Live order book (background depth column) defaults.
+// Live order book (right-side ladder panel) defaults.
 const DEFAULT_DEPTH = {
   showDepth: false,
 };
-
-// Live raw L2 book for the ACTIVE (latest) brick, pushed by the orderbook depth
-// WS (subscribeAllDepth → depthSnapshot, top-N ladders). bids/asks are
-// [price, amount] levels (best-first); read by the XV_DEPTH indicator, which
-// draws them as a translucent horizontal-depth column behind the last candle.
-const xvDepthConfig: {
-  book: { bids: Array<[number, number]>; asks: Array<[number, number]> } | null;
-} = { book: null };
-const DEPTH_BID_RGB = '38,166,154';  // green (bids), rgb of #26a69a
-const DEPTH_ASK_RGB = '239,83,80';   // red (asks), rgb of #ef5350
-
-let depthIndicatorRegistered = false;
-function registerXvDepthIndicator() {
-  if (depthIndicatorRegistered) return;
-  depthIndicatorRegistered = true;
-  registerIndicator({
-    name: 'XV_DEPTH',
-    shortName: 'Depth',
-    series: 'price',
-    shouldUpdate: () => true,
-    calc: (dataList: any[]) => dataList.map(() => ({})),
-    draw: ({ ctx, chart, bounding, xAxis, yAxis }: any) => {
-      const book = xvDepthConfig.book;
-      const bids = book?.bids || [];
-      const asks = book?.asks || [];
-      if (!bids.length && !asks.length) return true;
-      const dataList = chart.getDataList();
-      if (!dataList?.length) return true;
-      const vr = chart.getVisibleRange();
-      const lastIndex = dataList.length - 1;
-      // Only draw when the active (latest) brick is actually on screen.
-      if (lastIndex < vr.from || lastIndex >= vr.to) return true;
-      const bar = Number(chart.getBarSpace()?.bar) || 0;
-      if (bar <= 0) return true;
-      // Fixed pixel width so the column is visible at any zoom (bars can be a few
-      // px wide). Anchored just right of the active candle, shifted left if there
-      // isn't room before the pane's right edge so it always fits fully.
-      const MAX_LEN_PX = 90;
-      const paneW = Number(bounding?.width) || 0;
-      const x = xAxis.convertToPixel(lastIndex);
-      let startX = x + bar * 0.5 + 2;
-      if (paneW > 0) {
-        startX = Math.min(startX, paneW - MAX_LEN_PX - 2);
-      }
-      startX = Math.max(startX, 0);
-      // Normalize bar length by the largest amount across both sides.
-      let maxAmt = 0;
-      for (const l of bids) { if (l[1] > maxAmt) maxAmt = l[1]; }
-      for (const l of asks) { if (l[1] > maxAmt) maxAmt = l[1]; }
-      if (maxAmt <= 0) return true;
-      const drawSide = (levels: Array<[number, number]>, rgb: string) => {
-        for (let i = 0; i < levels.length; i++) {
-          const price = Number(levels[i]?.[0]);
-          const amt = Number(levels[i]?.[1]);
-          if (!Number.isFinite(price) || !(amt > 0)) continue;
-          const y = yAxis.convertToPixel(price);
-          // Row thickness = pixel gap to the neighbour, clamped to a readable 2–8px.
-          const next = levels[i + 1];
-          const gap = next ? Math.abs(yAxis.convertToPixel(Number(next[0])) - y) : 3;
-          const th = Math.min(8, Math.max(2, gap));
-          const len = Math.max(3, (amt / maxAmt) * MAX_LEN_PX);
-          ctx.fillStyle = `rgba(${rgb},0.45)`;
-          ctx.fillRect(startX, y - th / 2, len, th);
-        }
-      };
-      ctx.save();
-      drawSide(bids, DEPTH_BID_RGB);
-      drawSide(asks, DEPTH_ASK_RGB);
-      ctx.restore();
-      return true;
-    },
-  } as any);
-}
 
 function pct(arr: number[], p: number): number {
   if (arr.length === 0) return 0;
@@ -702,8 +629,6 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   const [sweepHover, setSweepHover] = useState<{ left: number; top: number; price: number; items: SweepRec[] } | null>(null);
   const [sweepVersion, setSweepVersion] = useState<number>(0);
   const [showDepth, setShowDepth] = useState<boolean>(DEFAULT_DEPTH.showDepth);
-  // Bumped on every fresh depth snapshot to trigger an XV_DEPTH redraw.
-  const [depthVersion, setDepthVersion] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(false);
   const [openChartSettings, setOpenChartSettings] = useState<boolean>(false);
 
@@ -943,7 +868,6 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     registerXvDeltaIndicator();
     registerXvLiquidationsIndicator();
     registerXvSweepsIndicator();
-    registerXvDepthIndicator();
     // Defensive: on client-side navigation the container element can be reused
     // and re-init'd without the previous chart being disposed, stacking a second
     // klinecharts instance in the same box (16 canvases instead of ~8) — the new
@@ -1201,65 +1125,15 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     }
   }, [chart, showSweeps]);
 
-  // Live order-book depth column on the candle pane: create/remove on toggle.
+  // The order book now lives in a separate right-side panel (OrderbookLadder),
+  // rendered in the layout below. Toggling it changes the chart's available
+  // width, so re-measure the canvas (resizeChart only fires on window resize).
   useEffect(() => {
     if (!chart) { return; }
-    if (showDepth) {
-      chart.createIndicator?.('XV_DEPTH', true, { id: 'candle_pane' });
-    } else {
-      chart.removeIndicator?.({ paneId: 'candle_pane', name: 'XV_DEPTH' });
-    }
+    // Defer to the next frame so the flex layout has applied the new width.
+    const id = requestAnimationFrame(() => chart.resize?.());
+    return () => cancelAnimationFrame(id);
   }, [chart, showDepth]);
-
-  // Subscribe to the orderbook depth WS (separate service/host) while the depth
-  // column is on. subscribeAllDepth pushes the whole store; we keep only OUR
-  // pair's raw ladder in xvDepthConfig.book and bump depthVersion to redraw.
-  useEffect(() => {
-    if (!showDepth || !pairId) { return; }
-    const wsUrl = getOrderbookDepthWebSocketUrl();
-    let socket: WebSocket | null = null;
-    let cancelled = false;
-    let reconnectTimer: number | undefined;
-    const connect = () => {
-      if (cancelled) { return; }
-      try {
-        socket = new WebSocket(wsUrl);
-      } catch {
-        reconnectTimer = window.setTimeout(connect, 3000);
-        return;
-      }
-      socket.onopen = () => socket?.send(JSON.stringify(subscribeDepthByPairId(pairId)));
-      socket.onmessage = (ev) => {
-        try {
-          const msg = JSON.parse(ev.data);
-          if (msg?.type !== 'depthSnapshot' || !msg.data) { return; }
-          const book = msg.data[String(pairId)] ?? msg.data[Number(pairId)];
-          if (book && (book.bids || book.asks)) {
-            xvDepthConfig.book = { bids: book.bids || [], asks: book.asks || [] };
-            setDepthVersion((v) => v + 1);
-          }
-        } catch { /* ignore */ }
-      };
-      socket.onclose = () => {
-        if (!cancelled) { reconnectTimer = window.setTimeout(connect, 3000); }
-      };
-      socket.onerror = () => socket?.close();
-    };
-    connect();
-    return () => {
-      cancelled = true;
-      if (reconnectTimer !== undefined) { window.clearTimeout(reconnectTimer); }
-      socket?.close();
-      xvDepthConfig.book = null;
-    };
-  }, [showDepth, pairId]);
-
-  // Redraw the depth column when a fresh snapshot arrives (depth updates ~every
-  // 2s, so no throttle needed).
-  useEffect(() => {
-    if (!chart || !showDepth) { return; }
-    chart.overrideIndicator?.({ name: 'XV_DEPTH' });
-  }, [chart, showDepth, depthVersion]);
 
   // Rebuild the per-ts delta map from footprints (cheap, no layout) on every
   // change, but THROTTLE the recompute+relayout: live xvClusterForming ticks
@@ -1857,7 +1731,10 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
 
   return (
     <main style={{ position: 'relative' }}>
-      <Box ref={containerRef} sx={{ width: '100%' }} />
+      <Box sx={{ display: 'flex', width: '100%', alignItems: 'stretch' }}>
+        <Box ref={containerRef} sx={{ flex: 1, minWidth: 0 }} />
+        {showDepth && pairId && <OrderbookLadder pairId={pairId} />}
+      </Box>
 
       {sweepHover && (
         <Box
