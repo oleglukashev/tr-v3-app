@@ -18,3 +18,11 @@ export function getOrderbookDepthWebSocketUrl(): string {
 
 /** Message the client sends after the socket opens to receive the whole depth store at once. */
 export const SUBSCRIBE_ALL_DEPTH = { type: 'subscribeAllDepth' } as const;
+
+/**
+ * Message to receive ONLY one pair's raw book (same `depthSnapshot` shape, { [pairId]: book }).
+ * Use this instead of subscribeAllDepth when a view needs a single coin, so the server doesn't
+ * push every pair.
+ */
+export const subscribeDepthByPairId = (pairId: number | string) =>
+  ({ type: 'subscribeDepthByPairId', pairId: Number(pairId) }) as const;
