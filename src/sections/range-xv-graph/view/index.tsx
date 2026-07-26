@@ -231,6 +231,12 @@ const DEFAULT_LIQUIDATIONS = {
   showLiquidations: true,
 };
 
+// Fast-brick highlight defaults. maxKlineSeconds = 0 → disabled (mark nothing);
+// any value > 0 marks bricks whose open→close took no more than N seconds.
+const DEFAULT_FAST = {
+  maxKlineSeconds: 0,
+};
+
 // Sweep markers (up/down per brick) defaults.
 const DEFAULT_SWEEPS = {
   showSweeps: true,
@@ -291,6 +297,14 @@ const xvDeltaConfig: { byTs: Record<string, number> } = { byTs: {} };
 const xvLiqConfig: { byTs: Record<string, { up: number; down: number }> } = { byTs: {} };
 const LIQ_UP_COLOR = '#26a69a';   // long liqs (Σ contracts), above the high
 const LIQ_DOWN_COLOR = '#ef5350'; // short liqs (Σ contracts), below the low
+
+// Fast-brick highlight: a range brick's duration is the gap to the next brick's
+// open (both born with a real ts). `maxSeconds` = 0 disables the mark; otherwise
+// bricks that opened→closed within that many seconds get a translucent band + a
+// ⚡ marker. Read by the XV_FAST indicator draw.
+const xvFastConfig = { maxSeconds: 0 };
+const FAST_FILL_COLOR = 'rgba(255,193,7,0.20)'; // amber wash over the fast brick
+const FAST_MARK_COLOR = '#ffab00';               // ⚡ marker above the high
 
 // Only draw the sweep/liquidation level tallies when the footprint is wide enough
 // to show its own per-level values — clusterKline gates that text on barWidth > 80.
@@ -498,6 +512,56 @@ function registerXvLiquidationsIndicator() {
   } as any);
 }
 
+// Fast-brick highlight on the candle pane: bricks whose open→close took no more
+// than xvFastConfig.maxSeconds get a translucent band over their high→low range
+// and a ⚡ marker above the high. A range brick's duration is the gap to the next
+// brick's open, so the newest (still-forming, no next) brick is never marked.
+let fastIndicatorRegistered = false;
+function registerXvFastIndicator() {
+  if (fastIndicatorRegistered) return;
+  fastIndicatorRegistered = true;
+  registerIndicator({
+    name: 'XV_FAST',
+    shortName: 'Fast',
+    series: 'price',
+    // maxSeconds lives outside klinecharts' data, so overrideIndicator() must
+    // always redraw (default would no-op when the bar data is unchanged).
+    shouldUpdate: () => true,
+    calc: (dataList: any[]) => dataList.map(() => ({})),
+    draw: ({ ctx, chart, xAxis, yAxis }: any) => {
+      const maxMs = xvFastConfig.maxSeconds * 1000;
+      if (!(maxMs > 0)) return true; // disabled
+      const dataList = chart.getDataList();
+      const vr = chart.getVisibleRange();
+      const slot = chart.getBarSpace().bar;
+      const w = Math.max(2, slot * 0.9);
+      ctx.save();
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      for (let i = vr.from; i < vr.to; i++) {
+        const d = dataList[i];
+        const next = dataList[i + 1];
+        if (!d || !next) continue;
+        const dur = Number(next.timestamp) - Number(d.timestamp);
+        if (!(dur > 0) || dur > maxMs) continue;
+        const x = xAxis.convertToPixel(i);
+        const yH = yAxis.convertToPixel(d.high);
+        const yL = yAxis.convertToPixel(d.low);
+        const top = Math.min(yH, yL);
+        let h = Math.abs(yL - yH);
+        if (h < 2) h = 2;
+        ctx.fillStyle = FAST_FILL_COLOR;
+        ctx.fillRect(x - w / 2, top, w, h);
+        ctx.fillStyle = FAST_MARK_COLOR;
+        ctx.fillText('⚡', x, top - 2);
+      }
+      ctx.restore();
+      return true;
+    },
+  } as any);
+}
+
 // Sweep tally drawn on the candle pane: at each price level where sweeps started,
 // snapped onto the footprint's row grid (same size/levels as clusterKline), the
 // sell and buy counts are drawn in a row to the RIGHT of the footprint block —
@@ -629,6 +693,9 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
   const [sweepHover, setSweepHover] = useState<{ left: number; top: number; price: number; items: SweepRec[] } | null>(null);
   const [sweepVersion, setSweepVersion] = useState<number>(0);
   const [showDepth, setShowDepth] = useState<boolean>(DEFAULT_DEPTH.showDepth);
+  // Fast-brick highlight: mark bricks that opened→closed within N seconds
+  // (0 = off). Shared across pairs, saved in the global settings blob.
+  const [maxKlineSeconds, setMaxKlineSeconds] = useState<number>(DEFAULT_FAST.maxKlineSeconds);
   const [loading, setLoading] = useState<boolean>(false);
   const [openChartSettings, setOpenChartSettings] = useState<boolean>(false);
 
@@ -868,6 +935,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     registerXvDeltaIndicator();
     registerXvLiquidationsIndicator();
     registerXvSweepsIndicator();
+    registerXvFastIndicator();
     // Defensive: on client-side navigation the container element can be reused
     // and re-init'd without the previous chart being disposed, stacking a second
     // klinecharts instance in the same box (16 canvases instead of ~8) — the new
@@ -1125,6 +1193,26 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     }
   }, [chart, showSweeps]);
 
+  // Fast-brick highlight overlay on the candle pane: create it once N > 0,
+  // remove it when disabled. The threshold itself is pushed via the effect below.
+  useEffect(() => {
+    if (!chart) { return; }
+    if (maxKlineSeconds > 0) {
+      chart.createIndicator?.('XV_FAST', true, { id: 'candle_pane' });
+    } else {
+      chart.removeIndicator?.({ paneId: 'candle_pane', name: 'XV_FAST' });
+    }
+  }, [chart, maxKlineSeconds]);
+
+  // Push the current threshold into the config the indicator reads, then force a
+  // redraw (the value lives outside klinecharts' data, so it won't repaint on its
+  // own). Also re-runs on data changes so newly loaded bricks get marked.
+  useEffect(() => {
+    xvFastConfig.maxSeconds = maxKlineSeconds;
+    if (!chart || !(maxKlineSeconds > 0)) { return; }
+    chart.overrideIndicator?.({ name: 'XV_FAST' });
+  }, [chart, maxKlineSeconds, klinesVersion]);
+
   // The order book now lives in a separate right-side panel (OrderbookLadder),
   // rendered in the layout below. Toggling it changes the chart's available
   // width, so re-measure the canvas (resizeChart only fires on window resize).
@@ -1202,6 +1290,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
         setShowLiquidations(parsed.showLiquidations !== false);
         setShowSweeps(parsed.showSweeps !== false);
         setShowDepth(!!parsed.showDepth);
+        setMaxKlineSeconds(Math.max(0, Number(parsed.maxKlineSeconds) || DEFAULT_FAST.maxKlineSeconds));
         // sweepMinLevels / sweepMinAmount are NOT read here — they are per-pair
         // (restored by the SWEEP_THRESHOLDS_KEY effect below).
         setShowStrongLevels(parsed.showStrongLevels !== false);
@@ -1539,6 +1628,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     const nextShowLiquidations = values.showLiquidations !== false;
     const nextShowSweeps = values.showSweeps !== false;
     const nextShowDepth = !!values.showDepth;
+    const nextMaxKlineSeconds = Math.max(0, Number(values.maxKlineSeconds) || 0);
     const nextSweepMinLevels = Math.max(0, Number(values.sweepMinLevels) || 0);
     const nextSweepMinAmount = Math.max(0, Number(values.sweepMinAmount) || 0);
     const nextR = values.r != null ? String(values.r) : '';
@@ -1564,6 +1654,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
     setShowLiquidations(nextShowLiquidations);
     setShowSweeps(nextShowSweeps);
     setShowDepth(nextShowDepth);
+    setMaxKlineSeconds(nextMaxKlineSeconds);
     setSweepMinLevels(nextSweepMinLevels);
     setSweepMinAmount(nextSweepMinAmount);
     setR(nextR);
@@ -1596,6 +1687,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
             showLiquidations: nextShowLiquidations,
             showSweeps: nextShowSweeps,
             showDepth: nextShowDepth,
+            maxKlineSeconds: nextMaxKlineSeconds,
             // sweepMinLevels / sweepMinAmount are persisted per-pair below.
             rsiPeriod: nextRsiPeriod,
             showStrongLevels: nextShowStrongLevels,
@@ -1811,6 +1903,7 @@ export default function RangeXvGraphView({ pairId, r: rFromUrl }: any) {
               showLiquidations,
               showSweeps,
               showDepth,
+              maxKlineSeconds,
               sweepMinLevels,
               sweepMinAmount,
               showStrongLevels,

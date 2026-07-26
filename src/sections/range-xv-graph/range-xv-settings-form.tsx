@@ -19,6 +19,14 @@ export function RangeXvSettingsForm({ defaultValues, onSubmit }: any) {
               fullWidth
             />
             <CheckboxElement name='volumeWidth' label='Ширина по объёму' />
+            <TextFieldElement
+              name='maxKlineSeconds'
+              label='Пометить быстрые свечи: макс. секунд от начала до конца (0 = выкл.)'
+              type='number'
+              inputProps={{ min: 0, step: 1 }}
+              size='small'
+              fullWidth
+            />
             <CheckboxElement name='showRsi' label='Показывать RSI?' />
             <TextFieldElement
               name='rsiPeriod'
