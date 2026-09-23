@@ -1028,15 +1028,21 @@ export default function DhmIndexView({ tf, pairId }: any) {
 
   // Open interest sub-pane: create/remove on toggle only (same reasoning as the
   // delta pane — recreating would drop the resized height and force a relayout).
+  // Create only once klines are applied (klinesUpdatedAt), like the VOL pane:
+  // creating the pane before the main data loads lets klinecharts wipe it when
+  // the normal chart draws, so OI would flash and vanish on reload.
   useEffect(() => {
     if (!chart) { return; }
-    if (showOpenInterest) {
-      chart.createIndicator?.('DHM_OI', false, { id: 'dhm_oi_pane' });
-      applySavedPaneHeight(chart, PANE_HEIGHTS_KEY, 'dhm_oi_pane');
-    } else {
+    if (!showOpenInterest) {
       chart.removeIndicator?.({ paneId: 'dhm_oi_pane', name: 'DHM_OI' });
+      return;
     }
-  }, [chart, showOpenInterest, PANE_HEIGHTS_KEY]);
+    const klines = chart.getDataList();
+    if (!klines?.length) { return; }
+    chart.createIndicator?.('DHM_OI', false, { id: 'dhm_oi_pane' });
+    applySavedPaneHeight(chart, PANE_HEIGHTS_KEY, 'dhm_oi_pane');
+    chart.overrideIndicator?.({ name: 'DHM_OI' });
+  }, [chart, showOpenInterest, klinesUpdatedAt, PANE_HEIGHTS_KEY]);
 
   // Fetch OI for the loaded kline range and feed the DHM_OI indicator. Bybit OI
   // exists only from 5m granularity, so on a 1m chart the pane stays empty.
