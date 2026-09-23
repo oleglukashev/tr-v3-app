@@ -1040,11 +1040,22 @@ export default function DhmIndexView({ tf, pairId }: any) {
 
   // Fetch OI for the loaded kline range and feed the DHM_OI indicator. Bybit OI
   // exists only from 5m granularity, so on a 1m chart the pane stays empty.
+  //
+  // Keyed on heatmapTick (bumped on every kline load — init zoom-restore and
+  // scroll) so the pane survives the visible window moving past the first fetch;
+  // values ACCUMULATE into byTs across chunks instead of being replaced. The map
+  // is reset only when the pair/tf changes (it holds OI for one dataset).
   const [triggerOiFetch] = useLazyGetAllOpenInterestQuery();
+  const oiKeyRef = useRef<string>('');
   useEffect(() => {
     if (!chart || !showOpenInterest) { return; }
     const klines = chart.getDataList();
     if (!klines?.length) { return; }
+    const key = `${pairId}:${tf}`;
+    if (oiKeyRef.current !== key) {
+      oiKeyRef.current = key;
+      dhmOiConfig.byTs = {};
+    }
     const startTs = Number(klines[0].timestamp);
     const endTs = Number(klines[klines.length - 1].timestamp) + 1;
     let cancelled = false;
@@ -1052,7 +1063,8 @@ export default function DhmIndexView({ tf, pairId }: any) {
       try {
         const rows: any = await triggerOiFetch({ pairId, tf, startTs, endTs }).unwrap();
         if (cancelled || !Array.isArray(rows)) { return; }
-        const map: Record<string, number> = {};
+        // Merge, don't replace: keep OI already loaded for other scrolled chunks.
+        const map = { ...dhmOiConfig.byTs };
         for (const r of rows) {
           const v = Number(r?.value);
           if (Number.isFinite(v)) { map[String(r.ts)] = v; }
@@ -1064,7 +1076,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
       }
     })();
     return () => { cancelled = true; };
-  }, [chart, showOpenInterest, pairId, tf, klinesUpdatedAt, triggerOiFetch]);
+  }, [chart, showOpenInterest, pairId, tf, klinesUpdatedAt, heatmapTick, triggerOiFetch]);
 
   // Rebuild the per-ts delta map from bidask footprints (cheap, no layout) on
   // every change, but THROTTLE the recompute+relayout: live cluster ticks arrive
