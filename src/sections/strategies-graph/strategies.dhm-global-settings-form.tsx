@@ -164,6 +164,9 @@ export function StrategiesDhmGlobalSettingsForm({ defaultValues, onSubmit }: any
             <CheckboxElement name='showDelta' label='Показывать дельту (footprint, Δ bid/ask)?' />
           </Grid>
           <Grid item size={12}>
+            <CheckboxElement name='showOpenInterest' label='Показывать Open Interest?' />
+          </Grid>
+          <Grid item size={12}>
             <CheckboxElement name='showDrawingElements' label='Показывать элементы рисования?' />
           </Grid>
           <Grid item size={12}>

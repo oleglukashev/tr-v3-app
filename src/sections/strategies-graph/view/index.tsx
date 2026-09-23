@@ -10,6 +10,7 @@ import {
 } from "@/lib/redux/api/dhmApi";
 import { runDhmBacktestForUI } from "@/src/utils/dhm-backtest";
 import { useGetAllQuery as useGetAllFppQuery } from "@/lib/redux/api/fppApi";
+import { useLazyGetAllQuery as useLazyGetAllOpenInterestQuery } from "@/lib/redux/api/openInterestApi";
 import CustomDialog from 'src/components/custom-dialog/custom-dialog';
 import {onSubmitWrapper} from "@/src/utils/submit";
 import {StrategiesDhmDialog} from "@/src/sections/strategies-graph/strategies.dhm-dialog";
@@ -120,6 +121,7 @@ const DEFAULT_GLOBAL_SETTINGS = {
   showClusterSpike: false,
   clusterSpikeMultiplier: 3,
   showDelta: false,
+  showOpenInterest: false,
   showDrawingElements: true,
   dhmVisibleStatuses: ['created', 'waiting', 'triggered', 'finished', 'finished_by_lose', 'finished_by_size'],
   showStrongLevels: true,
@@ -294,6 +296,56 @@ function registerDhmDeltaIndicator() {
 }
 registerDhmDeltaIndicator();
 
+// Open interest sub-pane: OI (in base coin) per kline ts, read by the DHM_OI
+// indicator. Values are fetched from the klines server (grab-oi dataset) and
+// keyed by ts; the pane draws an OI line with a faint fill, mirroring the delta
+// pane's out-of-band data approach.
+const dhmOiConfig: { byTs: Record<string, number> } = { byTs: {} };
+const DHM_OI_LINE = '#f5a623';
+
+let dhmOiIndicatorRegistered = false;
+function registerDhmOiIndicator() {
+  if (dhmOiIndicatorRegistered) { return; }
+  dhmOiIndicatorRegistered = true;
+  registerIndicator({
+    name: 'DHM_OI',
+    shortName: 'OI',
+    // OI values live outside klinecharts' data, so an explicit
+    // overrideIndicator() must always recompute (default would no-op).
+    shouldUpdate: () => true,
+    calc: (dataList: any[]) => {
+      return dataList.map((d) => {
+        const oi = dhmOiConfig.byTs[String(d.timestamp)];
+        return { oi: oi == null ? null : oi };
+      });
+    },
+    figures: [
+      { key: 'oi', title: 'OI: ', type: 'line' },
+    ],
+    draw: ({ ctx, chart, indicator, xAxis, yAxis }: any) => {
+      const vals = indicator?.result || [];
+      const vr = chart.getVisibleRange();
+      ctx.save();
+      // OI line
+      ctx.beginPath();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = DHM_OI_LINE;
+      let started = false;
+      for (let i = vr.from; i < vr.to; i++) {
+        const rr = vals[i];
+        if (!rr || rr.oi == null) { continue; }
+        const x = xAxis.convertToPixel(i);
+        const y = yAxis.convertToPixel(rr.oi);
+        if (!started) { ctx.moveTo(x, y); started = true; } else { ctx.lineTo(x, y); }
+      }
+      ctx.stroke();
+      ctx.restore();
+      return true;
+    },
+  } as any);
+}
+registerDhmOiIndicator();
+
 // DHM test sessions are always built on 60-minute data, regardless of
 // which timeframe the user is currently viewing in the chart URL. That
 // way switching the chart to e.g. 5m doesn't hide hourly sessions —
@@ -373,6 +425,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
     showClusterSpike,
     clusterSpikeMultiplier,
     showDelta,
+    showOpenInterest,
     showDrawingElements,
     dhmVisibleStatuses,
     showStrongLevels,
@@ -616,6 +669,7 @@ export default function DhmIndexView({ tf, pairId }: any) {
       showClusterSpike: !!values.showClusterSpike,
       clusterSpikeMultiplier: Number(values.clusterSpikeMultiplier) || 3,
       showDelta: !!values.showDelta,
+      showOpenInterest: !!values.showOpenInterest,
       showDrawingElements: values.showDrawingElements !== false,
       dhmVisibleStatuses: values.dhmVisibleStatuses || [],
       showStrongLevels: values.showStrongLevels !== false,
@@ -971,6 +1025,46 @@ export default function DhmIndexView({ tf, pairId }: any) {
     if (!chart) { return; }
     return subscribePaneHeights(chart, PANE_HEIGHTS_KEY);
   }, [chart, PANE_HEIGHTS_KEY]);
+
+  // Open interest sub-pane: create/remove on toggle only (same reasoning as the
+  // delta pane — recreating would drop the resized height and force a relayout).
+  useEffect(() => {
+    if (!chart) { return; }
+    if (showOpenInterest) {
+      chart.createIndicator?.('DHM_OI', false, { id: 'dhm_oi_pane' });
+      applySavedPaneHeight(chart, PANE_HEIGHTS_KEY, 'dhm_oi_pane');
+    } else {
+      chart.removeIndicator?.({ paneId: 'dhm_oi_pane', name: 'DHM_OI' });
+    }
+  }, [chart, showOpenInterest, PANE_HEIGHTS_KEY]);
+
+  // Fetch OI for the loaded kline range and feed the DHM_OI indicator. Bybit OI
+  // exists only from 5m granularity, so on a 1m chart the pane stays empty.
+  const [triggerOiFetch] = useLazyGetAllOpenInterestQuery();
+  useEffect(() => {
+    if (!chart || !showOpenInterest) { return; }
+    const klines = chart.getDataList();
+    if (!klines?.length) { return; }
+    const startTs = Number(klines[0].timestamp);
+    const endTs = Number(klines[klines.length - 1].timestamp) + 1;
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows: any = await triggerOiFetch({ pairId, tf, startTs, endTs }).unwrap();
+        if (cancelled || !Array.isArray(rows)) { return; }
+        const map: Record<string, number> = {};
+        for (const r of rows) {
+          const v = Number(r?.value);
+          if (Number.isFinite(v)) { map[String(r.ts)] = v; }
+        }
+        dhmOiConfig.byTs = map;
+        chart.overrideIndicator?.({ name: 'DHM_OI' });
+      } catch (e) {
+        console.error('OI fetch failed:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [chart, showOpenInterest, pairId, tf, klinesUpdatedAt, triggerOiFetch]);
 
   // Rebuild the per-ts delta map from bidask footprints (cheap, no layout) on
   // every change, but THROTTLE the recompute+relayout: live cluster ticks arrive
