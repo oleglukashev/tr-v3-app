@@ -1007,18 +1007,24 @@ export default function DhmIndexView({ tf, pairId }: any) {
     });
   }, [chart, klinesUpdatedAt, showStrongLevels, strongLevelsLookback, strongLevelsTolerance, strongLevelsMinTouches, strongLevelsMaxCount]);
 
-  // Footprint delta sub-pane: create/remove on toggle only. Recreating the
+  // Footprint delta sub-pane: create/remove on toggle only — recreating the
   // indicator on data changes would destroy the pane (and its resized height)
-  // and force a full relayout — so data refreshes go through overrideIndicator.
+  // and force a full relayout, so data refreshes go through overrideIndicator.
+  // Create only once klines are applied (klinesUpdatedAt), like the OI/VOL panes:
+  // creating the pane before the main data loads lets klinecharts wipe it when
+  // the normal chart draws, so the delta pane would flash and vanish on reload.
   useEffect(() => {
     if (!chart) { return; }
-    if (showDelta) {
-      chart.createIndicator?.('DHM_DELTA', false, { id: 'dhm_delta_pane' });
-      applySavedPaneHeight(chart, PANE_HEIGHTS_KEY, 'dhm_delta_pane');
-    } else {
+    if (!showDelta) {
       chart.removeIndicator?.({ paneId: 'dhm_delta_pane', name: 'DHM_DELTA' });
+      return;
     }
-  }, [chart, showDelta, PANE_HEIGHTS_KEY]);
+    const klines = chart.getDataList();
+    if (!klines?.length) { return; }
+    chart.createIndicator?.('DHM_DELTA', false, { id: 'dhm_delta_pane' });
+    applySavedPaneHeight(chart, PANE_HEIGHTS_KEY, 'dhm_delta_pane');
+    chart.overrideIndicator?.({ name: 'DHM_DELTA' });
+  }, [chart, showDelta, klinesUpdatedAt, PANE_HEIGHTS_KEY]);
 
   // Persist sub-pane heights whenever the user drags a separator.
   useEffect(() => {
